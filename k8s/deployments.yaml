@@ -59,6 +59,10 @@ spec:
               value: /app/data/mock.db
             - name: MOCK_LOG_DIR
               value: /app/data/logs
+            # MCP validates the Host header; the ingress passes the public domain, so it must be
+            # allowed or every MCP call is a 421 (ADR-012). Update when the host changes.
+            - name: MOCK_ALLOWED_HOSTS
+              value: api-kirro.upayan.dev,kirro-mock,kirro-mock:*,localhost,localhost:*,127.0.0.1,127.0.0.1:*
           volumeMounts:
             - name: data
               mountPath: /app/data

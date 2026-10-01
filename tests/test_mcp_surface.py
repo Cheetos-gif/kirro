@@ -169,3 +169,20 @@ def test_mcp_tool_surfaces_failures_not_exceptions(mcp_base):
     out = asyncio.run(go())
     assert out["status_code"] == 404
     assert out["body"]["error"]["code"] == "NOT_FOUND"
+
+
+def test_mcp_host_header_allow_list(mcp_base):
+    """Regression for the first deploy: MCP validates the Host header (DNS-rebinding protection) and
+    `streamable_http_app` defaults the allow-list to 127.0.0.1, so behind the ingress every call was
+    rejected with `421 Invalid Host header`. The public host must be allowed; a foreign one must not.
+    """
+    body = {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}
+    base = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
+
+    blocked = httpx.post(f"{mcp_base}/venue/mcp", json=body, headers={**base, "Host": "evil.example.com"}, timeout=10)
+    assert blocked.status_code == 421
+
+    allowed = httpx.post(
+        f"{mcp_base}/venue/mcp", json=body, headers={**base, "Host": "api-kirro.upayan.dev"}, timeout=10
+    )
+    assert allowed.status_code != 421

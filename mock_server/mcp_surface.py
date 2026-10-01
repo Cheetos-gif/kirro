@@ -20,12 +20,40 @@ which also shares the pool. See `docs/connectors.md` and ADR-013.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import httpx
 from mcp.server.mcpserver import MCPServer
+from mcp.server.transport_security import TransportSecuritySettings
 
 DEFAULT_RUN = "default"
+
+# The MCP transport validates the request Host header (DNS-rebinding protection) and
+# `streamable_http_app` defaults the allow-list to 127.0.0.1. Behind the TLS-terminating ingress the
+# Host is the public domain, so without this every MCP call is rejected with
+# `421 Invalid Host header` — which is exactly what happened on the first deploy. Override with
+# MOCK_ALLOWED_HOSTS (comma-separated; a `host:*` entry matches any port) if the domain changes.
+DEFAULT_ALLOWED_HOSTS = "localhost,localhost:*,127.0.0.1,127.0.0.1:*,api-kirro.upayan.dev,kirro-mock,kirro-mock:*"
+
+
+def _split_env(name: str, default: str) -> list[str]:
+    return [item.strip() for item in os.environ.get(name, default).split(",") if item.strip()]
+
+
+def transport_security() -> TransportSecuritySettings:
+    """Host/Origin allow-list for the MCP endpoints.
+
+    DNS-rebinding protection stays on: the mock is called server-to-server, but the protection is
+    free and a rejected Host is loud (421) rather than silent. `MOCK_ALLOWED_ORIGINS` defaults to
+    empty, which accepts requests that send no Origin (normal for an MCP client) and rejects
+    browser-originated ones.
+    """
+    return TransportSecuritySettings(
+        allowed_hosts=_split_env("MOCK_ALLOWED_HOSTS", DEFAULT_ALLOWED_HOSTS),
+        allowed_origins=_split_env("MOCK_ALLOWED_ORIGINS", ""),
+    )
+
 
 SURFACE_INSTRUCTIONS = {
     "venue": "Mock venue inventory, time-boxed holds, bookings and the declare-interest pool.",

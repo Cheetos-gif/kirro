@@ -44,6 +44,14 @@ much of the existing implementation it reuses.
 1. **The REST routes remain the primary contract.** `docs/connectors.md` still documents them; the MCP surface is an
    additional access path to the same behaviour, not a replacement.
 
+1. **The MCP transport's Host allow-list is configured, not defaulted.** `streamable_http_app` enables
+   DNS-rebinding protection and defaults the allowed Host values to `127.0.0.1`; behind the TLS-terminating ingress
+   the Host is the public domain, so the first deploy answered every MCP call with `421 Invalid Host header` while
+   the same call succeeded in-cluster and locally. `MOCK_ALLOWED_HOSTS` (default: the deployed host plus
+   `localhost`/`127.0.0.1`, with `host:*` port wildcards) is passed to every mount; `MOCK_ALLOWED_ORIGINS` defaults
+   to empty, which accepts the no-`Origin` requests a server-to-server MCP client sends. A hostname change is now a
+   configuration change, not a code change.
+
 Explicitly rejected:
 
 - **Extracting a parallel pure-handler layer** for MCP to call. It duplicates the contract surface and risks the two

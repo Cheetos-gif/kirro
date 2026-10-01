@@ -21,7 +21,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from allocator.engine import Bid, Slot, allocate
 from logging_.redact import redact
-from mock_server.mcp_surface import build_surfaces
+from mock_server.mcp_surface import build_surfaces, transport_security
 from mock_server.state import SCENARIOS, MockState, RunState
 
 Handler = Callable[[str, dict, RunState], tuple[int, Any]]
@@ -515,8 +515,9 @@ def create_app(log_dir: str | None = None) -> FastAPI:
     # 307-redirect to /<surface>/mcp/, and behind the TLS-terminating ingress that Location is
     # http:// — which strict MCP clients refuse to follow (observed live).
     mcp_surfaces.update(build_surfaces(app))
+    security = transport_security()
     for name, server in mcp_surfaces.items():
-        app.mount(f"/{name}", server.streamable_http_app(stateless_http=True))
+        app.mount(f"/{name}", server.streamable_http_app(stateless_http=True, transport_security=security))
 
     return app
 
