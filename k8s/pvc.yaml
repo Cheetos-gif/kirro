@@ -1,0 +1,16 @@
+# Mock state volume (ADR-013). The declare-interest pool is written by the Declare Agent and read
+# later by the Window Allocation Workflow, so it must outlive a pod restart — which a rollout causes
+# every time, since the image tag is `latest` with imagePullPolicy: Always. Holds SQLite (mock.db)
+# and the request log. RWO + replicas: 1: SQLite is a single-writer store.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kirro-mock-data
+  namespace: kirro
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi

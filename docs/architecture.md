@@ -14,7 +14,10 @@ written spec that defines the behaviour.
 - **Mock server** (`mock_server/`): FastAPI app on :8081. Surfaces: `/venue/*` (catalogue, releases, holds,
   bookings, declared-interest pool), `/pinelabs/*` (mandate create/balance/execute/release, refunds),
   `/allocator/draw` (DIFD), `/delhivery/*` (serviceability, order create, tracking), `/health`, and the out-of-band
-  `/__admin/*` control surface. Per-run state in `mock_server/state.py`.
+  `/__admin/*` control surface. Per-run state lives in SQLite (`mock_server/state.py`, ADR-013), so a restart does
+  not lose the pool.
+- **MCP surface** (`mock_server/mcp_surface.py`): one MCP server per surface at `/<surface>/mcp`, which is what
+  AgenticOrg registers and discovers tools from (ADR-012). Tools call the same routes in process.
 - **Redaction** (`logging_/redact.py`): strips keys, tokens and phone numbers (last 4 only) before anything is
   written to the mock request log.
 - **Spec** (`docs/agenticorg/`, `docs/decisions/`): the agent's Prompt/Behavior rules, the scheduled workflow, the

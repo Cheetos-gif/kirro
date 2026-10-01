@@ -1,6 +1,9 @@
 # One image (ghcr.io/cheetos-gif/kirro), one Deployment: kirro-mock is the mock external-services
 # backend the AgenticOrg-hosted KIRRO agent calls. KIRRO's decision-making brain lives on the
 # AgenticOrg platform (docs/decisions/ADR-011-kirro-brain-moves-to-agenticorg.md), not here.
+#
+# replicas: 1 is load-bearing — the mock keeps its state in SQLite (ADR-013), which is a
+# single-writer store. Do not scale this horizontally without moving the state first.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,6 +20,15 @@ spec:
       labels:
         app: kirro-mock
     spec:
+      # Restricted profile: the image already runs as uid 10001, and fsGroup is what makes the
+      # freshly provisioned local-path volume writable by that uid.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       priorityClassName: low-priority
       affinity:
         nodeAffinity:
@@ -32,12 +44,31 @@ spec:
         - name: kirro-mock
           image: ghcr.io/cheetos-gif/kirro:latest
           imagePullPolicy: Always
-          command: ["uvicorn", "mock_server.app:app", "--host", "0.0.0.0", "--port", "8081"]
+          command:
+            ["uvicorn", "mock_server.app:app", "--host", "0.0.0.0", "--port", "8081", "--proxy-headers",
+             "--forwarded-allow-ips", "*"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 8081
+          env:
+            # Both live on the PVC: state and the request log survive a restart (ADR-013).
+            - name: MOCK_DB_PATH
+              value: /app/data/mock.db
+            - name: MOCK_LOG_DIR
+              value: /app/data/logs
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
           readinessProbe:
             httpGet: { path: /health, port: 8081 }
             initialDelaySeconds: 3
           resources:
             requests: { cpu: 50m, memory: 96Mi }
             limits: { cpu: 200m, memory: 256Mi }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: kirro-mock-data

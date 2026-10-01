@@ -9,6 +9,7 @@ Response bodies are KIRRO mock contracts, not vendor APIs (see docs/connectors.m
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import time
 from datetime import datetime, timedelta, timezone
@@ -20,6 +21,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from allocator.engine import Bid, Slot, allocate
 from logging_.redact import redact
+from mock_server.mcp_surface import build_surfaces
 from mock_server.state import SCENARIOS, MockState, RunState
 
 Handler = Callable[[str, dict, RunState], tuple[int, Any]]
@@ -40,11 +42,28 @@ def _iso(dt: datetime) -> str:
     return dt.isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+def _parse_iso(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
 def create_app(log_dir: str | None = None) -> FastAPI:
+    # MCP servers are built after the app exists (their tools call it in-process via
+    # ASGITransport); the holder lets this lifespan start their session managers without a
+    # construction cycle. See mock_server/mcp_surface.py and ADR-012.
+    mcp_surfaces: dict[str, Any] = {}
+
+    @contextlib.asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        async with contextlib.AsyncExitStack() as stack:
+            for server in mcp_surfaces.values():
+                await stack.enter_async_context(server.session_manager.run())
+            yield
+
     app = FastAPI(
         title="KIRRO mock server",
         version="0.1.0",
         description="MOCK external services. Schemas are KIRRO mock contracts, not vendor APIs.",
+        lifespan=lifespan,
     )
     st = MockState(log_dir)
     app.state.mock = st
@@ -218,7 +237,8 @@ def create_app(log_dir: str | None = None) -> FastAPI:
                 "slot_id": slot["slot_id"],
                 "quantity": qty,
                 "released": False,
-                "expires": _now() + timedelta(seconds=ttl),
+                # ISO, not a datetime: the stored document must be JSON-serializable (ADR-013)
+                "expires": _iso(_now() + timedelta(seconds=ttl)),
                 "force_expired": sc == "booking_expired",
             }
             return 200, {
@@ -226,7 +246,7 @@ def create_app(log_dir: str | None = None) -> FastAPI:
                 "slot_id": slot["slot_id"],
                 "quantity": qty,
                 "price_per_unit_paise": slot["price_per_person_paise"],
-                "expires_at": _iso(run.holds[hid]["expires"]),
+                "expires_at": run.holds[hid]["expires"],
             }
 
         return await serve(request, "venue.hold", h)
@@ -234,7 +254,7 @@ def create_app(log_dir: str | None = None) -> FastAPI:
     def hold_status(hold: dict) -> str:
         if hold["released"]:
             return "released"
-        if hold["force_expired"] or _now() > hold["expires"]:
+        if hold["force_expired"] or _now() > _parse_iso(hold["expires"]):
             return "expired"
         return "active"
 
@@ -244,7 +264,7 @@ def create_app(log_dir: str | None = None) -> FastAPI:
             hold = run.holds.get(hold_id)
             if not hold:
                 return err(404, "NOT_FOUND", "hold not found")
-            return 200, {"hold_id": hold_id, "status": hold_status(hold), "expires_at": _iso(hold["expires"])}
+            return 200, {"hold_id": hold_id, "status": hold_status(hold), "expires_at": hold["expires"]}
 
         return await serve(request, "venue.hold_get", h, body={})
 
@@ -488,6 +508,15 @@ def create_app(log_dir: str | None = None) -> FastAPI:
             return 200, {"ShipmentData": [{"Shipment": {"AWB": wb, "Status": {"Status": s["status"]}}}]}
 
         return await serve(request, "delhivery.track", h, body={})
+
+    # ------------------------------------------------------------------ MCP surface (ADR-012)
+    # Mount each server at /<surface> with the MCP app's own path ("/mcp"), so the public URL is
+    # exactly /<surface>/mcp. Mounting at /<surface>/mcp with an inner path of "/" makes Starlette
+    # 307-redirect to /<surface>/mcp/, and behind the TLS-terminating ingress that Location is
+    # http:// — which strict MCP clients refuse to follow (observed live).
+    mcp_surfaces.update(build_surfaces(app))
+    for name, server in mcp_surfaces.items():
+        app.mount(f"/{name}", server.streamable_http_app(stateless_http=True))
 
     return app
 

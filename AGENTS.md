@@ -47,13 +47,15 @@ connector-side validation in these mocks (e.g. an `execute` against a mandate th
 
 ```
 mock_server/app.py     FastAPI mock. create_app(log_dir) factory; routes below; admin surface under /__admin/*
-mock_server/state.py   per-run state: scenario table, scenario bindings, holds, bookings, mandates, payments,
-                       declarations, request log; catalogue loaded from mock_server/fixtures/
+mock_server/state.py   per-run state in SQLite (ADR-013): holds, bookings, mandates, payments, declarations,
+                       idempotency ledger, capacity/counters; scenario table + request log; catalogue from fixtures/
 allocator/engine.py    DIFD: pure deterministic allocation over (slots, bids, release_id, window_open)
 allocator/fairness.py  weighted-permutation fairness
 allocator/schemas.py   allocation request/result models
+mock_server/mcp_surface.py  MCP servers, one per surface (ADR-012); tools call this same app in-process
 logging_/redact.py     key/token/phone redaction applied before anything is logged
-tests/                 test_mock_server.py (scenarios, incl. a real uvicorn thread), test_allocator.py
+tests/                 test_mock_server.py (scenarios, incl. a real uvicorn thread), test_allocator.py,
+                       test_mcp_surface.py (MCP tool catalogs + REST/MCP state parity)
 k8s/                   Deployment, Service, Ingress, NetworkPolicy (single service: kirro-mock)
 scripts/dev.sh         starts the mock server on :8081 in the foreground
 docs/                  agenticorg/ (spec), decisions/ (ADRs), architecture.md, connectors.md, ...
@@ -66,6 +68,7 @@ Mock routes, by surface:
 - `/pinelabs/*` — mandates create/balance/execute/release, refunds
 - `/allocator/draw` — the DIFD draw
 - `/delhivery/*` — pincode serviceability, order create, package tracking
+- `/{venue,pinelabs,allocator,delhivery}/mcp` — the MCP surface, one server per surface (ADR-012)
 - `/__admin/*` — scenario, reset, state (harness only; out of band)
 
 Package names use underscores (`mock_server`) because Python cannot import hyphenated names.
@@ -84,12 +87,17 @@ Package names use underscores (`mock_server`) because Python cannot import hyphe
   target, scenario, request, response, status and latency_ms, after redaction.
 - Scenario table: `success`, `no_inventory`, `insufficient_balance`, `timeout`, `delayed`, `malformed`, `duplicate`,
   `booking_expired`, `payment_failure`, `partial_group`, `upstream_500`. Keep it in sync with `docs/connectors.md`.
+- **State is durable and single-writer** (SQLite at `MOCK_DB_PATH`, ADR-013). Writes go through the store facade in
+  `mock_server/state.py`, so a mutation is persisted the moment it happens; `replicas: 1` is load-bearing and
+  retention/pruning is not implemented — `POST /__admin/reset` is the explicit way to clear a run.
 
 ### How to add a mock route
 
 1. Add the route to `mock_server/app.py` and route it through `serve(request, "<target>", handler)` so scenarios,
    idempotency and request logging all apply. Add state to `mock_server/state.py` if needed.
 1. Add the target name and its scenarios to the mock scenario docs in `docs/connectors.md`.
+1. Add the matching MCP tool in `mock_server/mcp_surface.py` (tools call the route in-process) and cover it in
+   `tests/test_mcp_surface.py`.
 1. Add tests in `tests/test_mock_server.py` covering the success path and at least one failure scenario.
 1. Keep the handler deterministic for a given `(run_id, scenario, request)`.
 
@@ -103,6 +111,8 @@ Package names use underscores (`mock_server`) because Python cannot import hyphe
   `uvicorn` thread in a background thread over real HTTP so the client timeout path is genuinely tested.
 - Allocator tests assert the DIFD properties: determinism, capacity-respecting, ceiling-respecting, fairness-weighted
   ordering, waitlist order.
+- Durable-state tests (`tests/test_state_durability.py`) reopen the app over the same data directory, because that is
+  what a container restart is; they cover the pool, holds, capacity, mandate balance and the idempotency ledger.
 - Markdown is autoformatted on commit by `pre-commit` (`.pre-commit-config.yaml`, `mdformat` +
   `mdformat-gfm`/`mdformat-tables`), installed once with `uv run pre-commit install`.
 
@@ -124,6 +134,20 @@ bash scripts/dev.sh                 # mock server on :8081 (GET /health)
 ```
 
 Fish shell is the user default; scripts are bash (`bash scripts/dev.sh`).
+
+## Deploying
+
+The cluster is GitOps. An ArgoCD Application named `kirro` watches **this repo's `k8s/` on `main`** and syncs it to
+namespace `kirro` with `selfHeal` and `prune` enabled. So **merging to `main` is the deploy**, and there is no deploy
+step in CI beyond the image build:
+
+- `.github/workflows/docker.yml` builds and pushes `ghcr.io/cheetos-gif/kirro:latest` on every push to `main`.
+- The Deployment pulls that tag with `imagePullPolicy: Always`, and ArgoCD reconciles `k8s/` from the same commit.
+- `kubectl apply -k k8s/` **does not stick**: `selfHeal` reverts it within seconds (this cost real debugging time
+  once — a manifest change was applied by hand, silently reverted, and the volume mount never took effect). Commit
+  manifest changes instead.
+- `kubectl rollout restart deploy/kirro-mock -n kirro` is still the way to force a pod onto a freshly pushed image
+  without a manifest change.
 
 ## Working on this repo (for Claude sessions)
 

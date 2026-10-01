@@ -65,6 +65,36 @@ as a tool instead of our Python engine calling it in process:
 - Response: `{release_id, results: [{declaration_id, slot_id, group_size_allocated, status, draw_position, seed, reason}]}` — one `allocator/schemas.py::AllocationResult` per bid, in draw order. Unknown release → 404
   `NOT_FOUND`. See `docs/allocation.md` for the mechanism.
 
+### MCP surface
+
+Each surface is also exposed as an MCP server (ADR-012) — this is what AgenticOrg registers with the MCP checkbox
+on. Transport is stateless streamable HTTP.
+
+| Surface           | MCP endpoint     | Tools                                                                                                                                                       |
+| ----------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| venue             | `/venue/mcp`     | `list_releases`, `get_release`, `create_hold`, `get_hold`, `release_hold`, `confirm_booking`, `declare_interest`, `list_pool_entries`, `cancel_declaration` |
+| Pine Labs mandate | `/pinelabs/mcp`  | `create_mandate`, `get_mandate_balance`, `execute`, `release`, `refund`                                                                                     |
+| DIFD draw         | `/allocator/mcp` | `draw`                                                                                                                                                      |
+| Delhivery         | `/delhivery/mcp` | `pincode_serviceability`, `create_shipment`, `track`                                                                                                        |
+
+Tools call the same routes **in process**, so validation, the idempotency ledger, the state store and the request
+log are shared rather than reimplemented. Every tool takes an optional `run_id` (sent as `X-Run-Id`; defaults to
+`default`, which the Declare Agent and the Workflow therefore share) and every write tool takes an optional
+`idempotency_key` (sent as `Idempotency-Key`). Scenario control (`/__admin/*`) is harness-only and is **not**
+reachable from MCP.
+
+### State and durability
+
+State is durable in SQLite (ADR-013) at `MOCK_DB_PATH` — in the cluster `/app/data/mock.db` on a PVC — so the
+declare-interest pool, holds, mandates, payments and the idempotency ledger survive a pod restart. This matters
+because the Declare Agent writes a bid now and the Window Allocation Workflow reads it later, and every deploy
+restarts the pod.
+
+Everything is keyed by `X-Run-Id`, so that header is the scope of a run: keep it stable across the Declare Agent and
+the Workflow. Both fall back to `default`, which is also shared, so omitting it works too — just do not give the two
+sides *different* run ids, or they will not see each other's pool. Single writer: the Deployment runs one replica.
+`POST /__admin/reset` clears one run (with `run_id`) or all state.
+
 ## Pine Labs
 
 - **Native on AgenticOrg**: `Pine Labs (Plural)` connector, already registered and active in this tenant as

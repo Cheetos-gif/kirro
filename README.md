@@ -26,15 +26,17 @@ offline and against the hosted deployment.
 ## Layout
 
 ```
-mock_server/         FastAPI mock: venue inventory + holds + declared-interest pool, Pine Labs mandate
+mock_server/app.py   FastAPI mock: venue inventory + holds + declared-interest pool, Pine Labs mandate
                      hold/release, DIFD draw, Delhivery — plus out-of-band scenario control
+mock_server/mcp_surface.py  MCP servers, one per surface (ADR-012) — what AgenticOrg registers
+mock_server/state.py        per-run state in SQLite (ADR-013), so the pool survives a restart
 allocator/           DIFD seeded fair draw (the reference the mock's /allocator/draw transcribes)
 logging_/redact.py   key/token/phone redaction shared by the mock request log
-tests/               mock-server scenarios (incl. a real uvicorn thread) and allocator properties
+tests/               mock scenarios (real uvicorn thread), MCP catalogs/parity, allocator, durability
 docs/                spec (agenticorg/), decisions/ (ADRs), architecture, connectors, testing, submission
 scripts/dev.sh       start the mock server on :8081
 Dockerfile           the mock server image
-k8s/                 Deployment, Service, Ingress, NetworkPolicy for the hosted mock
+k8s/                 Deployment, Service, Ingress, NetworkPolicy, PVC for the hosted mock
 ```
 
 ## Commands
@@ -49,6 +51,12 @@ bash scripts/dev.sh            # mock server on :8081
 ```
 
 `pytest`, `ruff` and `black` run entirely offline — no API keys and no network are needed.
+
+## Deploying
+
+ArgoCD (Application `kirro`) watches `k8s/` on `main` and syncs namespace `kirro` with self-heal, so **merging to
+`main` is the deploy**: CI builds `ghcr.io/cheetos-gif/kirro:latest` and ArgoCD applies the manifests from the same
+commit. `kubectl apply` on its own is reverted by self-heal — commit manifest changes.
 
 ## Safety invariants
 

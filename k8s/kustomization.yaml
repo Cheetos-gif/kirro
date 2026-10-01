@@ -4,6 +4,7 @@ namespace: kirro
 resources:
   - namespace.yaml
   - networkpolicy.yaml
+  - pvc.yaml
   - deployments.yaml
   - services.yaml
   - ingress.yaml
