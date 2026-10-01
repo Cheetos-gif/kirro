@@ -3,6 +3,7 @@
 `transition()` is the ONLY place Declaration.state is assigned. Every legal edge is in TRANSITIONS and
 each guard is a named function so a failure explains itself.
 """
+
 from __future__ import annotations
 
 from agent.schemas.models import ConnectorResult, Declaration, State
@@ -11,8 +12,18 @@ S = State
 
 TERMINAL = {S.CLOSED, S.CANCELLED, S.RELEASED, S.FAILED, S.EXPIRED}
 PRE_CONFIRMED = {
-    S.INTAKE, S.AWAITING_USER, S.VALIDATED, S.AUTHORISING, S.AUTHORISED, S.WAITING_FOR_WINDOW,
-    S.ALLOCATING, S.ALLOCATED, S.WAITLISTED, S.UNALLOCATED, S.HOLD_PLACED, S.PAYMENT_PENDING,
+    S.INTAKE,
+    S.AWAITING_USER,
+    S.VALIDATED,
+    S.AUTHORISING,
+    S.AUTHORISED,
+    S.WAITING_FOR_WINDOW,
+    S.ALLOCATING,
+    S.ALLOCATED,
+    S.WAITLISTED,
+    S.UNALLOCATED,
+    S.HOLD_PLACED,
+    S.PAYMENT_PENDING,
 }
 
 TRANSITIONS: dict[State, set[State]] = {

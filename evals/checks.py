@@ -1,4 +1,5 @@
 """Machine-checkable pass criteria. Each check: (criterion dict, RunResult) -> (passed, detail)."""
+
 from __future__ import annotations
 
 import re
@@ -28,8 +29,12 @@ class RunResult:
         return out
 
     def calls(self, operation: str, connector: str | None = None) -> list[dict]:
-        return [r for r in self.records if r.get("decision") == f"call:{operation}"
-                and (connector is None or connector in (r.get("connector") or ""))]
+        return [
+            r
+            for r in self.records
+            if r.get("decision") == f"call:{operation}"
+            and (connector is None or connector in (r.get("connector") or ""))
+        ]
 
 
 def _get(final: dict, name: str) -> Any:
@@ -55,7 +60,10 @@ def check(c: dict, r: RunResult) -> tuple[bool, str]:
             return v in (None, [], {}), f"turn {c['turn']} {c['field']}={v!r}"
         return v == c["equals"], f"turn {c['turn']} {c['field']}={v!r}"
     if t == "snapshot_state":
-        return r.snapshots[c["turn"] - 1]["state"] == c["equals"], f"turn {c['turn']} state {r.snapshots[c['turn'] - 1]['state']}"
+        return (
+            r.snapshots[c["turn"] - 1]["state"] == c["equals"],
+            f"turn {c['turn']} state {r.snapshots[c['turn'] - 1]['state']}",
+        )
     if t == "connector_called":
         n = len(r.calls(c["operation"], c.get("connector")))
         ok = (n == c["count"]) if "count" in c else (c.get("min", 1) <= n <= c.get("max", 10**6))
@@ -68,7 +76,9 @@ def check(c: dict, r: RunResult) -> tuple[bool, str]:
         ok = any(re.search(c["pattern"], m) for m in msgs)
         return ok, f"turn {c['turn']} messages {msgs}"
     if t == "assistant_not_matches":
-        bad = [m["text"] for m in r.assistant if m["step"] >= c.get("from_turn", 1) and re.search(c["pattern"], m["text"])]
+        bad = [
+            m["text"] for m in r.assistant if m["step"] >= c.get("from_turn", 1) and re.search(c["pattern"], m["text"])
+        ]
         return not bad, f"matches: {bad}"
     if t == "any_assistant_matches":
         return any(re.search(c["pattern"], m["text"]) for m in r.assistant), "searched all assistant messages"
@@ -76,7 +86,11 @@ def check(c: dict, r: RunResult) -> tuple[bool, str]:
         v = r.mock_state.get(c["key"])
         return v == c["equals"], f"mock {c['key']}={v}"
     if t == "no_record_matches":
-        bad = [x["decision"] for x in r.records if re.search(c["pattern"], str(x.get("tool_response")) + str(x.get("user_message")))]
+        bad = [
+            x["decision"]
+            for x in r.records
+            if re.search(c["pattern"], str(x.get("tool_response")) + str(x.get("user_message")))
+        ]
         return not bad, f"found in: {bad}"
     return False, f"unknown check type {t!r}"
 
@@ -89,8 +103,13 @@ def builtin_checks(r: RunResult) -> list[tuple[str, bool, str]]:
     many = [m["text"] for m in r.assistant if m["text"].count("?") > 1]
     out.append(("at most one question per assistant message", not many, str(many)))
     if r.final["state"] == "CONFIRMED" or r.final.get("booking_ref"):
-        out.append(("CONFIRMED only with inventory + payment evidence",
-                    bool(r.final.get("booking_ref") and r.final.get("payment_id")), ""))
+        out.append(
+            (
+                "CONFIRMED only with inventory + payment evidence",
+                bool(r.final.get("booking_ref") and r.final.get("payment_id")),
+                "",
+            )
+        )
     mp, cap = r.final.get("max_price_paise"), r.final.get("slot_price_paise")
     if cap and mp:
         out.append(("charged unit price within ceiling", cap <= mp, f"{cap} vs {mp}"))

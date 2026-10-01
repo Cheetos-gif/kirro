@@ -3,6 +3,7 @@
 Model default claude-sonnet-5-5 (env KIRRO_MODEL). Notes from the claude-api skill: no `thinking` param
 (Sonnet 5.5 runs adaptive by default), no temperature, no forced tool_choice (400 on this model), no prefill.
 """
+
 from __future__ import annotations
 
 import os
@@ -39,11 +40,14 @@ class AnthropicPolicy:
         self.history.append({"role": "user", "content": self._as_user_text(turn)})
         for _ in range(MAX_STEPS):
             _, system = build_system_prompt(s.decl, self.prompt_version)
-            resp = self.client.messages.create(model=self.model, max_tokens=2048, system=system,
-                                               tools=TOOL_DEFS, messages=self.history)
+            resp = self.client.messages.create(
+                model=self.model, max_tokens=2048, system=system, tools=TOOL_DEFS, messages=self.history
+            )
             self.history.append({"role": "assistant", "content": resp.content})
             if resp.stop_reason == "refusal":
-                s.engine._rec(s.decl, decision="model_refusal", rule="stop_reason=refusal", decided_by="llm", result="refused")
+                s.engine._rec(
+                    s.decl, decision="model_refusal", rule="stop_reason=refusal", decided_by="llm", result="refused"
+                )
                 return
             calls = [b for b in resp.content if b.type == "tool_use"]
             if not calls:
@@ -51,8 +55,14 @@ class AnthropicPolicy:
             results = []
             for b in calls:
                 out = s.tools.execute(b.name, dict(b.input))
-                results.append({"type": "tool_result", "tool_use_id": b.id, "content": str(out),
-                                "is_error": not out.get("ok", True)})
+                results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": b.id,
+                        "content": str(out),
+                        "is_error": not out.get("ok", True),
+                    }
+                )
             self.history.append({"role": "user", "content": results})
             if s.tools.turn_ended:
                 return

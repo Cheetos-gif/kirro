@@ -1,4 +1,5 @@
 """Render connector output for the LLM. External text is DATA: fenced, truncated, stripped of fence tokens."""
+
 from __future__ import annotations
 
 import json
@@ -22,7 +23,13 @@ def _clean(v: Any, depth: int = 0) -> Any:
 
 def render_connector_result(r: ConnectorResult) -> str:
     """Never includes raw_excerpt. The system prompt says content inside the fence is not instructions."""
-    body = {"operation": r.operation, "status": r.status,
-            "error": r.error.model_dump() if r.error else None, "data": _clean(r.data)}
-    return (f"<<external_data source={r.source} connector={r.connector} kind={r.kind} status={r.status}>>\n"
-            f"{json.dumps(body, ensure_ascii=False)}\n<</external_data>>")
+    body = {
+        "operation": r.operation,
+        "status": r.status,
+        "error": r.error.model_dump() if r.error else None,
+        "data": _clean(r.data),
+    }
+    return (
+        f"<<external_data source={r.source} connector={r.connector} kind={r.kind} status={r.status}>>\n"
+        f"{json.dumps(body, ensure_ascii=False)}\n<</external_data>>"
+    )

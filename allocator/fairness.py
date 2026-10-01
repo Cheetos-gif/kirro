@@ -1,4 +1,5 @@
 """Fairness weight and seeded weighted permutation (Efraimidis-Spirakis)."""
+
 from __future__ import annotations
 
 import hashlib

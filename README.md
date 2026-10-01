@@ -24,7 +24,8 @@ declare -> verify -> authorise -> wait -> allocate -> capture/release -> confirm
 - Mock external services (venue inventory and holds, Pine Labs mandate, Delhivery) run in `mock_server/` with
   scenarios (no inventory, timeout, malformed, payment failure, ...) that a test harness sets out of band.
 
-Python 3.11+, FastAPI, Pydantic v2, httpx, pytest, ruff, Anthropic SDK for the local runner. No database.
+Python 3.11+, FastAPI, Pydantic v2, httpx, pytest, ruff (lint), black (format), Anthropic SDK for the local runner.
+No database.
 
 ## Setup
 
@@ -38,12 +39,15 @@ cp .env.example .env     # only needed for live mode or real connectors
 ```
 uv run pytest                          # offline: no key, no network
 uv run ruff check .
+uv run black .                         # formats agent/, connectors/, evals/, logging_/, mock_server/, scripts/, tests/
 bash scripts/dev.sh                    # mock :8081 and core :8080
 uv run python scripts/chat.py          # chat with the offline stub; type /open to open the window
 bash scripts/run_eval.sh all           # ten eval cases, offline stub policy
 bash scripts/run_eval.sh E08 --mode live   # real model (needs ANTHROPIC_API_KEY; KIRRO_MODEL defaults to claude-sonnet-5-5)
 bash scripts/reconstruct.sh evals/runs/<run>/log.jsonl     # decision log -> Q1.2 table
 ```
+
+`web/` formats with Prettier (`pnpm format` / `pnpm format:check` inside `web/`) — see `web/README.md`.
 
 ## Layout
 

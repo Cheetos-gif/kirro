@@ -1,6 +1,7 @@
 """Deterministic offline policy. It plays the role of the LLM using the SAME tools and rules, so evals
 can run structurally without an API key. It is not a model: it proves harness + engine + guards, not
 prompt quality. Live mode (anthropic_policy.py) is what evaluates the prompt."""
+
 from __future__ import annotations
 
 import re
@@ -29,7 +30,10 @@ class StubPolicy:
             return
         if d.state.value in ("WAITING_FOR_WINDOW", "WAITLISTED"):
             if t.strip():
-                run("report_to_user", {"message": "Your request is in. I will act when the window opens and tell you what happens."})
+                run(
+                    "report_to_user",
+                    {"message": "Your request is in. I will act when the window opens and tell you what happens."},
+                )
             return
         ex = extract_intake(t, today=e.today, catalogue=e.catalogue, focus=d.open_field) if t.strip() else None
         cands = sorted(ex.candidates, key=lambda c: _ORDER.index(c.field)) if ex else []
@@ -47,7 +51,9 @@ class StubPolicy:
             if r.get("turn_ended"):
                 return  # read-back was asked
         if d.state.value == "INTAKE" and d.readback_presented:
-            run("ask_user", {"question": M.readback(d)})  # silence / interruption / unclear: repeat only the open question
+            run(
+                "ask_user", {"question": M.readback(d)}
+            )  # silence / interruption / unclear: repeat only the open question
             return
         opts = e.event_options(d) if d.open_field == "event" else None
         run("ask_user", {"question": M.question_for(d, options=opts)})

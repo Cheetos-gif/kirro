@@ -2,6 +2,7 @@
 
 Every parser returns FieldParse(status, value, detail). status in ok|ambiguous|invalid|absent.
 """
+
 from __future__ import annotations
 
 import re
@@ -24,24 +25,79 @@ class FieldParse:
 
 
 _WEEKDAYS = {
-    "monday": 0, "somvaar": 0, "somvar": 0,
-    "tuesday": 1, "mangalvaar": 1, "mangalvar": 1,
-    "wednesday": 2, "budhvaar": 2, "budhvar": 2,
-    "thursday": 3, "guruvaar": 3, "guruvar": 3, "veervaar": 3,
-    "friday": 4, "shukravaar": 4, "shukravar": 4,
-    "saturday": 5, "shanivaar": 5, "shanivar": 5,
-    "sunday": 6, "ravivaar": 6, "ravivar": 6, "itwaar": 6,
+    "monday": 0,
+    "somvaar": 0,
+    "somvar": 0,
+    "tuesday": 1,
+    "mangalvaar": 1,
+    "mangalvar": 1,
+    "wednesday": 2,
+    "budhvaar": 2,
+    "budhvar": 2,
+    "thursday": 3,
+    "guruvaar": 3,
+    "guruvar": 3,
+    "veervaar": 3,
+    "friday": 4,
+    "shukravaar": 4,
+    "shukravar": 4,
+    "saturday": 5,
+    "shanivaar": 5,
+    "shanivar": 5,
+    "sunday": 6,
+    "ravivaar": 6,
+    "ravivar": 6,
+    "itwaar": 6,
 }
 _REL = {"today": 0, "aaj": 0, "tomorrow": 1, "kal": 1, "parso": 2}
 _NUMWORDS = {
-    "ek": 1, "one": 1, "do": 2, "two": 2, "teen": 3, "three": 3, "char": 4, "chaar": 4, "four": 4,
-    "paanch": 5, "panch": 5, "five": 5, "chhe": 6, "chah": 6, "six": 6, "saat": 7, "seven": 7,
-    "aath": 8, "eight": 8, "nau": 9, "nine": 9, "das": 10, "ten": 10,
+    "ek": 1,
+    "one": 1,
+    "do": 2,
+    "two": 2,
+    "teen": 3,
+    "three": 3,
+    "char": 4,
+    "chaar": 4,
+    "four": 4,
+    "paanch": 5,
+    "panch": 5,
+    "five": 5,
+    "chhe": 6,
+    "chah": 6,
+    "six": 6,
+    "saat": 7,
+    "seven": 7,
+    "aath": 8,
+    "eight": 8,
+    "nau": 9,
+    "nine": 9,
+    "das": 10,
+    "ten": 10,
 }
 _GROUP_NOUN = r"(?:people|persons?|ppl|log|members?|guests?|seats?|tickets?|players?|friends|of us|adults?)"
 HINGLISH_MARKERS = {
-    "chahiye", "ko", "log", "shanivaar", "ravivaar", "kal", "aaj", "haan", "nahi", "hai", "mujhe",
-    "karna", "kar", "do", "char", "teen", "paanch", "hazaar", "se", "tak", "wala",
+    "chahiye",
+    "ko",
+    "log",
+    "shanivaar",
+    "ravivaar",
+    "kal",
+    "aaj",
+    "haan",
+    "nahi",
+    "hai",
+    "mujhe",
+    "karna",
+    "kar",
+    "do",
+    "char",
+    "teen",
+    "paanch",
+    "hazaar",
+    "se",
+    "tak",
+    "wala",
 }
 
 
@@ -126,14 +182,14 @@ def parse_event(text: str, catalogue: list[dict]) -> FieldParse:
     if len(specific) == 1:
         return FieldParse("ok", specific[0]["event_id"], "", {"name": specific[0]["name"]})
     if len(specific) > 1:
-        return FieldParse("ambiguous", None, "matches more than one event",
-                          {"options": [e["name"] for e in specific]})
+        return FieldParse("ambiguous", None, "matches more than one event", {"options": [e["name"] for e in specific]})
     generic = [e for e in catalogue if any(a.lower() in words for a in e.get("generic_aliases", []))]
     if len(generic) == 1:
         return FieldParse("ok", generic[0]["event_id"], "", {"name": generic[0]["name"]})
     if len(generic) > 1:
-        return FieldParse("ambiguous", None, "generic word matches several events",
-                          {"options": [e["name"] for e in generic]})
+        return FieldParse(
+            "ambiguous", None, "generic word matches several events", {"options": [e["name"] for e in generic]}
+        )
     return FieldParse("absent", None, "no known event in words")
 
 

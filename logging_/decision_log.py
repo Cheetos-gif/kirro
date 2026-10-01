@@ -1,4 +1,5 @@
 """Structured JSONL decision log. One line per decision. Redacts on write."""
+
 from __future__ import annotations
 
 import json

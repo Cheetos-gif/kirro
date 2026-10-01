@@ -1,4 +1,5 @@
 """Turn a decision log into the Round 3 Q1.2 table (markdown / csv). `python -m logging_.reconstruct <log.jsonl>`."""
+
 from __future__ import annotations
 
 import csv
@@ -13,11 +14,22 @@ COLS = ["timestamp", "state", "input", "source", "decision", "rule", "action / m
 
 
 def _row(r: dict) -> list[str]:
-    action = r.get("user_message") or (json.dumps(r["tool_call"], ensure_ascii=False) if r.get("tool_call") else r.get("action", ""))
+    action = r.get("user_message") or (
+        json.dumps(r["tool_call"], ensure_ascii=False) if r.get("tool_call") else r.get("action", "")
+    )
     state = r["state_before"] if r["state_before"] == r["state_after"] else f"{r['state_before']} -> {r['state_after']}"
     inp = r.get("input")
-    return [r["ts"], state or "", json.dumps(inp, ensure_ascii=False) if inp is not None else "", r["input_source"],
-            r["decision"], r.get("rule", ""), str(action)[:300], r.get("connector") or "", r.get("result", "")]
+    return [
+        r["ts"],
+        state or "",
+        json.dumps(inp, ensure_ascii=False) if inp is not None else "",
+        r["input_source"],
+        r["decision"],
+        r.get("rule", ""),
+        str(action)[:300],
+        r.get("connector") or "",
+        r.get("result", ""),
+    ]
 
 
 def to_markdown(records: list[dict]) -> str:

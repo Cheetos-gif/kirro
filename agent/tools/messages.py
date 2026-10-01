@@ -1,5 +1,6 @@
 """Code-generated user-facing text. Outcome messages state only what connector results confirmed.
 Amounts are formatted from integer paise by code. No external free text (labels) is interpolated."""
+
 from __future__ import annotations
 
 import re
@@ -16,7 +17,9 @@ def rupees(paise: int) -> str:
     return f"Rs {whole:,}" + (f".{frac:02d}" if frac else "")
 
 
-def question_for(d: Declaration, catalogue_names: dict[str, str] | None = None, options: list[str] | None = None) -> str:
+def question_for(
+    d: Declaration, catalogue_names: dict[str, str] | None = None, options: list[str] | None = None
+) -> str:
     f = d.open_field
     note = d.field_notes.get(f or "", "")
     if f == "event":
@@ -50,14 +53,18 @@ def readback(d: Declaration) -> str:
     if "start_hour_min" in c:
         window = f", starting between {c['start_hour_min']:02d}:00 and {c['start_hour_max']:02d}:00"
     hold = rupees((d.group_size or 0) * (d.max_price_paise or 0))
-    return (f"To confirm: {d.event_name} on {d.date}{window}, {group}, at most "
-            f"{rupees(d.max_price_paise or 0)} per person. I will reserve up to {hold} and charge only the real price. "
-            f"Shall I go ahead?")
+    return (
+        f"To confirm: {d.event_name} on {d.date}{window}, {group}, at most "
+        f"{rupees(d.max_price_paise or 0)} per person. I will reserve up to {hold} and charge only the real price. "
+        f"Shall I go ahead?"
+    )
 
 
 def msg_authorised(d: Declaration) -> str:
-    return (f"Done. I have reserved up to {rupees(d.mandate_paise or 0)} on your payment method; nothing is charged yet. "
-            f"I will act when the booking window opens.")
+    return (
+        f"Done. I have reserved up to {rupees(d.mandate_paise or 0)} on your payment method; nothing is charged yet. "
+        f"I will act when the booking window opens."
+    )
 
 
 def msg_confirmed(d: Declaration) -> str:
@@ -65,13 +72,17 @@ def msg_confirmed(d: Declaration) -> str:
     part = ""
     if d.allocated_group_size != d.group_size:
         part = f" This is for {d.allocated_group_size} of your {d.group_size} people, which is within your minimum."
-    return (f"Booking confirmed by the venue: {d.event_name} on {d.date} at {d.slot_time or ''}, "
-            f"{d.allocated_group_size} people. Reference {d.booking_ref}. Charged {rupees(total)}.{part}")
+    return (
+        f"Booking confirmed by the venue: {d.event_name} on {d.date} at {d.slot_time or ''}, "
+        f"{d.allocated_group_size} people. Reference {d.booking_ref}. Charged {rupees(total)}.{part}"
+    )
 
 
 def msg_waitlisted(d: Declaration, reason: str) -> str:
-    return (f"I could not get you a slot in this round ({reason}). You are on the waitlist. No booking has been "
-            f"made and nothing has been charged. Your reserved amount stays held until the window ends.")
+    return (
+        f"I could not get you a slot in this round ({reason}). You are on the waitlist. No booking has been "
+        f"made and nothing has been charged. Your reserved amount stays held until the window ends."
+    )
 
 
 def msg_unallocated(d: Declaration, reason: str) -> str:
@@ -79,8 +90,11 @@ def msg_unallocated(d: Declaration, reason: str) -> str:
 
 
 def msg_expired(d: Declaration, released: bool) -> str:
-    tail = "Your reserved amount is released." if released else \
-        "I could not confirm that your reserved amount was released; please check with your payment provider."
+    tail = (
+        "Your reserved amount is released."
+        if released
+        else "I could not confirm that your reserved amount was released; please check with your payment provider."
+    )
     return f"The window has ended without a slot. No booking was made and nothing was charged. {tail}"
 
 
@@ -88,8 +102,11 @@ def msg_released(d: Declaration, why: str, released_hold: bool, released_mandate
     bits = []
     if d.hold_id:
         bits.append("the slot hold is released" if released_hold else "I could not confirm the slot hold was released")
-    bits.append("your reserved amount is released" if released_mandate else
-                "I could not confirm your reserved amount was released; please check with your payment provider")
+    bits.append(
+        "your reserved amount is released"
+        if released_mandate
+        else "I could not confirm your reserved amount was released; please check with your payment provider"
+    )
     return f"It did not go through: {why}. No booking was made. " + "; ".join(bits).capitalize() + "."
 
 
@@ -102,7 +119,9 @@ def msg_cancelled(d: Declaration, released: list[str], unconfirmed: list[str]) -
     if released:
         text += " Released: " + ", ".join(released) + "."
     if unconfirmed:
-        text += " I could not confirm release of: " + ", ".join(unconfirmed) + "; please check with your payment provider."
+        text += (
+            " I could not confirm release of: " + ", ".join(unconfirmed) + "; please check with your payment provider."
+        )
     if not released and not unconfirmed:
         text += " Nothing had been reserved or charged."
     return text

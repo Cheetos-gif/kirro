@@ -4,6 +4,7 @@ candidates with *heuristic* confidence. Gnani exposes no field confidence, so th
 It finds evidence spans; the actual parsing/validation is done by agent.state.fields, which is also what
 the engine applies when a field is set. So extraction can suggest, but only validation can store.
 """
+
 from __future__ import annotations
 
 import re
@@ -13,7 +14,8 @@ from datetime import date
 from agent.state import fields as F
 
 _PRICE_KW = re.compile(
-    r"(?i)\b(max(?:imum)?|budget|under|up\s*to|upto|at most|not more than|ceiling|rs\.?|rupees?|inr)\b|₹")
+    r"(?i)\b(max(?:imum)?|budget|under|up\s*to|upto|at most|not more than|ceiling|rs\.?|rupees?|inr)\b|₹"
+)
 _HEDGE_START = re.compile(r"(?i)^\s*(ideally|preferably|or|maybe|around|about|ya|lekin|but|if possible)\b")
 
 
@@ -57,8 +59,9 @@ def extract_intake(text: str, *, today: date, catalogue: list[dict], focus: str 
     def add(name: str, evidence: str, p: F.FieldParse, conf: float) -> None:
         if p.status == "absent":
             return
-        cands.append(FieldCandidate(name, p.status, evidence, p.value, p.detail,
-                                    conf if p.status == "ok" else 0.0, p.extra))
+        cands.append(
+            FieldCandidate(name, p.status, evidence, p.value, p.detail, conf if p.status == "ok" else 0.0, p.extra)
+        )
 
     add("event", text, F.parse_event(text, catalogue), 0.9)
     add("date", text, F.parse_weekday_date(text, today), 0.85)

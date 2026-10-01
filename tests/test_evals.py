@@ -7,8 +7,17 @@ from agent.runner.prompt import build_system_prompt, current_version, load_layer
 from agent.schemas.models import Declaration
 from evals.harness import CASES, all_case_ids, load_case, run_case
 
-REQUIRED = {"id", "name", "objective", "setup", "human_input", "external_state", "expected_behaviour",
-            "forbidden_behaviour", "pass_criteria"}
+REQUIRED = {
+    "id",
+    "name",
+    "objective",
+    "setup",
+    "human_input",
+    "external_state",
+    "expected_behaviour",
+    "forbidden_behaviour",
+    "pass_criteria",
+}
 
 
 def test_exactly_ten_canonical_cases():
@@ -44,7 +53,10 @@ def test_live_mode_refuses_without_key(monkeypatch, tmp_path):
 def test_a_broken_policy_would_fail_the_suite(tmp_path):
     """The checks must bite: a policy that claims success before CONFIRMED has to fail the built-ins."""
     from evals.checks import RunResult, builtin_checks
-    r = RunResult({"state": "INTAKE"}, [], [{"step": 1, "role": "assistant", "text": "All booked!", "state": "INTAKE"}], [])
+
+    r = RunResult(
+        {"state": "INTAKE"}, [], [{"step": 1, "role": "assistant", "text": "All booked!", "state": "INTAKE"}], []
+    )
     assert not all(ok for _, ok, _ in builtin_checks(r))
 
 

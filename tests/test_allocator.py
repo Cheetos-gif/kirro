@@ -3,8 +3,11 @@ import random
 from allocator.engine import Bid, Slot, allocate
 from allocator.fairness import fairness_weight, make_seed, weighted_order
 
-SLOTS = [Slot("s1", 4, 25000, "2026-10-03T07:00:00Z"), Slot("s2", 4, 28000, "2026-10-03T08:00:00Z"),
-         Slot("s3", 4, 90000, "2026-10-03T18:00:00Z")]
+SLOTS = [
+    Slot("s1", 4, 25000, "2026-10-03T07:00:00Z"),
+    Slot("s2", 4, 28000, "2026-10-03T08:00:00Z"),
+    Slot("s3", 4, 90000, "2026-10-03T18:00:00Z"),
+]
 
 
 def bid(i, n=2, price=30000, prior=0, user=None, **kw):
@@ -72,4 +75,6 @@ def test_speed_buys_nothing_and_fairness_favours_unlucky():
 def test_seed_and_weights():
     assert make_seed("a", "b") == make_seed("a", "b") != make_seed("a", "c")
     assert fairness_weight(0) == 1 and fairness_weight(3) == 0.25
-    assert weighted_order([("a", 1), ("b", 1)], make_seed("x", "y")) == weighted_order([("b", 1), ("a", 1)], make_seed("x", "y"))
+    assert weighted_order([("a", 1), ("b", 1)], make_seed("x", "y")) == weighted_order(
+        [("b", 1), ("a", 1)], make_seed("x", "y")
+    )

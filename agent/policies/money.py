@@ -5,6 +5,7 @@ parse_price() turns the user's own words into integer paise or refuses:
   - "8 to 10k, ideally 8", "around 300", "300 or 400" -> AMBIGUOUS (never guessed)
   - no number -> ABSENT; out of policy bounds -> INVALID
 """
+
 from __future__ import annotations
 
 import re

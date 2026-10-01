@@ -4,6 +4,7 @@ Scenario control is OUT OF BAND: the harness calls POST /__admin/scenario before
 agent carry only X-Run-Id (a correlation id) plus business payload; no response ever names a scenario.
 Response bodies are MOCK schemas (connectors/mock_schemas.py), not vendor-verified contracts.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -38,14 +39,18 @@ def _iso(dt: datetime) -> str:
 
 
 def create_app(log_dir: str | None = None) -> FastAPI:
-    app = FastAPI(title="KIRRO mock server", version="0.1.0",
-                  description="MOCK external services. Schemas are KIRRO mock contracts, not vendor APIs.")
+    app = FastAPI(
+        title="KIRRO mock server",
+        version="0.1.0",
+        description="MOCK external services. Schemas are KIRRO mock contracts, not vendor APIs.",
+    )
     st = MockState(log_dir)
     app.state.mock = st
     seq = {"n": 0}
 
-    async def serve(request: Request, target: str, handler: Handler, *, body: dict | None = None,
-                    html_ok: bool = True) -> JSONResponse | HTMLResponse:
+    async def serve(
+        request: Request, target: str, handler: Handler, *, body: dict | None = None, html_ok: bool = True
+    ) -> JSONResponse | HTMLResponse:
         t0 = time.monotonic()
         run_id = request.headers.get("x-run-id", "default")
         req_id = request.headers.get("x-request-id", "")
@@ -70,8 +75,10 @@ def create_app(log_dir: str | None = None) -> FastAPI:
         elif replay is not None:
             status, payload = replay
             if scenario == "duplicate":
-                status, payload = 409, {"error": {"code": "DUPLICATE_REQUEST",
-                                                  "message": "request already processed"}, "original": replay[1]}
+                status, payload = 409, {
+                    "error": {"code": "DUPLICATE_REQUEST", "message": "request already processed"},
+                    "original": replay[1],
+                }
         else:
             status, payload = handler(scenario, body, run)
             if idem and request.method == "POST" and status < 500:
@@ -82,15 +89,30 @@ def create_app(log_dir: str | None = None) -> FastAPI:
         if scenario == "malformed":
             resp: JSONResponse | HTMLResponse = HTMLResponse(
                 "<html><body><h1>Service notice</h1><p>Temporarily unavailable.</p></body></html>",
-                status_code=200, headers=headers)
+                status_code=200,
+                headers=headers,
+            )
             shown: Any = "<html>...</html>"
         else:
             resp = JSONResponse(payload, status_code=status, headers=headers)
             shown = payload
-        st.log(run_id, redact({
-            "ts": _iso(_now()), "request_id": req_id, "upstream_request_id": up_id, "path": request.url.path,
-            "target": target, "scenario": scenario, "request": body, "response": shown, "status": resp.status_code,
-            "latency_ms": int((time.monotonic() - t0) * 1000)}))
+        st.log(
+            run_id,
+            redact(
+                {
+                    "ts": _iso(_now()),
+                    "request_id": req_id,
+                    "upstream_request_id": up_id,
+                    "path": request.url.path,
+                    "target": target,
+                    "scenario": scenario,
+                    "request": body,
+                    "response": shown,
+                    "status": resp.status_code,
+                    "latency_ms": int((time.monotonic() - t0) * 1000),
+                }
+            ),
+        )
         return resp
 
     # ------------------------------------------------------------------ admin (harness only)
@@ -117,11 +139,16 @@ def create_app(log_dir: str | None = None) -> FastAPI:
     @app.get("/__admin/state")
     def admin_state(run_id: str):
         r = st.run(run_id)
-        return {"holds": len(r.holds), "active_holds": sum(1 for h in r.holds.values() if not h["released"]),
-                "bookings": len(r.bookings), "mandates": len(r.mandates), "payments": len(r.payments),
-                "refunds": sum(1 for p in r.payments.values() if p.get("refunded")),
-                "released_mandates": sum(1 for m in r.mandates.values() if m["status"] == "RELEASED"),
-                "shipments": len(r.shipments)}
+        return {
+            "holds": len(r.holds),
+            "active_holds": sum(1 for h in r.holds.values() if not h["released"]),
+            "bookings": len(r.bookings),
+            "mandates": len(r.mandates),
+            "payments": len(r.payments),
+            "refunds": sum(1 for p in r.payments.values() if p.get("refunded")),
+            "released_mandates": sum(1 for m in r.mandates.values() if m["status"] == "RELEASED"),
+            "shipments": len(r.shipments),
+        }
 
     # ------------------------------------------------------------------ venue (capability A, MOCK REQUIRED)
     def find_release(rel_id: str) -> dict | None:
@@ -144,10 +171,14 @@ def create_app(log_dir: str | None = None) -> FastAPI:
     async def list_releases(request: Request):
         def h(sc: str, body: dict, run: RunState):
             q = request.query_params
-            out = [{"release_id": r["release_id"], "event_id": r["event_id"], "date": r["date"], "opens_at": r["opens_at"]}
-                   for r in st.catalogue["releases"]
-                   if (not q.get("event_id") or r["event_id"] == q["event_id"]) and (not q.get("date") or r["date"] == q["date"])]
+            out = [
+                {"release_id": r["release_id"], "event_id": r["event_id"], "date": r["date"], "opens_at": r["opens_at"]}
+                for r in st.catalogue["releases"]
+                if (not q.get("event_id") or r["event_id"] == q["event_id"])
+                and (not q.get("date") or r["date"] == q["date"])
+            ]
             return 200, {"releases": out}
+
         return await serve(request, "venue.list_releases", h, body={})
 
     @app.get("/venue/releases/{release_id}")
@@ -156,8 +187,13 @@ def create_app(log_dir: str | None = None) -> FastAPI:
             r = find_release(release_id)
             if not r:
                 return err(404, "NOT_FOUND", "release not found")
-            return 200, {"release_id": r["release_id"], "event_id": r["event_id"], "opens_at": r["opens_at"],
-                         "slots": [slot_view(run, sc, s) for s in r["slots"]]}
+            return 200, {
+                "release_id": r["release_id"],
+                "event_id": r["event_id"],
+                "opens_at": r["opens_at"],
+                "slots": [slot_view(run, sc, s) for s in r["slots"]],
+            }
+
         return await serve(request, "venue.release", h, body={})
 
     @app.post("/venue/releases/{release_id}/holds")
@@ -176,10 +212,21 @@ def create_app(log_dir: str | None = None) -> FastAPI:
             ttl = 1 if sc == "booking_expired" else int(body.get("ttl_s", 600))
             hid = run.next_id("hold")
             run.used_capacity[slot["slot_id"]] += qty
-            run.holds[hid] = {"slot_id": slot["slot_id"], "quantity": qty, "released": False,
-                              "expires": _now() + timedelta(seconds=ttl), "force_expired": sc == "booking_expired"}
-            return 200, {"hold_id": hid, "slot_id": slot["slot_id"], "quantity": qty,
-                         "price_per_unit_paise": slot["price_per_person_paise"], "expires_at": _iso(run.holds[hid]["expires"])}
+            run.holds[hid] = {
+                "slot_id": slot["slot_id"],
+                "quantity": qty,
+                "released": False,
+                "expires": _now() + timedelta(seconds=ttl),
+                "force_expired": sc == "booking_expired",
+            }
+            return 200, {
+                "hold_id": hid,
+                "slot_id": slot["slot_id"],
+                "quantity": qty,
+                "price_per_unit_paise": slot["price_per_person_paise"],
+                "expires_at": _iso(run.holds[hid]["expires"]),
+            }
+
         return await serve(request, "venue.hold", h)
 
     def hold_status(hold: dict) -> str:
@@ -196,6 +243,7 @@ def create_app(log_dir: str | None = None) -> FastAPI:
             if not hold:
                 return err(404, "NOT_FOUND", "hold not found")
             return 200, {"hold_id": hold_id, "status": hold_status(hold), "expires_at": _iso(hold["expires"])}
+
         return await serve(request, "venue.hold_get", h, body={})
 
     @app.delete("/venue/holds/{hold_id}")
@@ -208,6 +256,7 @@ def create_app(log_dir: str | None = None) -> FastAPI:
                 hold["released"] = True
                 run.used_capacity[hold["slot_id"]] -= hold["quantity"]
             return 200, {"hold_id": hold_id, "released": True}
+
         return await serve(request, "venue.hold_release", h, body={})
 
     @app.post("/venue/bookings")
@@ -223,8 +272,13 @@ def create_app(log_dir: str | None = None) -> FastAPI:
                 return err(402, "PAYMENT_REQUIRED", "no captured payment for this booking")
             ref = run.next_id("BK").replace("_", "-")
             run.bookings[ref] = {"hold_id": body["hold_id"]}
-            return 200, {"booking_ref": ref, "status": "CONFIRMED", "hold_id": body["hold_id"],
-                         "amount_paise": pay["amount"]}
+            return 200, {
+                "booking_ref": ref,
+                "status": "CONFIRMED",
+                "hold_id": body["hold_id"],
+                "amount_paise": pay["amount"],
+            }
+
         return await serve(request, "venue.booking", h)
 
     # ------------------------------------------------------------------ Pine Labs mock (shapes: MOCK)
@@ -242,6 +296,7 @@ def create_app(log_dir: str | None = None) -> FastAPI:
             mid = run.next_id("auth")
             run.mandates[mid] = {"amount": amt, "balance": amt, "status": "ACTIVE"}
             return 200, {"authorizationId": mid, "status": "ACTIVE", "amount": money(amt)}
+
         return await serve(request, "pinelabs.create_mandate", h)
 
     @app.get("/pinelabs/mandates/{auth_id}/balance")
@@ -251,6 +306,7 @@ def create_app(log_dir: str | None = None) -> FastAPI:
             if not m:
                 return err(404, "NOT_FOUND", "authorization not found")
             return 200, {"authorizationId": auth_id, "status": m["status"], "balance": money(m["balance"])}
+
         return await serve(request, "pinelabs.balance", h, body={})
 
     @app.post("/pinelabs/mandates/{auth_id}/execute")
@@ -270,6 +326,7 @@ def create_app(log_dir: str | None = None) -> FastAPI:
             m["balance"] -= amt
             run.payments[pid] = {"status": "SUCCESS", "amount": amt, "auth": auth_id, "refunded": False}
             return 200, {"payment_id": pid, "status": "SUCCESS", "receipt_id": f"rcpt_{pid}", "amount": money(amt)}
+
         return await serve(request, "pinelabs.execute", h)
 
     @app.post("/pinelabs/mandates/{auth_id}/release")
@@ -281,6 +338,7 @@ def create_app(log_dir: str | None = None) -> FastAPI:
             released = m["balance"] if m["status"] == "ACTIVE" else 0
             m["status"], m["balance"] = "RELEASED", 0
             return 200, {"authorizationId": auth_id, "status": "RELEASED", "released_amount": money(released)}
+
         return await serve(request, "pinelabs.release", h)
 
     @app.post("/pinelabs/payments/{payment_id}/refund")
@@ -291,6 +349,7 @@ def create_app(log_dir: str | None = None) -> FastAPI:
                 return err(404, "NOT_FOUND", "payment not found")
             p["refunded"] = True
             return 200, {"refund_id": run.next_id("rf"), "payment_id": payment_id, "status": "REFUNDED"}
+
         return await serve(request, "pinelabs.refund", h)
 
     # ------------------------------------------------------------------ Delhivery Express mock
@@ -301,9 +360,21 @@ def create_app(log_dir: str | None = None) -> FastAPI:
             info = st.catalogue["pincodes"].get(pin)
             if not info:  # non-serviceable: empty list, as a real lookup would return
                 return 200, {"delivery_codes": []}
-            return 200, {"delivery_codes": [{"postal_code": {
-                "pin": int(pin), "pre_paid": "Y", "cash": "N", "pickup": "Y",
-                "district": info["district"], "state_code": info["state_code"]}}]}
+            return 200, {
+                "delivery_codes": [
+                    {
+                        "postal_code": {
+                            "pin": int(pin),
+                            "pre_paid": "Y",
+                            "cash": "N",
+                            "pickup": "Y",
+                            "district": info["district"],
+                            "state_code": info["state_code"],
+                        }
+                    }
+                ]
+            }
+
         return await serve(request, "delhivery.serviceability", h, body={})
 
     @app.post("/delhivery/api/cmu/create.json")
@@ -322,6 +393,7 @@ def create_app(log_dir: str | None = None) -> FastAPI:
             wb = f"MOCKWB{run.next_id('wb')[-4:]}"
             run.shipments[wb] = {"refnum": ref, "status": "Manifested"}
             return 200, {"success": True, "packages": [{"waybill": wb, "refnum": ref, "status": "Success"}], "rmk": ""}
+
         return await serve(request, "delhivery.create", h)
 
     @app.get("/delhivery/api/v1/packages/json/")
@@ -332,6 +404,7 @@ def create_app(log_dir: str | None = None) -> FastAPI:
             if not s:
                 return err(404, "NOT_FOUND", "waybill not found")
             return 200, {"ShipmentData": [{"Shipment": {"AWB": wb, "Status": {"Status": s["status"]}}}]}
+
         return await serve(request, "delhivery.track", h, body={})
 
     # ------------------------------------------------------------------ Gnani extract mock (capability B)
@@ -344,9 +417,14 @@ def create_app(log_dir: str | None = None) -> FastAPI:
         def h(sc: str, body: dict, run: RunState):
             today = date.fromisoformat(body.get("today", date.today().isoformat()))
             ex = extract_intake(body.get("transcript", ""), today=today, catalogue=st.catalogue["events"])
-            return 200, {"language": ex.language, "fields": {
-                c.field: {"value": c.value, "confidence": c.confidence, "evidence": c.evidence, "status": c.status}
-                for c in ex.candidates}}
+            return 200, {
+                "language": ex.language,
+                "fields": {
+                    c.field: {"value": c.value, "confidence": c.confidence, "evidence": c.evidence, "status": c.status}
+                    for c in ex.candidates
+                },
+            }
+
         return await serve(request, "gnani.extract", h)
 
     return app

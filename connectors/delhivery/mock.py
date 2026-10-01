@@ -4,6 +4,7 @@ Shapes follow the paths in the Delhivery Express docs (delhivery-express-api-doc
 docs/architecture-plan-v1.md: pincode serviceability, cmu/create.json, packages tracking. The query name
 `filter_codes` is DOCUMENTED via community sources, not verified. Retarget to staging with a token only after
 verifying each path; TODO marker below."""
+
 from __future__ import annotations
 
 from connectors.base import HttpConnector, NotConfiguredConnector, Op
@@ -22,7 +23,9 @@ class DelhiveryMockConnector(HttpConnector):
     kind = "mock"
     ops = {
         "check_serviceability": Op("GET", "/delhivery/c/api/pin-codes/json/", PinResp),
-        "create_shipment": Op("POST", "/delhivery/api/cmu/create.json", CreateShipmentResp, ok_check=_create_ok, form=True),
+        "create_shipment": Op(
+            "POST", "/delhivery/api/cmu/create.json", CreateShipmentResp, ok_check=_create_ok, form=True
+        ),
         "track": Op("GET", "/delhivery/api/v1/packages/json/", TrackResp),
     }
 

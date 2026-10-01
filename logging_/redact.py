@@ -1,4 +1,5 @@
 """Redaction applied before anything is logged. Secrets, tokens and phone numbers never reach logs."""
+
 from __future__ import annotations
 
 import re

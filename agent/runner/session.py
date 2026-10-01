@@ -1,4 +1,5 @@
 """A conversation session: Engine + declaration + tool set + transcript. Policy-agnostic."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -43,7 +44,9 @@ class Session:
             self.transcript.append({"step": step, "role": "event", "text": str(turn.event)})
             self.engine.on_event(self.decl, turn.event)
         else:
-            self.transcript.append({"step": step, "role": "user", "text": turn.text or "", "interrupted": turn.interrupted})
+            self.transcript.append(
+                {"step": step, "role": "user", "text": turn.text or "", "interrupted": turn.interrupted}
+            )
             self.engine.receive_user_turn(self.decl, turn.text, interrupted=turn.interrupted)
             self.policy.respond(self, turn)
         for m in self.engine.messages[n_before:]:

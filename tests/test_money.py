@@ -3,18 +3,34 @@ import pytest
 from agent.policies.money import charge_within_limits, mandate_amount_paise, parse_price, validate_ceiling_paise
 
 
-@pytest.mark.parametrize("text,paise", [
-    ("300", 30000), ("Rs 300", 30000), ("max 1,200", 120000), ("8k", 800000), ("2 lakh", 20000000), ("Rs. 450.50", 45050),
-    ("up to 300", 30000),
-])
+@pytest.mark.parametrize(
+    "text,paise",
+    [
+        ("300", 30000),
+        ("Rs 300", 30000),
+        ("max 1,200", 120000),
+        ("8k", 800000),
+        ("2 lakh", 20000000),
+        ("Rs. 450.50", 45050),
+        ("up to 300", 30000),
+    ],
+)
 def test_single_amount_ok(text, paise):
     p = parse_price(text)
     assert p.status == "ok" and p.paise == paise
 
 
-@pytest.mark.parametrize("text", [
-    "8 to 10k, ideally 8", "around 300", "300 or 400", "between 300 and 400", "300-400", "ideally 300",
-])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "8 to 10k, ideally 8",
+        "around 300",
+        "300 or 400",
+        "between 300 and 400",
+        "300-400",
+        "ideally 300",
+    ],
+)
 def test_ranges_and_hedges_are_ambiguous_never_guessed(text):
     p = parse_price(text)
     assert p.status == "ambiguous" and p.paise is None

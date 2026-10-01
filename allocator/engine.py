@@ -1,4 +1,5 @@
 """Declared-Interest Fair Draw (DIFD). Pure, deterministic, no I/O. See docs/allocation.md."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -62,14 +63,26 @@ def allocate(slots: list[Slot], bids: list[Bid], release_id: str, window_open_is
         bid = bid_by_id[did]
         elig = [by_id[sid] for sid in bid.acceptable_slot_ids if sid in by_id and eligible(bid, by_id[sid])]
         if not elig:
-            results[did] = AllocationResult(declaration_id=did, slot_id=None, group_size_allocated=0,
-                                            status="UNALLOCATED", draw_position=pos, seed=seed,
-                                            reason="no acceptable slot within ceiling and constraints")
+            results[did] = AllocationResult(
+                declaration_id=did,
+                slot_id=None,
+                group_size_allocated=0,
+                status="UNALLOCATED",
+                draw_position=pos,
+                seed=seed,
+                reason="no acceptable slot within ceiling and constraints",
+            )
             continue
         if bid.user_id in winners_by_user:
-            results[did] = AllocationResult(declaration_id=did, slot_id=None, group_size_allocated=0,
-                                            status="UNALLOCATED", draw_position=pos, seed=seed,
-                                            reason="user already allocated another declaration in this release")
+            results[did] = AllocationResult(
+                declaration_id=did,
+                slot_id=None,
+                group_size_allocated=0,
+                status="UNALLOCATED",
+                draw_position=pos,
+                seed=seed,
+                reason="user already allocated another declaration in this release",
+            )
             continue
         chosen = None
         for slot in elig:  # preference order
@@ -83,14 +96,25 @@ def allocate(slots: list[Slot], bids: list[Bid], release_id: str, window_open_is
         if chosen is None:
             best = max(remaining[s.slot_id] for s in elig)
             results[did] = AllocationResult(
-                declaration_id=did, slot_id=None, group_size_allocated=0, status="WAITLISTED",
-                draw_position=pos, seed=seed,
-                reason=f"eligible but capacity exhausted (best remaining {best}, needs {bid.min_group_size})")
+                declaration_id=did,
+                slot_id=None,
+                group_size_allocated=0,
+                status="WAITLISTED",
+                draw_position=pos,
+                seed=seed,
+                reason=f"eligible but capacity exhausted (best remaining {best}, needs {bid.min_group_size})",
+            )
             continue
         remaining[chosen.slot_id] -= n
         winners_by_user.add(bid.user_id)
         partial = n < bid.group_size
         results[did] = AllocationResult(
-            declaration_id=did, slot_id=chosen.slot_id, group_size_allocated=n, status="ALLOCATED",
-            draw_position=pos, seed=seed, reason="partial group accepted" if partial else "assigned")
+            declaration_id=did,
+            slot_id=chosen.slot_id,
+            group_size_allocated=n,
+            status="ALLOCATED",
+            draw_position=pos,
+            seed=seed,
+            reason="partial group accepted" if partial else "assigned",
+        )
     return [results[d] for d in order]

@@ -5,7 +5,9 @@ from agent.state.machine import PRE_CONFIRMED, TERMINAL, TRANSITIONS, IllegalTra
 
 
 def ok_result(**data):
-    return ConnectorResult(source="x", connector="x.mock", kind="mock", operation="op", request_id="r", status="success", data=data)
+    return ConnectorResult(
+        source="x", connector="x.mock", kind="mock", operation="op", request_id="r", status="success", data=data
+    )
 
 
 def decl(state=State.INTAKE, **kw):
@@ -48,8 +50,15 @@ def test_confirmed_needs_both_external_confirmations():
     d.inventory_result = ok_result(booking_ref="BK-1")
     with pytest.raises(IllegalTransition, match="payment"):
         transition(d, State.CONFIRMED)
-    d.payment_result = ConnectorResult(source="p", connector="p.mock", kind="mock", operation="op", request_id="r",
-                                       status="failure", data={"payment_id": "p1"})
+    d.payment_result = ConnectorResult(
+        source="p",
+        connector="p.mock",
+        kind="mock",
+        operation="op",
+        request_id="r",
+        status="failure",
+        data={"payment_id": "p1"},
+    )
     with pytest.raises(IllegalTransition, match="payment"):
         transition(d, State.CONFIRMED)  # failure result never confirms, even if it carries an id
     d.payment_result = ok_result(payment_id="p1")

@@ -1,5 +1,6 @@
 """Venue inventory + hold service client. MOCK REQUIRED: no partner rail exposes time-boxed holds.
 Endpoints are the KIRRO mock contract (mock_server/app.py); not a vendor API."""
+
 from __future__ import annotations
 
 from connectors.base import HttpConnector, Op

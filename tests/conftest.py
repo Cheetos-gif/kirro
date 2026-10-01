@@ -26,6 +26,7 @@ def make_engine(tmp_path, mock_client):
         log = DecisionLog(run_id, tmp_path / "logs")
         eng = Engine(build_connectors(mock_client, run_id, env={}), Store(), log, cat, today=TODAY)
         return eng, log
+
     return _make
 
 
@@ -33,8 +34,13 @@ def declare(eng, text="Badminton court Saturday 7-9 am, 4 people, max 300 each")
     """Drive a declaration to VALIDATED through the public engine API (no stub policy)."""
     d = eng.new_declaration()
     eng.receive_user_turn(d, text)
-    for name, ev in (("time_window", "7-9 am"), ("event", "Badminton court"), ("date", "Saturday"),
-                     ("group_size", "4 people"), ("max_price", "max 300 each")):
+    for name, ev in (
+        ("time_window", "7-9 am"),
+        ("event", "Badminton court"),
+        ("date", "Saturday"),
+        ("group_size", "4 people"),
+        ("max_price", "max 300 each"),
+    ):
         eng.set_field(d, name, ev)
     eng.present_readback(d)
     return d

@@ -13,7 +13,10 @@ def test_core_api_flow(mock_client, tmp_path):
     core = TestClient(create_core(client=mock_client, log_dir=str(tmp_path)))
     assert core.get("/health").json()["status"] == "ok"
     did = core.post("/declarations").json()["declaration_id"]
-    r = core.post(f"/declarations/{did}/fields", json={"user_text": "budget 8 to 10k", "field": "max_price", "evidence": "budget 8 to 10k"})
+    r = core.post(
+        f"/declarations/{did}/fields",
+        json={"user_text": "budget 8 to 10k", "field": "max_price", "evidence": "budget 8 to 10k"},
+    )
     assert r.json()["status"] == "ambiguous"
     assert core.post(f"/declarations/{did}/authorise").json()["ok"] is False
     assert core.get("/declarations/nope").status_code == 404
@@ -23,9 +26,21 @@ def test_core_api_flow(mock_client, tmp_path):
 
 def test_tool_defs_expose_no_money_fields():
     names = {t["name"] for t in TOOL_DEFS}
-    assert names == {"set_field", "ask_user", "confirm_readback", "request_authorisation", "cancel_declaration", "report_to_user", "get_state"}
+    assert names == {
+        "set_field",
+        "ask_user",
+        "confirm_readback",
+        "request_authorisation",
+        "cancel_declaration",
+        "report_to_user",
+        "get_state",
+    }
     schema_text = json.dumps([t["input_schema"] for t in TOOL_DEFS])
-    assert "paise" not in schema_text and "amount" not in schema_text and "price" not in schema_text.replace("max_price", "")
+    assert (
+        "paise" not in schema_text
+        and "amount" not in schema_text
+        and "price" not in schema_text.replace("max_price", "")
+    )
 
 
 class FakeClient:
@@ -48,8 +63,12 @@ def tu(i, name, **inp):
 def test_anthropic_policy_loop_uses_same_tools_and_guards(make_engine, monkeypatch):
     eng, _ = make_engine()
     d = eng.new_declaration()
-    fake = FakeClient([[tu(1, "set_field", field="max_price", evidence="8 to 10k, ideally 8")],
-                       [tu(2, "ask_user", question="What is the single maximum you will pay per person?")]])
+    fake = FakeClient(
+        [
+            [tu(1, "set_field", field="max_price", evidence="8 to 10k, ideally 8")],
+            [tu(2, "ask_user", question="What is the single maximum you will pay per person?")],
+        ]
+    )
     pol = AnthropicPolicy(client=fake, model=None)
     assert pol.model == "claude-sonnet-5-5"
     s = Session(eng, d, pol)

@@ -122,7 +122,7 @@ Core directly, so no CORS is configured on it.
 ## Testing rules
 
 - `uv run pytest` must pass offline: no API key, no network, no real credentials. Keep it that way.
-- `uv run ruff check .` must be clean.
+- `uv run ruff check .` must be clean; `uv run black --check .` must be clean (format with `uv run black .`).
 - Unit tests for deterministic logic (money, fields, machine, allocator), contract tests for connectors, mock-server
   tests, engine/state tests, eval-harness tests all live in `tests/`.
 - Evals: `scripts/run_eval.sh E01|all [--mode offline|live]`. Offline uses `agent/runner/stub.py`, a deterministic
@@ -162,7 +162,7 @@ Skill: `.claude/skills/bump-prompt`.
 
 ```
 uv sync
-uv run pytest && uv run ruff check .
+uv run pytest && uv run ruff check . && uv run black --check .
 scripts/dev.sh                      # mock on :8081, core on :8080 (GET /health on both)
 uv run python scripts/chat.py       # text chat against the stub policy; --live for the Anthropic policy
 scripts/run_eval.sh all             # offline eval of all ten cases, artifacts in evals/runs/

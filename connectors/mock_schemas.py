@@ -4,6 +4,7 @@ These are NOT vendor-verified schemas. Where a shape mirrors a documented vendor
 docs/connectors.md; everything else is a KIRRO mock contract. A response that fails validation is
 classified `malformed` by the connector layer.
 """
+
 from __future__ import annotations
 
 from typing import Literal

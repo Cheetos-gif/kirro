@@ -1,4 +1,5 @@
 """Per-run mock state, scenario table and request log. Everything is keyed by run_id (X-Run-Id header)."""
+
 from __future__ import annotations
 
 import json
@@ -9,8 +10,17 @@ from typing import Any
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SCENARIOS = {
-    "success", "no_inventory", "insufficient_balance", "timeout", "malformed", "duplicate",
-    "booking_expired", "payment_failure", "partial_group", "upstream_500", "delayed",
+    "success",
+    "no_inventory",
+    "insufficient_balance",
+    "timeout",
+    "malformed",
+    "duplicate",
+    "booking_expired",
+    "payment_failure",
+    "partial_group",
+    "upstream_500",
+    "delayed",
 }
 DEFAULT_DELAY = {"timeout": 12.0, "delayed": 4.0}
 
@@ -53,8 +63,9 @@ class MockState:
         else:
             self.runs.clear()
 
-    def set_scenario(self, run_id: str, target: str, sequence: list[str], delay_s: float | None,
-                     options: dict | None) -> None:
+    def set_scenario(
+        self, run_id: str, target: str, sequence: list[str], delay_s: float | None, options: dict | None
+    ) -> None:
         for s in sequence:
             if s not in SCENARIOS:
                 raise ValueError(f"unknown scenario {s!r}")

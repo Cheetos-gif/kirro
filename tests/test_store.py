@@ -1,11 +1,18 @@
 """Store persistence: a process that restarts must see what the previous one wrote."""
+
 from agent.schemas.models import ConnectorResult, Declaration
 from agent.state.store import Store
 
 
 def _hold() -> ConnectorResult:
-    return ConnectorResult(source="venue", connector="venue_inventory", kind="mock", operation="create_hold",
-                           request_id="req-1", status="success")
+    return ConnectorResult(
+        source="venue",
+        connector="venue_inventory",
+        kind="mock",
+        operation="create_hold",
+        request_id="req-1",
+        status="success",
+    )
 
 
 def test_declarations_and_ledger_reload_from_disk(tmp_path):

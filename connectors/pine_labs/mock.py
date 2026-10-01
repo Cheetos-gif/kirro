@@ -1,6 +1,7 @@
 """Pine Labs mock connector (PINE_LABS_MODE=mock). Mirrors the DOCUMENTED P3P names
 (authorizationId, Amount(value, currency), RESERVE_PAY) but response bodies are KIRRO mock schemas.
 MOCK REQUIRED: sandbox onboarding not available; see docs/connectors.md."""
+
 from __future__ import annotations
 
 from connectors.base import HttpConnector, Op

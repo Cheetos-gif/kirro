@@ -3,8 +3,23 @@ from logging_.reconstruct import to_markdown
 from logging_.redact import redact
 from tests.conftest import declare
 
-REQUIRED = {"ts", "run_id", "state_before", "state_after", "input", "input_source", "connector", "decision", "rule",
-            "action", "recipient", "tool_call", "tool_response", "result", "user_message"}
+REQUIRED = {
+    "ts",
+    "run_id",
+    "state_before",
+    "state_after",
+    "input",
+    "input_source",
+    "connector",
+    "decision",
+    "rule",
+    "action",
+    "recipient",
+    "tool_call",
+    "tool_response",
+    "result",
+    "user_message",
+}
 
 
 def test_record_has_all_q12_fields_and_is_jsonl(tmp_path):
@@ -17,10 +32,21 @@ def test_record_has_all_q12_fields_and_is_jsonl(tmp_path):
 
 def test_secrets_and_phones_never_written(tmp_path):
     log = DecisionLog("r2", tmp_path)
-    log.record(decision="call", tool_call={"headers": {"x-api-key": "sk-123", "Authorization": "Bearer abcdefghijklmnop"},
-                                           "mobileNumber": "9876543210", "note": "call +91 98765 43210"})
+    log.record(
+        decision="call",
+        tool_call={
+            "headers": {"x-api-key": "sk-123", "Authorization": "Bearer abcdefghijklmnop"},
+            "mobileNumber": "9876543210",
+            "note": "call +91 98765 43210",
+        },
+    )
     text = log.path.read_text()
-    assert "sk-123" not in text and "abcdefghijklmnop" not in text and "9876543210" not in text and "98765 43210" not in text
+    assert (
+        "sk-123" not in text
+        and "abcdefghijklmnop" not in text
+        and "9876543210" not in text
+        and "98765 43210" not in text
+    )
     assert "******3210" in text
 
 

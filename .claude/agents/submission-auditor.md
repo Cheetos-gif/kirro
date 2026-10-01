@@ -13,7 +13,7 @@ Checklist (report each as OK / GAP with file:line):
 4. Each of the ten eval cases has at least one run recorded; live runs exist for the ones cited in the submission.
 5. `docs/testing.md` lists every failed live run and its change.
 6. Secrets and personal data: grep for keys, tokens, phone numbers in tracked files and in kept runs.
-7. `uv run pytest` and `uv run ruff check .` pass offline.
+7. `uv run pytest`, `uv run ruff check .` and `uv run black --check .` pass offline.
 8. Decision log covers Q1.2 fields for the demo run (`scripts/reconstruct.sh`).
 
 Output: the checklist with evidence and the three most important gaps. Constraints: read-only; do not fix; do not invent

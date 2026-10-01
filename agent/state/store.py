@@ -1,4 +1,5 @@
 """In-memory store with optional JSON persistence, plus the idempotency ledger."""
+
 from __future__ import annotations
 
 import hashlib

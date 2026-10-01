@@ -21,6 +21,7 @@ TODO(credentials): implement `PineLabsSandboxConnector.call` by mapping KIRRO op
   refund -> create_refund. Add pinelabs-online-p3p-server-sdk to pyproject only when implementing.
   Confirm the response field names on the first sandbox call and update connectors/mock_schemas.py.
 """
+
 from __future__ import annotations
 
 from connectors.base import NotConfiguredConnector
@@ -28,6 +29,9 @@ from connectors.base import NotConfiguredConnector
 
 def build_sandbox_connector(env: dict) -> NotConfiguredConnector:
     missing = [k for k in ("PINELABS_CLIENT_ID", "PINELABS_CLIENT_SECRET", "PINELABS_MERCHANT_ID") if not env.get(k)]
-    reason = (f"missing env: {', '.join(missing)}" if missing
-              else "real Pine Labs connector not implemented yet; see connectors/pine_labs/sandbox.py TODO")
+    reason = (
+        f"missing env: {', '.join(missing)}"
+        if missing
+        else "real Pine Labs connector not implemented yet; see connectors/pine_labs/sandbox.py TODO"
+    )
     return NotConfiguredConnector("pine_labs.p3p.sandbox", "pine_labs", reason)

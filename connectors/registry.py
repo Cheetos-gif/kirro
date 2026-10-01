@@ -1,4 +1,5 @@
 """Builds the connector set from config/connectors.yaml and env. Real vs mock is config, not code."""
+
 from __future__ import annotations
 
 import os
@@ -30,16 +31,18 @@ def load_config(path: Path = CONFIG_PATH) -> dict:
     return yaml.safe_load(path.read_text())
 
 
-def build_connectors(client: httpx.Client, run_id: str, env: dict | None = None,
-                     config: dict | None = None) -> Connectors:
+def build_connectors(
+    client: httpx.Client, run_id: str, env: dict | None = None, config: dict | None = None
+) -> Connectors:
     """`client` points at the mock server (in-process TestClient or http://localhost:8081)."""
     env = dict(os.environ if env is None else env)
     config = config or load_config()
     modes = {k: env.get(f"{k.upper()}_MODE", v.get("mode", "mock")) for k, v in config["connectors"].items()}
-    pine = (PineLabsMockConnector(client, run_id) if modes["pine_labs"] == "mock"
-            else build_sandbox_connector(env))
-    delh = (DelhiveryMockConnector(client, run_id) if modes["delhivery"] == "mock"
-            else build_real_delhivery(env))
-    gnani = (NotConfiguredConnector("gnani.mock", "gnani", "voice is simulated in evals; no mock call path")
-             if modes["gnani"] == "mock" else build_gnani(env))
+    pine = PineLabsMockConnector(client, run_id) if modes["pine_labs"] == "mock" else build_sandbox_connector(env)
+    delh = DelhiveryMockConnector(client, run_id) if modes["delhivery"] == "mock" else build_real_delhivery(env)
+    gnani = (
+        NotConfiguredConnector("gnani.mock", "gnani", "voice is simulated in evals; no mock call path")
+        if modes["gnani"] == "mock"
+        else build_gnani(env)
+    )
     return Connectors(VenueInventoryConnector(client, run_id), pine, delh, gnani)

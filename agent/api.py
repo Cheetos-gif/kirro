@@ -3,6 +3,7 @@
 Scaffold: endpoints exist so the Pine Labs platform / Gnani post-call action can be pointed at them.
 Wiring to the real platform is TODO (docs/connectors.md). State is in memory per process.
 """
+
 from __future__ import annotations
 
 import json
@@ -44,8 +45,13 @@ class GnaniPostCall(BaseModel):
     clientReferenceId: str | None = None
 
 
-def create_core(mock_url: str | None = None, log_dir: str = "logs", client: httpx.Client | None = None,
-                store_dir: str | None = None, log_file: str | None = None) -> FastAPI:
+def create_core(
+    mock_url: str | None = None,
+    log_dir: str = "logs",
+    client: httpx.Client | None = None,
+    store_dir: str | None = None,
+    log_file: str | None = None,
+) -> FastAPI:
     app = FastAPI(title="KIRRO Core", version="0.1.0")
     run_id = f"core-{uuid.uuid4().hex[:8]}"
     client = client or httpx.Client(base_url=mock_url or os.environ.get("MOCK_SERVER_URL", "http://localhost:8081"))

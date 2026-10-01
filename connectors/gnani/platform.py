@@ -14,6 +14,7 @@ fetches the transcript via conversations/logs.
 TODO(credentials): request bodies for conversations/logs (filters) are not recorded in the plan.
 Phone numbers are passed at call time only and are redacted in logs.
 """
+
 from __future__ import annotations
 
 from connectors.base import HttpConnector, NotConfiguredConnector, Op
@@ -34,6 +35,8 @@ def build_gnani(env: dict):
         return NotConfiguredConnector("gnani.inya", "gnani", "missing GNANI_INYA_API_KEY or GNANI_AGENT_ID")
     import httpx
 
-    client = httpx.Client(base_url=env.get("GNANI_INYA_BASE_URL", "https://api.inya.ai/platform"),
-                          headers={"x-api-key": env["GNANI_INYA_API_KEY"]})
+    client = httpx.Client(
+        base_url=env.get("GNANI_INYA_BASE_URL", "https://api.inya.ai/platform"),
+        headers={"x-api-key": env["GNANI_INYA_API_KEY"]},
+    )
     return GnaniPlatformConnector(client)
