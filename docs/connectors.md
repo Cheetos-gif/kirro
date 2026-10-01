@@ -120,13 +120,24 @@ sides *different* run ids, or they will not see each other's pool. Single writer
 
 ## Vachana (Gnani.ai voice)
 
-- DOCUMENTED and REAL: `https://api.vachana.ai` — REST speech-to-text, WebSocket streaming STT at
-  `wss://api.vachana.ai/stt/v3/stream`, TTS REST. Auth header `X-API-Key-ID`. Reference client: `gnani-vachana`
-  (PyPI); full reference docs at `docs.gnani.ai`. Same vendor as Inya (Gnani.ai); replaces the Inya `trigger_call`
-  design entirely — see ADR-010 decision 1 for why.
+- **REAL — verified from the official client source and a live authenticated call (2026-10-02).** Base URL
+  `https://api.vachana.ai`. Auth header `X-API-Key-ID` (plus `X-API-Request-ID`); the client reads the key from
+  `GNANI_API_KEY` (`gnani-vachana` 0.7.9, sdist inspected). Endpoints, from that package's own constants:
+  - TTS REST `POST /api/v1/tts/inference`; also SSE `/api/v1/tts/sse` and WS `/api/v1/tts`.
+  - STT REST `POST /stt/v3`; realtime STT WebSocket `wss://api.vachana.ai/stt/v3/stream`.
+- **Live check, no synthesis so no credits spent:** `POST /api/v1/tts/inference` with the key answers
+  `400 {"success":false,"message":"'model' is required …"}` — auth passed, payload rejected. The same call **without**
+  the key answers `401 {"detail":{"error_code":"MISSING_API_KEY", …}}`. The key in use is valid.
+- **Supported TTS model is `timbre-v2.5`** (from that live error message). The package's `DEFAULT_MODEL` is still
+  `timbre-v2.0`, so the SDK default is stale — pass the model explicitly.
+- **Cloudflare fronts the API.** A bare `python-urllib/x` User-Agent got `403 error code: 1010` *before the API saw
+  the request*; a conventional library UA (`python-httpx/…`, `curl/…`) is accepted. Any caller — including the
+  registered connector — must send a normal User-Agent or it looks like an auth failure.
+- Rate limiting is real: `429 {"error_code":"RATE_LIMITED", …}` was hit during verification, so do not assume the
+  default 100 RPM allowance.
 - Register on AgenticOrg via `Connectors > Register Connector > Custom/Generic Connector`: Base URL
-  `https://api.vachana.ai`, Auth Type API Key, header `X-API-Key-ID`, MCP checkbox **off** (this is a plain REST/WS
-  API, not an MCP server).
+  `https://api.vachana.ai`, Auth Type `Api Key`, header `X-API-Key-ID`, MCP checkbox **off** (plain REST/WS, not an
+  MCP server). The key is entered in that form only — never in this repo (runbook §8).
 - Call leg is **Twilio** (native AgenticOrg connector, `make_call`/`send_sms`/`send_whatsapp`/`get_recordings`/
   `get_message_status`), not Gnani/Vachana — Vachana only turns the call audio into text and back.
 - The old Inya client and the deterministic field extractor (`connectors/gnani/*`) were removed with the AgenticOrg
