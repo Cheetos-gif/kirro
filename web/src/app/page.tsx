@@ -17,7 +17,7 @@ const STEPS = [
 
 export default function Home() {
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-16 px-6 py-24">
+    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-16 px-6 py-24">
       <div className="flex flex-col gap-5">
         <Image src="/kirro.png" alt="" width={56} height={56} className="rounded-xl" priority />
         <h1 className="text-4xl font-semibold tracking-tight">KIRRO</h1>
@@ -34,7 +34,7 @@ export default function Home() {
         </div>
       </div>
 
-      <ol className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <ol className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {STEPS.map(([title, body], i) => (
           <li key={title} className="flex flex-col gap-1.5 rounded-xl border border-border p-5">
             <span className="text-xs font-medium text-muted-foreground">
