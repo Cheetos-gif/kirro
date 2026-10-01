@@ -17,6 +17,8 @@ import {
 } from '@/components/ui/table';
 import type { EvalRunSummary } from '@/lib/kirro';
 
+import { CheckName } from './check-name';
+
 export function EvalRunsTable({ runs }: { runs: EvalRunSummary[] }) {
   return (
     <Accordion>
@@ -49,8 +51,8 @@ export function EvalRunsTable({ runs }: { runs: EvalRunSummary[] }) {
                 <TableBody>
                   {verdict.checks.map((c, i) => (
                     <TableRow key={i}>
-                      <TableCell className="max-w-72 min-w-72 font-mono text-xs whitespace-normal">
-                        {c.name}
+                      <TableCell className="max-w-96 min-w-96 whitespace-normal">
+                        <CheckName name={c.name} />
                       </TableCell>
                       <TableCell>
                         <Badge variant={c.passed ? 'default' : 'destructive'}>
