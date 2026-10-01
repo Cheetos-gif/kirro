@@ -643,3 +643,45 @@ even with floor 0.5 and a consistent condition. Untried options for the next ses
 
 Tenant left coherent: `Kirro` (Declare, floor 0.5, one aggregate connector, 4 tools), `Kirro Allocator` (floor 0.5,
 10 tools), the 5 untouched shadow agents, and 13 connectors. All probe agents and connectors deleted.
+
+### Solved: the wizard recipe that *does* set `hitl_condition` — and what still blocks
+
+**The recipe works.** The reason my first manual wizard attempt stalled was linking a connector at the Behavior step:
+that disables `Next`. The path that works, verified end to end:
+
+1. `Create Agent` → **Describe in English → Generate.** The generated wizard's `Next` is enabled (no connector
+   linked), unlike the hand-built one.
+1. Step 1 Persona: set Name/Designation and, importantly, **Domain** — the generator defaults to `travel`, and
+   `domain` is immutable later, so it must be right here.
+1. Step 2 Role: tick `Create custom agent type` and enter the slug (`declared_interest_booking`); the type picker
+   only lists built-in types, so a custom type must come from this checkbox.
+1. Step 3 Prompt: replace the generated text with the verbatim `agent-spec.md` §3 prompt.
+1. Step 4 Behavior: `Confidence Floor` slider is `min 0.5` — **move it with a real `tab.clickAt()` on the track**
+   (synthetic events don't commit), then set `HITL Condition` to the same threshold (`confidence < 0.5`). **Link no
+   connector** — do it afterwards.
+1. Review → `Create as Shadow`.
+1. Then through the API: `PATCH` the connector (`connector_ids`), the tools (`authorized_tools`) and the prompt
+   (`system_prompt_text`). All three work.
+
+That produced `Kirro`, id **`455907ea-d9eb-4fc2-aecd-e19369febdf8`** — `agent_type: declared_interest_booking`,
+`domain: ops`, `confidence_floor: 0.5`, **`hitl_condition: "confidence < 0.5"`**, the four tools, the 6,545-char
+prompt, one connector.
+
+**But the tool call is still held, and it is not the agent's condition any more.** The new approval rows read
+`condition matched: confidence < 0.5` — so the agent-level condition is correctly 0.5 — with
+**`Trigger: chat_policy`**. That means the escalation is coming from a **platform-level chat policy**, not from the
+agent's `hitl_condition`, and it fires on ordinary turns whose stated confidence is 0.60–0.85. Deciding one of them
+(`POST /api/v1/approvals/{hitl_id}/decide` → `{"decision":"approve","status":"decided"}`) does **not** release the
+held action either: the mock still received nothing and `mandates` stayed 0.
+
+**Also confirmed immutable through the API for an existing agent:** `category`/`is_trusted` (connectors),
+`confidence_floor` on update, `hitl_condition`, `domain` and `agent_type` — all return 200 and change nothing. Only
+creation-time values and the wizard can set them.
+
+**Next options, cheapest first:** look for the org/chat-policy setting that drives `chat_policy` (Scope Dashboard,
+Approvals, or an admin surface); ask the platform whether `chat_policy` HITL can be relaxed for a demo tenant; or
+drive the agent by phone/WhatsApp instead of the Chat panel, since the held approvals are all `Trigger: chat_policy`
+and may be specific to that channel.
+
+Cleanup still owed on the tenant: two leftover renamed records, `Kirro Old3` and `Kirro Travel` (both shadow,
+harmless, but they should be deleted).
