@@ -233,5 +233,34 @@ settable from the connector page (only `Test Connection`, `Health Check`, `Back`
 governance surface (Scope Dashboard / Approvals), a registration-time Grantex check ours has not passed, or an API
 field. Check that first.
 
-**Draft state at the time of writing:** the wizard sits at step 4/5 with Persona + Prompt filled, agent type
-`declared_interest_booking`, and `mcp_venue_kirro` linked — **unsaved**. Nothing has been created.
+**Definitive (2026-10-02):** `GET /api/v1/tools` returns the platform's **559 valid tool names**, all drawn from the
+native registry (`agent_scheduler__*`, `whatsapp__*`, `zoom__*`, …). **None of our `mcp_*_kirro__*` tools is in it**,
+and setting them explicitly is rejected:
+
+```
+PATCH /api/v1/agents/{id} {"authorized_tools":["mcp_venue_kirro__get_release", …]}
+422 {"detail":"Invalid authorized_tools: … Use GET /connectors/registry or GET /tools to discover valid tool names."}
+```
+
+So a custom MCP connector's discovered tools are real at the connector level (they register, and the platform
+discovers and stores their JSON schemas) but are **not grantable to an agent** through the tool ACL. Our four mock
+connectors are therefore usable by the mock's own REST/MCP surface and by anything outside the agent ACL, but the
+Declare Agent as configured cannot call them.
+
+Untested ideas worth trying, in order: (1) name the connector after a native registry entry so its tools inherit a
+valid namespace; (2) get the connector `is_trusted` (mount a governance/admin surface — Scope Dashboard / Approvals
+— we have not found a UI for it); (3) drive KIRRO from the `agenticorg` Python SDK / A2A-MCP path shown on
+`/dashboard/integrations` instead of the agent ACL — but note the brief requires the platform agent to make the
+decisions, so this would be a design change, not a workaround.
+
+**Agent created (2026-10-02):** `Kirro`, id `ccbb1e36-ae7e-499f-825f-bdc2fe26a3ba`, type `declared_interest_booking`,
+domain `ops`, status `shadow`, `token_issued: true`, `grantex_registered: true`
+(`did:grantex:ag_01M3WTR022YXPQEAXEC4CHYQQX`). Connectors linked: `whatsapp_kirro`, `mcp_venue_kirro`,
+`mcp_pinelabs_kirro`. `authorized_tools` as auto-assigned: **only `whatsapp_kirro`'s five tools**, and
+`config.grantex.grantex_scopes = ["agenticorg:ops:read", "tool:whatsapp:write"]` — i.e. the untrusted `mcp_*`
+connectors contributed nothing. The agent runs on `azure_openai — deployment:gpt-4o`, confidence floor 88%, HITL at
+`confidence < 0.88`, max retries 3, and carries the full 6,545-char `agent-spec.md` §3 prompt verbatim.
+
+Note for anyone editing an agent: `PUT /api/v1/agents/{id}` needs the whole object and, carrying the 6.5 KB prompt,
+is **blocked by CloudFront** (a 403 HTML page, not an app error). `PATCH` accepts a partial body and is the usable
+path.
