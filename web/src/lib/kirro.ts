@@ -1,72 +1,103 @@
 // Typed server-side KIRRO Core calls. Every function here runs on the server only (Server
 // Components, Route Handlers, Server Actions) — the browser never talks to KIRRO Core directly.
+//
+// Read paths are schema-validated: a response that does not match what the UI expects throws
+// (surfaced by the error boundary) instead of silently rendering `undefined`. Mutation paths stay
+// loosely typed because the engine's reply shape varies by outcome and the wizard reads it defensively.
+import * as z from 'zod';
+
 import { kirroApi, request } from '@/api';
 
-export interface StateView {
-  declaration_id: string;
-  state: string;
-  confirmed_fields: Record<string, unknown>;
-  open_field: string | null;
-  open_field_note: string | null;
-  readback_presented: boolean;
-  allowed_actions: string[];
-  booking_ref: string | null;
-}
+const stateViewSchema = z.object({
+  declaration_id: z.string(),
+  state: z.string(),
+  confirmed_fields: z.record(z.string(), z.unknown()),
+  open_field: z.string().nullable(),
+  open_field_note: z.string().nullable(),
+  readback_presented: z.boolean(),
+  allowed_actions: z.array(z.string()),
+  booking_ref: z.string().nullable(),
+});
 
-export interface DeclarationFull {
-  declaration_id: string;
-  state: string;
-  event_name: string | null;
-  date: string | null;
-  group_size: number | null;
-  min_group_size: number | null;
-  max_price_paise: number | null;
-  hard_constraints: Record<string, unknown>;
-  mandate_id: string | null;
-  mandate_paise: number | null;
-  hold_id: string | null;
-  payment_id: string | null;
-  booking_ref: string | null;
-  slot_label: string | null;
-  slot_price_paise: number | null;
-  terminal_reason: string | null;
-  field_notes: Record<string, string>;
-}
+const declarationFullSchema = z.object({
+  declaration_id: z.string(),
+  state: z.string(),
+  event_id: z.string().nullable(),
+  event_name: z.string().nullable(),
+  fulfilment: z.string(),
+  date: z.string().nullable(),
+  group_size: z.number().nullable(),
+  min_group_size: z.number().nullable(),
+  max_price_paise: z.number().nullable(),
+  hard_constraints: z.record(z.string(), z.unknown()),
+  alternatives: z.array(z.string()),
+  language: z.string(),
+  open_field: z.string().nullable(),
+  readback_presented: z.boolean(),
+  confirmed_by_user: z.boolean(),
+  mandate_id: z.string().nullable(),
+  mandate_paise: z.number().nullable(),
+  release_id: z.string().nullable(),
+  slot_id: z.string().nullable(),
+  slot_label: z.string().nullable(),
+  slot_time: z.string().nullable(),
+  allocated_group_size: z.number().nullable(),
+  slot_price_paise: z.number().nullable(),
+  hold_id: z.string().nullable(),
+  payment_id: z.string().nullable(),
+  booking_ref: z.string().nullable(),
+  shipment_waybill: z.string().nullable(),
+  failed_slots: z.array(z.string()),
+  terminal_reason: z.string().nullable(),
+  field_notes: z.record(z.string(), z.string()),
+  hold_released: z.boolean(),
+  mandate_released: z.boolean(),
+  // Kept (not stripped) so the endpoint's stated purpose — every field, including connector
+  // provenance — survives validation. ConnectorResult is not modelled deeply; nothing reads it yet.
+  user_id: z.string(),
+  inventory_result: z.unknown(),
+  payment_result: z.unknown(),
+  processed_event_ids: z.array(z.string()),
+  allocations_last_30d: z.number(),
+});
 
-export interface DecisionRecord {
-  ts: string;
-  run_id: string;
-  seq: number;
-  declaration_id: string | null;
-  state_before: string | null;
-  state_after: string | null;
-  decision: string;
-  decided_by: 'code' | 'llm';
-  rule: string;
-  action: string;
-  connector: string | null;
-  result: string;
-  user_message: string | null;
-}
+const decisionRecordSchema = z.object({
+  ts: z.string(),
+  run_id: z.string(),
+  seq: z.number(),
+  declaration_id: z.string().nullable(),
+  state_before: z.string().nullable(),
+  state_after: z.string().nullable(),
+  decision: z.string(),
+  decided_by: z.enum(['code', 'llm']),
+  rule: z.string(),
+  action: z.string(),
+  connector: z.string().nullable(),
+  result: z.string(),
+  user_message: z.string().nullable(),
+});
 
-export interface EvalVerdict {
-  case_id?: string;
-  passed?: boolean;
-  [key: string]: unknown;
-}
+const evalRunSummarySchema = z.object({
+  run_id: z.string(),
+  verdict: z.record(z.string(), z.unknown()),
+});
 
-export interface EvalRunSummary {
-  run_id: string;
-  verdict: EvalVerdict;
-}
+const evalRunDetailSchema = evalRunSummarySchema.extend({
+  log: z.array(decisionRecordSchema),
+  transcript: z.string(),
+});
 
-export interface EvalRunDetail extends EvalRunSummary {
-  log: DecisionRecord[];
-  transcript: string;
-}
+const declaredSchema = stateViewSchema.extend({ declaration_id: z.string() });
+
+export type StateView = z.infer<typeof stateViewSchema>;
+export type DeclarationFull = z.infer<typeof declarationFullSchema>;
+export type DecisionRecord = z.infer<typeof decisionRecordSchema>;
+export type EvalRunSummary = z.infer<typeof evalRunSummarySchema>;
+export type EvalRunDetail = z.infer<typeof evalRunDetailSchema>;
+export type EvalVerdict = EvalRunSummary['verdict'];
 
 export async function createDeclaration() {
-  return request<StateView & { declaration_id: string }>({ method: 'POST', url: '/declarations' });
+  return request({ method: 'POST', url: '/declarations', schema: declaredSchema });
 }
 
 export async function setField(did: string, field: string, evidence: string, userText: string) {
@@ -101,22 +132,27 @@ export async function authorise(did: string) {
 }
 
 export async function getDeclarationState(did: string) {
-  return request<StateView>({ method: 'GET', url: `/declarations/${did}` });
+  return request({ method: 'GET', url: `/declarations/${did}`, schema: stateViewSchema });
 }
 
 export async function listDeclarations() {
-  return request<StateView[]>({ method: 'GET', url: '/declarations' });
+  return request({ method: 'GET', url: '/declarations', schema: z.array(stateViewSchema) });
 }
 
 export async function getDeclarationFull(did: string) {
-  return request<DeclarationFull>({ method: 'GET', url: `/declarations/${did}/full` });
+  return request({
+    method: 'GET',
+    url: `/declarations/${did}/full`,
+    schema: declarationFullSchema,
+  });
 }
 
 export async function getDecisionLog(declarationId?: string) {
-  return request<DecisionRecord[]>({
+  return request({
     method: 'GET',
     url: '/log',
     params: declarationId ? { declaration_id: declarationId } : undefined,
+    schema: z.array(decisionRecordSchema),
   });
 }
 
@@ -130,11 +166,11 @@ export async function getLatestUserMessage(did: string) {
 }
 
 export async function listEvalRuns() {
-  return request<EvalRunSummary[]>({ method: 'GET', url: '/evals/runs' });
+  return request({ method: 'GET', url: '/evals/runs', schema: z.array(evalRunSummarySchema) });
 }
 
 export async function getEvalRun(runId: string) {
-  return request<EvalRunDetail>({ method: 'GET', url: `/evals/runs/${runId}` });
+  return request({ method: 'GET', url: `/evals/runs/${runId}`, schema: evalRunDetailSchema });
 }
 
 export async function kirroHealth() {
