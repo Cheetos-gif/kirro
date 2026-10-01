@@ -22,22 +22,23 @@ flag (can live on the venue-inventory mock, since it already tracks per-release 
 
 ## 2. Steps
 
-1. **Fetch the pool.** `venue_inventory.list_pool_entries {release_id}` (new op, same mock as
-   `declare_interest` — ADR-011 §2). Returns every pending bid: `{declaration_id, user_contact, acceptable_slot_ids_or_constraints, group_size, min_group_size, max_price_paise, mandate_id}`.
+1. **Fetch the pool.** `venue_inventory.list_pool_entries {release_id}` — the mock's
+   `GET /venue/releases/{release_id}/declarations` (same mock as `declare_interest`, ADR-011 §2). Returns
+   `{release_id, declarations: [{declaration_id, user_contact, mandate_id, acceptable_slot_ids, group_size, min_group_size, max_price_paise, ...}]}`, one entry per pending bid.
    - Empty pool: nothing to do, end the Workflow.
 1. **Fetch the release.** `venue_inventory.get_release {release_id}` for current slots/capacity/`opens_at`.
-1. **Run the draw.** `allocator.draw {release_id, window_open_iso: opens_at, slots, bids: <pool, mapped to the allocator's Bid shape>}` (the budgeted DIFD mock, ADR-011 §2). Returns one `AllocationResult` per bid:
-   `{declaration_id, slot_id|null, group_size_allocated, status: ALLOCATED|WAITLISTED|UNALLOCATED, reason}`.
+1. **Run the draw.** `allocator.draw {release_id, window_open_iso: opens_at, bids: <pool, mapped to the allocator's Bid shape>}` — the budgeted DIFD mock (ADR-011 §2), implemented as `POST /allocator/draw`. The mock resolves the release's slots (with remaining capacity) from its own catalogue, so the Workflow does not send them. Returns one `AllocationResult` per bid in draw order:
+   `{declaration_id, slot_id|null, group_size_allocated, status: ALLOCATED|WAITLISTED|UNALLOCATED, draw_position, seed, reason}`.
 1. **For each ALLOCATED result** (winner):
    a. `venue_inventory.create_hold {release_id, declaration_id, slot_id, quantity: group_size_allocated, ttl_s}`.
    Failure (4xx, slot taken between draw and hold): fall back to the next acceptable slot per the bid's
-   preference order if capacity allows, same rule as the existing Python oracle (`agent/core.py` ALLOCATED→
-   ALLOCATING→ALLOCATED retry, ADR-011 §3). Exhausted candidates → treat as WAITLISTED (step 5).
+   preference order if capacity allows — the ALLOCATED→ALLOCATING→ALLOCATED retry the (now removed) local oracle
+   used (`agent/core.py`, ADR-011 §3). Exhausted candidates → treat as WAITLISTED (step 5).
    b. `venue_inventory.get_hold {hold_id}` — confirm `status == "active"` before charging.
    c. Compute `charge = group_size_allocated * hold.price_per_unit_paise`; refuse to proceed if
-   `charge > group_size * max_price_paise` or `charge > mandate amount` (the same `charge_within_limits` rule
-   as the oracle, `agent/policies/money.py`) — this is a hard invariant the Workflow must check itself, not
-   delegate to the mock.
+   `charge > group_size * max_price_paise` or `charge > mandate amount` (the `charge_within_limits` rule the
+   removed local oracle enforced in `agent/policies/money.py`) — this is a hard invariant the Workflow must check
+   itself, not delegate to the mock.
    d. `pine_labs_mandate.execute {authorizationId: mandate_id, amount: {value: charge}}`.
    - Failure (declined, HTTP < 500): release the hold (`venue_inventory.release_hold`), release the mandate
      (`pine_labs_mandate.release`), notify as a loss with reason "payment declined" (step 6).
@@ -60,10 +61,10 @@ flag (can live on the venue-inventory mock, since it already tracks per-release 
 ## 3. Idempotency
 
 - The draw itself only runs once per `release_id` (§1/§7).
-- Every mandate/hold/booking call reuses the same idempotency-key discipline as the oracle
-  (`agent/state/store.py`: `sha256(declaration_id|stage|scope)`) — if the Workflow re-runs a step after a partial
-  failure, it must not double-charge or double-hold. This needs an idempotency key field on each of the 3 budgeted
-  mock endpoints' write operations, generated the same way.
+- Every mandate/hold/booking call reuses the idempotency-key discipline the removed oracle's store used
+  (`sha256(declaration_id|stage|scope)`) — if the Workflow re-runs a step after a partial failure, it must not
+  double-charge or double-hold. This needs an idempotency key field on each of the 3 budgeted mock endpoints'
+  write operations, generated the same way.
 - If the Workflow itself crashes/restarts mid-run (brief's "agent restart/resume" test case), re-entry must be safe
   per-bid: check whether a winner already has a `hold_id`/`payment_id`/`booking_ref` before repeating a step.
 

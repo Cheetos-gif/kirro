@@ -1,7 +1,8 @@
 # Eval cases for the live AgenticOrg agent
 
-Distinct from `evals/cases/E01..E10.yaml`, which run against the local Python oracle (`agent/core.py`) via
-`evals/harness.py` and are unaffected by this migration (ADR-011 §3). These cases are written to run against the
+Distinct from the E01–E10 local-oracle suite, which ran against `agent/core.py` via `evals/harness.py` and was
+**removed** with the migration (issue #1 overrides ADR-011 §3; the E01–E10 inputs are kept as history in
+`docs/evals.md`). These cases are written to run against the
 actual "Kirro Declare" Agent and "Kirro Window Allocation" Workflow once built (ADR-011 §8 steps 6–7); no harness
 exists yet to execute them automatically — that is reachable work once the live agent exists and
 `AGENTICORG_API_KEY` is available (`client.agents.run(...)` / direct phone-channel scripting), not done here.
@@ -9,8 +10,8 @@ exists yet to execute them automatically — that is reachable work once the liv
 Columns match the brief's request: input, expected state, expected tool calls, forbidden tool calls, expected
 response, pass/fail, failure, prompt/behavior change made afterward. `Pass/fail`, `Failure`, and `Change made` are
 left blank (`TBD`) — they get filled in when a case is actually run, never fabricated ahead of time. `Oracle xref`
-points at the equivalent `evals/cases/*.yaml` case where one exists, so a live-agent failure can be cross-checked
-against the deterministic spec it was transcribed from.
+names the equivalent historical E01–E10 case (`docs/evals.md`) where one exists, so a live-agent failure can be
+cross-checked against the deterministic spec it was transcribed from.
 
 State names use the 6-stage model from ADR-011 §4 (`Declared, Verified, Pooled, Allocated, Captured, Confirmed`,
 plus exits `Cancelled, Released, Failed, Expired`), not the 19-state oracle machine.

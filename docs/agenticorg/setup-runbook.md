@@ -84,20 +84,21 @@ trigger per `workflow-spec.md` §1.
 | AgenticOrg platform API key                                        | `client.agents.*` / `client.workflows.*` SDK calls, if any setup is scripted instead of done via UI | environment variable on whatever machine runs the setup script, never committed     |
 | Public mock-server deploy credentials (Vercel token or equivalent) | deploying `mock_server/` publicly                                                                   | deploy tooling's own secret store, not this repo                                    |
 
-Nothing above goes in `.env`/`.env.example` in this repo unless a *local* dev/test path needs it (the existing
-`agent/core.py` oracle path already documents its own needs in `docs/connectors.md`'s "Needs real credentials"
-section, unchanged by this ADR).
+Nothing above goes in `.env`/`.env.example` in this repo — the mock server needs no vendor credentials, so the
+repo's env surface is `MOCK_SERVER_URL` and `MOCK_LOG_DIR` only. The old `agent/core.py` oracle path and the
+connector credentials it needed were removed with the migration; `docs/connectors.md`'s "Needs real credentials"
+section now covers platform-side config only.
 
 ## 9. Demo runbook (once 1–7 are done)
 
 1. Reset the mock server's state for a clean run (`POST /__admin/reset`, unchanged from today's mock).
 1. Call the Kirro Declare Agent's number (or WhatsApp) as a judge/demo user; declare a badminton slot for 4 people
-   at a 300/person ceiling, as in `evals/cases/E01_happy_path.yaml`.
+   at a 300/person ceiling, as in historical case E01 (`docs/evals.md`).
 1. Confirm the read-back, confirm yes; observe the mandate-hold tool call and the "you're in the pool" message.
 1. Trigger the release's `opens_at` (either wait for the real scheduled time or use whatever manual-trigger path
    the Agent Scheduler/Workflow builder exposes for a demo — not yet identified, needs verification during
    implementation).
 1. Observe the Window Allocation Workflow run: draw, hold, capture, booking confirm, WhatsApp notification.
 1. Pull AgenticOrg's own Audit Log / Observatory for the run as the judge-facing evidence trail (ADR-010/011 open
-   question: whether this fully replaces `logging_/decision_log.py`'s JSONL for Q1.2 reconstruction, or whether
-   both are shown).
+   question: whether this fully replaces the removed local `logging_/decision_log.py` JSONL as the Q1.2 source, or
+   whether both are shown — there is no local JSONL path any more; see ADR-011 §7.6).

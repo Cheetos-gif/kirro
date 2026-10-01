@@ -12,9 +12,11 @@ before relying on them (ADR-011 §8 step 1).
   copy-pasteable), Behavior rules, Authorized Tools, tool invocation contracts, failure handling, memory/state.
 - `workflow-spec.md` — the "Kirro Window Allocation" Workflow: trigger, steps, idempotency, notification templates.
 - `setup-runbook.md` — connector registration (exact field values), environment/secrets, demo steps.
-- `evals.md` — eval cases written against the live platform agent (distinct from `evals/cases/*.yaml`, which test
-  the local Python oracle and are unaffected by this migration).
+- `evals.md` — eval cases written against the live platform agent (the E01–E10 local-oracle suite they were
+  cross-referenced against was removed with the migration; its inputs survive as history in `docs/evals.md`).
 
-Source-of-truth extraction this spec is built from: `agent/state/machine.py`, `agent/state/fields.py`,
-`agent/policies/*`, `agent/core.py`, `agent/tools/*`, `agent/system-prompt/v0.md`, `allocator/*`, `mock_server/*`,
-`connectors/*`, `evals/cases/*.yaml` — all unchanged by this planning pass; see ADR-011 §3 for what stays as-is.
+Source-of-truth extraction this spec is built from: the pre-migration local oracle (`agent/state/machine.py`,
+`agent/state/fields.py`, `agent/policies/*`, `agent/core.py`, `agent/tools/*`, `agent/system-prompt/v0.md`,
+`connectors/*`, `evals/cases/*.yaml`). That code was **removed** from the repo with the AgenticOrg migration —
+issue #1 overrides ADR-011 §3's "keep as an oracle", so this directory, with `allocator/*` and `mock_server/*`, is
+the only surviving record of those rules.

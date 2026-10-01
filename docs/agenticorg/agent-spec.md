@@ -168,8 +168,10 @@ more tools than it needs is the one lever the static-ACL limitation (Risk 5) lea
 
 ### `venue_inventory.declare_interest` (pool-declare — new, part of budgeted mock #1, ADR-011 §2)
 
-- Input: `{release_id, declaration_id, user_contact, acceptable_slot_ids_or_constraints, group_size, min_group_size, max_price_paise, mandate_id}`.
-- Output: `{pool_entry_id}`.
+Implemented as `POST /venue/releases/{release_id}/declarations` (see `docs/connectors.md`).
+
+- Input: `{release_id, declaration_id, user_contact, acceptable_slot_ids, group_size, min_group_size, max_price_paise, mandate_id}` — `acceptable_slot_ids` must be a non-empty list of slot ids, the release must exist, and `group_size`/`min_group_size`/`max_price_paise` must be valid integers.
+- Output: `{declaration_id, release_id, status: "DECLARED"}`.
 - Idempotency: same `declaration_id` + `release_id` must not create a duplicate pool entry — treat a
   success/duplicate result the same way.
 - Failure: if the release's window has already opened (pool closed), tell the user plainly; do not retry.
