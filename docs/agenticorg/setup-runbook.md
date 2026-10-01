@@ -15,6 +15,13 @@ the Agent/Workflow builder UI is ADR-011 Risk 2/4 — verify as you go and corre
 
 ## 2. Register Vachana (real, custom connector)
 
+> **Naming rule (verified live 2026-10-02, this changes the name below).** `POST /api/v1/connectors` rejects any
+> connector whose name does not start with a native registry connector name
+> (`422 {"detail":"Unknown native connector. Use '<native_connector_name>_<your_suffix>'"}`). `vachana`, `gnani`,
+> `delhivery`, `pinelabs` and `custom` are **not** in the registry, so `vachana_kirro` cannot be registered. The
+> registry does contain an entry named **`mcp`** (category `custom`, no fixed tools), which is the intended prefix for
+> connectors we bring ourselves — e.g. `mcp_vachana_kirro`. See "Connector registration: verified mechanics" below.
+
 `Dashboard > Connectors > Register Connector`:
 
 | Field               | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
@@ -111,3 +118,47 @@ anyway. Do not configure different run ids for the two sides — they would not 
 1. Pull AgenticOrg's own Audit Log / Observatory for the run as the judge-facing evidence trail (ADR-010/011 open
    question: whether this fully replaces the removed local `logging_/decision_log.py` JSONL as the Q1.2 source, or
    whether both are shown — there is no local JSONL path any more; see ADR-011 §7.6).
+
+## Connector registration: verified mechanics (2026-10-02)
+
+Measured on the live tenant, not inferred.
+
+**Naming.** `POST /api/v1/connectors` answers
+`422 {"detail":"Unknown native connector. Use '<native_connector_name>_<your_suffix>'."}` unless the name begins with
+a name from the native registry. Confirmed accepted: **`mcp_<suffix>`** (the registry has an entry `mcp`, category
+`custom`, no fixed tools). Confirmed rejected: `vachana_*`. So our connectors are:
+
+- mocks (MCP on): `mcp_venue_kirro`, `mcp_pinelabs_kirro`, `mcp_allocator_kirro`, `mcp_delhivery_kirro`
+- Vachana: no non-`mcp` prefix is valid — see the note in §2.
+
+**Registry** (`GET /api/v1/connectors/registry`, 101 entries with `name`, `display_name`, `category`,
+`tool_functions`, `auth_type`). Present: `agent_scheduler` (`schedule_agent_task`, `cancel_agent_task`,
+`list_my_schedules`, `cancel_merchant_schedules`), `twilio`, `gmail`, `whatsapp`, `mcp`. Absent: `vachana`, `gnani`,
+`delhivery`, `pinelabs`, `custom`, `generic`.
+
+**Tenant state.** 7 connectors, all active: `whatsapp_kirro` (meta_business, 5 tools), `tally` (3), `zoho_books` (4),
+`gstn` (4), `banking_aa` (2), `stripe` (2), `pinelabs_plural` (2 — ADR-010 listed six tools for this connector;
+worth re-checking when the charge leg is wired). 5 shadow agents. **`agent_scheduler` and `twilio` are not registered
+yet** — the Workflow's trigger needs the former.
+
+**Write API.** Writes require `csrf_token` **in the JSON body**, equal to the `agenticorg_csrf` cookie value; a
+header-only token is rejected `403`.
+
+| Action                | Call                                                                   |
+| --------------------- | ---------------------------------------------------------------------- |
+| register              | `POST /api/v1/connectors`                                              |
+| archive (soft delete) | `DELETE /api/v1/connectors/{id}` → `status: "deleted"`, hidden from UI |
+| update / restore      | `PUT /api/v1/connectors/{id}`; `{"status":"active",…}` revives it      |
+
+`PUT` with the edit form's own fields does **not** change `status` — only an explicit `status` field does.
+
+**Gotcha that cost us a connector.** The list's Archive button is guarded by a native `window.confirm`, and browser
+automation accepts native dialogs by default, so a stray click silently archives a live connector. Always set a
+dismiss policy before clicking around this UI. `whatsapp_kirro` was archived this way and restored with the `PUT`
+above; the tenant is back to its original 7.
+
+**Form options** (`/dashboard/connectors/new`): Provider is only `custom`; Category ∈ {finance, hr, marketing, ops,
+engineering, comms, compliance, internal, custom, quick_commerce, travel, ecommerce}; Auth Type ∈ {oauth2,
+oauth2_client_credentials, api_key, basic, bolt_bot_token, certificate, custom, none} — note there is **no
+`meta_business`**, which is why native-prefixed connectors such as `whatsapp_kirro` are the only way to get that
+auth.
