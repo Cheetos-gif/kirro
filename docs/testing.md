@@ -28,11 +28,14 @@ Prompt/Behavior configuration.
 
 ## Testing log
 
-Every failed run against the live agent goes here.
+Every failed run against the live agent goes here. The first live run is recorded too, for the baseline.
 
-| date                                         | run id | case | prompt | outcome | evidence path | change made |
-| -------------------------------------------- | ------ | ---- | ------ | ------- | ------------- | ----------- |
-| TBD — nothing has run against the live agent |        |      |        |         |               |             |
+Channel: `Chat with Agent` (the agent page), agent `Kirro` id `4aec1080-fc25-4b0d-bf5a-cc9642fc18be`, shadow, one
+aggregate MCP connector (`mcp_kirro_all`), four authorized tools.
+
+| date       | agent id                               | case | prompt                                     | outcome                                                                      | evidence                                                 | change made |
+| ---------- | -------------------------------------- | ---- | ------------------------------------------ | ---------------------------------------------------------------------------- | -------------------------------------------------------- | ----------- |
+| 2026-10-02 | `4aec1080-fc25-4b0d-bf5a-cc9642fc18be` | L01  | v0 (prompt pasted from `agent-spec.md` §3) | **pass** — asked for a single maximum per person, did not echo 8000 or 10000 | `docs/agenticorg/platform-map.md` §8 (chat reply quoted) | none needed |
 
 ## Failure cases to test by hand once credentials exist
 

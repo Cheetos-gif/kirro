@@ -410,3 +410,32 @@ tools in one MCPServer — the builders already exist), rebuild and redeploy, re
 point a rebuilt agent at it, and grant the tool list. That stays inside ADR-012's design; no ADR change needed.
 
 Probe agent deleted; tenant is back to `Kirro` + the 5 shadow agents and 11 connectors.
+
+### RESOLVED — the aggregate connector unblocks the agent
+
+The fix above worked end to end:
+
+1. `/all/mcp` deployed (CI image + `kubectl rollout restart`); verified `200` over HTTPS.
+1. Registered `mcp_kirro_all` → `https://api-kirro.upayan.dev/all/mcp`, MCP on. **All 18 tools discovered**,
+   `health: {status: healthy, tool_count: 18}`.
+1. Rebuilt the agent linking **only** that connector (the old one could not be edited — its `connector_ids` PATCH
+   503s while the unhealthy whatsapp is attached). Note two platform details: agent names are unique on
+   **`employee_name`** (the 409 says "choose a different employee name"), and a soft-deleted agent still holds the
+   name until you `PATCH` the old record's `employee_name`.
+1. Granted **all four** tools in one PATCH (`200`): `mcp_kirro_all__get_release`, `__declare_interest`,
+   `__create_mandate`, `__get_mandate_balance` — i.e. the least-privilege set `agent-spec.md` §5 asks for, from a
+   single custom connector.
+
+Current `Kirro`: id `4aec1080-fc25-4b0d-bf5a-cc9642fc18be`, status `shadow`, one linked connector
+(`mcp_kirro_all`), four authorized tools. (The previous `Kirro`, `ccbb1e36…`, is renamed `Kirro Archived` and
+deleted.)
+
+**First live eval (L01) passes.** In `Chat with Agent`, sending
+`Tennis court this Saturday for 2, budget 8 to 10k, ideally 8` returned:
+
+> "What is the single maximum you will pay per person? Please provide one number without a range or any ambiguous
+> terms."
+
+which is exactly L01's expected behaviour — ceiling unresolved, one question, and neither 8000 nor 10000 echoed —
+at 65% confidence, correctly flagged `HITL` below the 88% floor. So `Chat with Agent` is a working eval channel and
+the agent is runnable.

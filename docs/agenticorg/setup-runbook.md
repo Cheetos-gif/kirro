@@ -43,6 +43,22 @@ the Agent/Workflow builder UI is ADR-011 Risk 2/4 — verify as you go and corre
 - WhatsApp: `whatsapp_kirro` already connected and active — reuse, no action.
 - Pine Labs: `pinelabs_plural` already connected and active — reuse for the real order/payment-link/refund leg.
 
+> **Superseded 2026-10-02 by what the platform actually accepts — read this first.** Two findings change §4–§5:
+>
+> 1. **Connector names must start with a native registry connector name.** Anything else is rejected with
+>    `422 Unknown native connector`. The registry has an entry named `mcp`, so ours must be `mcp_*`; the names in the
+>    tables below (`delhivery_mock_kirro`, `venue_inventory_kirro`, `pine_labs_mandate_kirro`,
+>    `difd_allocator_kirro`) are **not registerable**. The four mocks are currently registered as `mcp_venue_kirro`,
+>    `mcp_pinelabs_kirro`, `mcp_allocator_kirro`, `mcp_delhivery_kirro` (all healthy, 9/5/1/3 tools discovered).
+> 1. **AgenticOrg scopes at most one untrusted custom connector per agent.** With two registered, whichever one the
+>    platform happens to pick is scoped and the other's tools are rejected (`422 Invalid authorized_tools`),
+>    reproducibly in both directions. So the agent must link **one** custom connector.
+>
+> **Therefore register the aggregate instead of four connectors:** `mcp_kirro_all`, MCP **checked**, Base URL
+> `https://api-kirro.upayan.dev/all/mcp`, Auth Type `None`, which discovers **all 18 tools** in one catalog. Link
+> only that connector to the agent. The per-surface endpoints below still exist and remain useful for debugging a
+> single surface; `docs/agenticorg/platform-map.md` has the evidence and the `/all/mcp` rationale.
+
 ## 4. Register the Delhivery mock (mandatory, MCP connector)
 
 Once `mock_server/` is deployed publicly (prerequisite, §1) and trimmed to the 4 surfaces (ADR-011 §2):
