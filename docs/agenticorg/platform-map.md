@@ -264,3 +264,43 @@ connectors contributed nothing. The agent runs on `azure_openai — deployment:g
 Note for anyone editing an agent: `PUT /api/v1/agents/{id}` needs the whole object and, carrying the 6.5 KB prompt,
 is **blocked by CloudFront** (a 403 HTML page, not an app error). `PATCH` accepts a partial body and is the usable
 path.
+
+### ACL update — custom tools *can* be granted, but only for some connectors
+
+Correcting the "Definitive" block above: this is not a blanket "custom tools are ungrantable". Measured by PATCHing
+one tool at a time and reading the status:
+
+| Connector                                                                 | Category | `is_trusted` | Grantable?            |
+| ------------------------------------------------------------------------- | -------- | ------------ | --------------------- |
+| `mcp_pinelabs_kirro`                                                      | finance  | false        | **yes — all 5 (200)** |
+| `whatsapp_kirro`                                                          | comms    | **true**     | yes                   |
+| `mcp_venue_kirro` (9 tools), `mcp_allocator_kirro`, `mcp_delhivery_kirro` | ops      | false        | **no — all 422**      |
+| probes in `custom` / `internal` / `comms` / `finance`, same MCP URLs      | various  | false        | no — 422              |
+
+Acceptance is **not** explained by category, `is_trusted`, registry-name matching, or tool-name suffix — each was
+tested and each fails to fit. `mcp_pinelabs_kirro` is the only untrusted custom connector whose tools pass, and a
+probe pointed at the identical MCP URL under a different name and category was rejected. The platform's error
+points at `GET /api/v1/tools`, whose 559 names contain **none** of the accepted ones (`create_mandate`,
+`get_mandate_balance`, `refund` are all absent), so the validator contradicts its own guidance. Treat this as a
+platform-side ingestion quirk, not a documented rule.
+
+Two mechanics worth knowing:
+
+- **Linking a connector whose tools cannot be scoped fails and rolls back** —
+  `PATCH /api/v1/agents/{id} {"connector_ids":[…]}` → `503 {"detail":"Unable to refresh agent authorization scopes; no changes were committed."}`. That is why venue and pinelabs are both linked yet only pinelabs contributed tools.
+- **`PUT /api/v1/connectors/{id}` silently ignores `category` and `is_trusted`** (server-managed), so the mismatch
+  cannot be fixed by editing the connector.
+
+**Current agent ACL** (PATCH, 200): `mcp_pinelabs_kirro__create_mandate`,
+`mcp_pinelabs_kirro__get_mandate_balance`, `whatsapp_kirro__send_text_message`, with Grantex scopes
+`tool:abb61bca-…__mcp_pinelabs_kirro:write` and `tool:whatsapp:write`.
+
+**Consequence for KIRRO:** the Declare Agent can reserve a mandate but cannot yet read a release or write a bid —
+that is the single blocking gap.
+
+**Untested lead:** copy the shape that works. Re-register the venue mock in the `mcp_pinelabs_*` family, or get the
+platform to explain why one connector's tools validate and an identically-shaped connector's do not.
+
+**Also found:** the agent page exposes `Chat with Agent` and `Run Agent` — the practical route for the L01–L22 evals
+without phone/WhatsApp. The four probe connectors used for these tests were deleted; the tenant is back to its 11
+connectors (7 pre-existing + our 4 mocks).
