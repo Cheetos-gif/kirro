@@ -12,6 +12,8 @@ before relying on them (ADR-011 §8 step 1).
   copy-pasteable), Behavior rules, Authorized Tools, tool invocation contracts, failure handling, memory/state.
 - `workflow-spec.md` — the "Kirro Window Allocation" Workflow: trigger, steps, idempotency, notification templates.
 - `setup-runbook.md` — connector registration (exact field values), environment/secrets, demo steps.
+- `platform-map.md` — how the AgenticOrg site is laid out (routes, areas, connector form, write API, gotchas) and
+  the tenant state observed. Keep this current as we work — it is the reference for anything done in the UI.
 - `evals.md` — eval cases written against the live platform agent (the E01–E10 local-oracle suite they were
   cross-referenced against was removed with the migration; its inputs survive as history in `docs/evals.md`).
 

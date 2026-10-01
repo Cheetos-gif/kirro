@@ -58,7 +58,8 @@ tests/                 test_mock_server.py (scenarios, incl. a real uvicorn thre
                        test_mcp_surface.py (MCP tool catalogs + REST/MCP state parity)
 k8s/                   Deployment, Service, Ingress, NetworkPolicy (single service: kirro-mock)
 scripts/dev.sh         starts the mock server on :8081 in the foreground
-docs/                  agenticorg/ (spec), decisions/ (ADRs), architecture.md, connectors.md, ...
+docs/                  agenticorg/ (spec + platform-map.md, the AgenticOrg site/API reference), decisions/ (ADRs),
+                       architecture.md, connectors.md, ...
 ```
 
 Mock routes, by surface:
