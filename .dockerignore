@@ -1,0 +1,22 @@
+# Local state and secrets must never enter the image: `COPY . .` would otherwise bake .env (real
+# credentials), the local venv, and logs/mock.db (mock state) into a published layer.
+.git
+.env
+.env.*
+!.env.example
+.venv
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+logs/
+
+# Not needed at runtime.
+docs/
+k8s/
+tests/
+.claude/
+.github/
+.pre-commit-config.yaml
+*.md
+kirro.png

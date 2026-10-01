@@ -7,9 +7,9 @@ the Agent/Workflow builder UI is ADR-011 Risk 2/4 — verify as you go and corre
 ## 1. Prerequisites (external, not in our control)
 
 - A Vachana API key: email `speechstack@gnani.ai` (free credits, no card) — needed before step 3.
-- A public URL for our mock server (`mock_server/`) once it has the 4 trimmed surfaces (ADR-011 §2) — AgenticOrg
-  cannot reach `localhost`. Deploy target not yet chosen; needs a decision (Vercel serverless adapter for FastAPI,
-  a small VM, or similar) — out of scope for this doc, flag before step 5.
+- A public URL for our mock server (`mock_server/`) — AgenticOrg cannot reach `localhost`. **Deployed and
+  verified**: `https://api-kirro.upayan.dev` (k8s Deployment/Service/Ingress in `k8s/`, image built by the repo's CI
+  on `main`; `/health`, `/venue/catalogue`, `/allocator/draw` and the declare pool all confirmed over public HTTP).
 - Confirm the already-connected `pinelabs_plural` connector's credentials are the ones to use for the real charge
   leg, or whether a separate merchant/sandbox binding is needed for the demo.
 
@@ -45,20 +45,25 @@ Once `mock_server/` is deployed publicly (prerequisite, §1) and trimmed to the 
 | Provider       | `Custom / Generic Connector`                                                                 |
 | Connector Name | `delhivery_mock_kirro`                                                                       |
 | MCP checkbox   | **Checked** — tool catalog auto-discovered from the mock server's MCP endpoint               |
-| Base URL       | `<public mock server URL>/delhivery` (or the root, depending on how the MCP shim is mounted) |
+| Base URL       | `https://api-kirro.upayan.dev/delhivery/mcp`                                                 |
 | Category       | `Ops` or `Custom`                                                                            |
 | Auth Type      | `None` (internal mock, no real credentials) unless we choose to gate it with a shared secret |
 
+Expected discovered tools: `pincode_serviceability`, `create_shipment`, `track` (ADR-012).
+
 ## 5. Register the 3 budgeted mock capabilities
 
-Same mechanism as §4, each as its own Custom/Generic Connector, MCP checked, pointed at the same deployed mock
-server's respective route group:
+Same mechanism as §4, each as its own Custom/Generic connector, MCP checked, pointed at the same deployed mock
+server's MCP endpoint for its surface (ADR-012):
 
-| Connector Name            | Base URL suffix | Category  |
-| ------------------------- | --------------- | --------- |
-| `venue_inventory_kirro`   | `/venue`        | `Ops`     |
-| `pine_labs_mandate_kirro` | `/pinelabs`     | `Finance` |
-| `difd_allocator_kirro`    | `/allocator`    | `Ops`     |
+| Connector Name            | Base URL                                     | Category  | Discovered tools                                                                                                                                            |
+| ------------------------- | -------------------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `venue_inventory_kirro`   | `https://api-kirro.upayan.dev/venue/mcp`     | `Ops`     | `list_releases`, `get_release`, `create_hold`, `get_hold`, `release_hold`, `confirm_booking`, `declare_interest`, `list_pool_entries`, `cancel_declaration` |
+| `pine_labs_mandate_kirro` | `https://api-kirro.upayan.dev/pinelabs/mcp`  | `Finance` | `create_mandate`, `get_mandate_balance`, `execute`, `release`, `refund`                                                                                     |
+| `difd_allocator_kirro`    | `https://api-kirro.upayan.dev/allocator/mcp` | `Ops`     | `draw`                                                                                                                                                      |
+
+Do **not** grant the Declare Agent the `create_hold`/`confirm_booking`/`execute`/`release`/`refund` tools — those
+belong to the Window Allocation Workflow (`agent-spec.md` §5 lists its Authorized Tools).
 
 ## 6. Build the Kirro Declare Agent
 
@@ -90,6 +95,10 @@ connector credentials it needed were removed with the migration; `docs/connector
 section now covers platform-side config only.
 
 ## 9. Demo runbook (once 1–7 are done)
+
+The mock keys its state by the `X-Run-Id` header (ADR-013). If AgenticOrg lets a connector send extra headers, give
+the Declare Agent and the Workflow the **same** value; if it does not, both fall back to `default`, which is shared
+anyway. Do not configure different run ids for the two sides — they would not see each other's pool.
 
 1. Reset the mock server's state for a clean run (`POST /__admin/reset`, unchanged from today's mock).
 1. Call the Kirro Declare Agent's number (or WhatsApp) as a judge/demo user; declare a badminton slot for 4 people

@@ -16,8 +16,17 @@ RUN uv sync --frozen --no-dev
 
 ENV PATH="/app/.venv/bin:${PATH}"
 
-RUN useradd --create-home --uid 10001 kirro
+# The runtime user must own /app: the default log dir is relative to WORKDIR, and a root-owned /app
+# made every request-log write raise PermissionError, 500ing every serve()-wrapped route (ADR-013).
+RUN useradd --create-home --uid 10001 kirro \
+    && mkdir -p /app/logs /app/data \
+    && chown -R kirro:kirro /app
+
 USER kirro
 
+# Works for a bare `docker run`; the cluster overrides both to the PVC-mounted /app/data.
+ENV MOCK_LOG_DIR=/app/logs \
+    MOCK_DB_PATH=/app/logs/mock.db
+
 EXPOSE 8081
-CMD ["uvicorn", "mock_server.app:app", "--host", "0.0.0.0", "--port", "8081"]
+CMD ["uvicorn", "mock_server.app:app", "--host", "0.0.0.0", "--port", "8081", "--proxy-headers", "--forwarded-allow-ips", "*"]
