@@ -1,0 +1,6 @@
+# Voice / conversation policy rendered into the prompt context block.
+max_questions_per_turn: 1
+on_silence: repeat_open_question_only
+on_interruption: re_ask_open_question_no_state_advance
+never_reopen_confirmed_fields: true
+languages: [en-IN, hi-IN, hinglish]

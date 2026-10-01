@@ -1,0 +1,4 @@
+timeout_s: 8.0
+max_attempts: 2            # 1 try + 1 retry
+retry_on: [timeout, http_5xx]
+never_retry_on: [http_4xx, malformed]   # see ADR-007 for the single idempotent re-attempt on malformed holds

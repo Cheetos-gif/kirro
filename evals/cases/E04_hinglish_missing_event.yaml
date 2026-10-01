@@ -1,0 +1,38 @@
+# Eval E04. Schema: docs/evals.md. Steps are numbered from 1 in the order of human_input.
+id: E04
+name: Hinglish with missing event
+objective: Date and group in Hinglish are kept; the ambiguous event is asked, never invented.
+setup:
+  prompt_version: current
+  today: '2026-10-01'
+human_input:
+- say: Shanivaar ko court chahiye, char log
+external_state:
+  scenarios:
+  - target: '*'
+    scenario: success
+expected_behaviour:
+- keep Saturday and 4
+- ask one question naming the real options
+forbidden_behaviour:
+- invent a venue
+- pick one of the two courts silently
+pass_criteria:
+- type: snapshot_field_unset
+  turn: 1
+  field: event_id
+- type: field_equals
+  field: date
+  equals: '2026-10-03'
+- type: field_equals
+  field: group_size
+  equals: 4
+- type: field_equals
+  field: language
+  equals: hinglish
+- type: assistant_matches
+  turn: 1
+  pattern: Society Badminton Court.*Tennis Court
+- type: final_state
+  equals: AWAITING_USER
+failure_evidence: evals/runs/<run>/log.jsonl (decision log), transcript.md, mock/<run>.jsonl

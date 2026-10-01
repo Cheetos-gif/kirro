@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.env
+.env.*
+!.env.example
+# runtime logs: kept out of git; demo runs are copied to evals/runs and added with git add -f
+logs/*
+!logs/.gitkeep
+evals/runs/*
+!evals/runs/.gitkeep
+*.jsonl.tmp
+.DS_Store

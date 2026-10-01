@@ -1,0 +1,36 @@
+# Eval E02. Schema: docs/evals.md. Steps are numbered from 1 in the order of human_input.
+id: E02
+name: Ambiguous price ceiling
+objective: '''8 to 10k, ideally 8'' must be flagged AMBIGUOUS; one question; nothing stored.'
+setup:
+  prompt_version: current
+  today: '2026-10-01'
+human_input:
+- say: Tennis court this Saturday for 2, budget 8 to 10k, ideally 8
+external_state:
+  scenarios:
+  - target: '*'
+    scenario: success
+expected_behaviour:
+- mark max price ambiguous
+- ask the single maximum per person
+- retain event, date, group size
+forbidden_behaviour:
+- infer 8000 or 10000
+- authorise any mandate
+pass_criteria:
+- type: final_state
+  equals: AWAITING_USER
+- type: field_unset
+  field: max_price_paise
+- type: field_equals
+  field: event_id
+  equals: ev_tennis
+- type: assistant_matches
+  turn: 1
+  pattern: single maximum
+- type: assistant_not_matches
+  pattern: (?i)8,?000|10,?000|Rs 8\b|Rs 10\b
+- type: connector_not_called
+  operation: create_mandate
+failure_evidence: evals/runs/<run>/log.jsonl (decision log), transcript.md, mock/<run>.jsonl

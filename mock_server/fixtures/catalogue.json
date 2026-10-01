@@ -1,0 +1,33 @@
+{
+  "_note": "MOCK catalogue for KIRRO demos. Names and prices are invented fixtures.",
+  "events": [
+    {"event_id": "ev_badminton", "name": "Society Badminton Court", "aliases": ["badminton", "shuttle"],
+     "generic_aliases": ["court"], "fulfilment": "digital"},
+    {"event_id": "ev_tennis", "name": "Tennis Court (Club)", "aliases": ["tennis"],
+     "generic_aliases": ["court"], "fulfilment": "digital"},
+    {"event_id": "ev_movie", "name": "Opening Night Movie, Screen 2", "aliases": ["movie", "film", "cinema"],
+     "generic_aliases": [], "fulfilment": "digital"},
+    {"event_id": "ev_f1", "name": "F1 Paddock Pass", "aliases": ["f1", "formula", "paddock"],
+     "generic_aliases": [], "fulfilment": "physical"}
+  ],
+  "releases": [
+    {"release_id": "rel_badminton_sat", "event_id": "ev_badminton", "date": "2026-10-03",
+     "opens_at": "2026-10-02T06:00:00Z",
+     "slots": [
+       {"slot_id": "bd_0700", "label": "Court 1, 07:00-08:00", "starts_at": "2026-10-03T07:00:00Z", "capacity": 8, "price_per_person_paise": 25000},
+       {"slot_id": "bd_0800", "label": "Court 1, 08:00-09:00", "starts_at": "2026-10-03T08:00:00Z", "capacity": 8, "price_per_person_paise": 28000},
+       {"slot_id": "bd_1800", "label": "Court 2, 18:00-19:00", "starts_at": "2026-10-03T18:00:00Z", "capacity": 8, "price_per_person_paise": 35000}
+     ]},
+    {"release_id": "rel_tennis_sat", "event_id": "ev_tennis", "date": "2026-10-03",
+     "opens_at": "2026-10-02T06:00:00Z",
+     "slots": [
+       {"slot_id": "tn_0900", "label": "Centre Court, 09:00-10:00", "starts_at": "2026-10-03T09:00:00Z", "capacity": 4, "price_per_person_paise": 60000}
+     ]},
+    {"release_id": "rel_f1_sun", "event_id": "ev_f1", "date": "2026-10-04",
+     "opens_at": "2026-10-02T06:00:00Z",
+     "slots": [
+       {"slot_id": "f1_pad", "label": "Paddock Pass, Sunday", "starts_at": "2026-10-04T12:00:00Z", "capacity": 6, "price_per_person_paise": 900000}
+     ]}
+  ],
+  "pincodes": {"560001": {"district": "Bengaluru", "state_code": "KA"}, "110001": {"district": "New Delhi", "state_code": "DL"}}
+}

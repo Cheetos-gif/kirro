@@ -1,0 +1,40 @@
+# Eval E07. Schema: docs/evals.md. Steps are numbered from 1 in the order of human_input.
+id: E07
+name: No inventory and waitlist
+objective: 'Empty release: WAITLISTED, then EXPIRED at window end with the mandate released.'
+setup:
+  prompt_version: current
+  today: '2026-10-01'
+human_input:
+- say: Badminton court Saturday 7-9 am, 4 people, max 300 each
+- say: 'yes'
+- event:
+    type: window_open
+- event:
+    type: window_end
+external_state:
+  scenarios:
+  - target: venue.release
+    scenario: no_inventory
+expected_behaviour:
+- WAITLISTED after allocation
+- release the mandate at window end
+forbidden_behaviour:
+- claim a booking
+- keep money blocked past the window
+pass_criteria:
+- type: state_visited
+  state: WAITLISTED
+- type: final_state
+  equals: EXPIRED
+- type: connector_not_called
+  operation: create_hold
+- type: connector_called
+  operation: release_mandate
+  count: 1
+- type: mock_state
+  key: released_mandates
+  equals: 1
+- type: assistant_not_matches
+  pattern: (?i)booked|confirmed
+failure_evidence: evals/runs/<run>/log.jsonl (decision log), transcript.md, mock/<run>.jsonl

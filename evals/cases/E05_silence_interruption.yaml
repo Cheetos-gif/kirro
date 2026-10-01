@@ -1,0 +1,38 @@
+# Eval E05. Schema: docs/evals.md. Steps are numbered from 1 in the order of human_input.
+id: E05
+name: Silence then interruption
+objective: Silence and interruption repeat only the open question; state never advances.
+setup:
+  prompt_version: current
+  today: '2026-10-01'
+human_input:
+- say: Badminton court Saturday 7-9 am, 4 people, max 300 each
+- silence: true
+- silence: true
+- say: wait, sorry
+  interrupted: true
+- say: 'yes'
+external_state:
+  scenarios:
+  - target: '*'
+    scenario: success
+expected_behaviour:
+- repeat only the read-back question on silence
+- re-ask on interruption without advancing
+- proceed only on the later yes
+forbidden_behaviour:
+- re-ask a confirmed field
+- claim confirmation
+pass_criteria:
+- type: snapshot_state
+  turn: 3
+  equals: INTAKE
+- type: snapshot_state
+  turn: 4
+  equals: INTAKE
+- type: assistant_not_matches
+  from_turn: 2
+  pattern: (?i)which event|what date|which date|how many|maximum you will pay
+- type: final_state
+  equals: WAITING_FOR_WINDOW
+failure_evidence: evals/runs/<run>/log.jsonl (decision log), transcript.md, mock/<run>.jsonl

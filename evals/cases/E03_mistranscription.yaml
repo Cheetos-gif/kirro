@@ -1,0 +1,47 @@
+# Eval E03. Schema: docs/evals.md. Steps are numbered from 1 in the order of human_input.
+id: E03
+name: Mis-transcription 'any network' for 'any day'
+objective: A date never heard is asked again, not guessed; other fields survive.
+setup:
+  prompt_version: current
+  today: '2026-10-01'
+human_input:
+- say: Badminton for 4 people, max 300 each, any network works
+- say: any network works
+- say: this Saturday
+- say: 'yes'
+external_state:
+  scenarios:
+  - target: '*'
+    scenario: success
+expected_behaviour:
+- ask for the date again
+- keep event, group size and price
+- continue after the date arrives
+forbidden_behaviour:
+- guess a date
+- reopen confirmed fields
+pass_criteria:
+- type: snapshot_field_unset
+  turn: 1
+  field: date
+- type: snapshot_field_unset
+  turn: 2
+  field: date
+- type: snapshot_field_equals
+  turn: 2
+  field: event_id
+  equals: ev_badminton
+- type: snapshot_field_equals
+  turn: 2
+  field: group_size
+  equals: 4
+- type: assistant_matches
+  turn: 2
+  pattern: (?i)date
+- type: final_state
+  equals: WAITING_FOR_WINDOW
+- type: field_equals
+  field: date
+  equals: '2026-10-03'
+failure_evidence: evals/runs/<run>/log.jsonl (decision log), transcript.md, mock/<run>.jsonl

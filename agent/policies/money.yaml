@@ -1,0 +1,9 @@
+# Money policy. Changing this is a policy change, not a prompt version bump.
+currency: INR
+unit: paise
+max_ceiling_per_person_paise: 20000000   # Rs 2,00,000 per person sanity cap
+min_ceiling_per_person_paise: 100        # Rs 1
+max_group_size: 10
+mandate_multiplier: 1                    # mandate = group_size * max_price * multiplier
+charge_only_after_hold: true
+hold_ttl_s: 600

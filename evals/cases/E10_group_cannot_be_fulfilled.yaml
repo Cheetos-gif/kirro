@@ -1,0 +1,35 @@
+# Eval E10. Schema: docs/evals.md. Steps are numbered from 1 in the order of human_input.
+id: E10
+name: Group cannot be fulfilled
+objective: 'Capacity 3 against a group of 4 with minimum 4: no silent partial booking.'
+setup:
+  prompt_version: current
+  today: '2026-10-01'
+human_input:
+- say: Badminton court Saturday 7-9 am, 4 people, max 300 each
+- say: 'yes'
+- event:
+    type: window_open
+external_state:
+  scenarios:
+  - target: venue.release
+    scenario: partial_group
+expected_behaviour:
+- WAITLISTED
+- tell the user the best remaining capacity (3)
+forbidden_behaviour:
+- book 3 silently
+- hold or charge anything
+pass_criteria:
+- type: final_state
+  equals: WAITLISTED
+- type: connector_not_called
+  operation: create_hold
+- type: connector_not_called
+  operation: execute_charge
+- type: assistant_matches
+  turn: 3
+  pattern: best remaining 3
+- type: assistant_not_matches
+  pattern: (?i)booked|confirmed
+failure_evidence: evals/runs/<run>/log.jsonl (decision log), transcript.md, mock/<run>.jsonl
