@@ -109,7 +109,9 @@ restored with `PUT {"status":"active"}`; the tenant is back to its original 7 co
 Also: the connectors list page is heavy (101 catalog cards) — a `Runtime.evaluate` can time out if you query it
 before the page settles; wait ~5-8s after navigating.
 
-## 4. Tenant state observed (2026-10-02)
+## 4. Tenant state before we registered anything (2026-10-02)
+
+> Superseded by §5; kept because it is the baseline the tenant was handed over in.
 
 **Connectors — 7, all active.** `whatsapp_kirro` (comms, `meta_business`, 5 tools: `get_business_profile`,
 `get_message_templates`, `send_media_message`, `send_template_message`, `send_text_message`), `tally` (finance,
@@ -123,12 +125,68 @@ Not yet registered but present in the registry: **`agent_scheduler`** (`schedule
 **Agents — 5, all shadow/untouched:** Vendor Manager, Support Triage, Compliance Guard, It Operations, Contract
 Intelligence. No active agents, no workflows configured yet, 0 pending approvals.
 
-## 5. Not yet inspected (do not assume)
+## 5. Tenant state (updated 2026-10-02, after Phase 1)
 
-- The Agent creation wizard's Role/Prompt/Behavior/Review steps (ADR-011 §8.1 step 1) — and therefore the exact
-  shape of the **Authorized Tools** checklist (dot vs `__` identifiers, per ADR-011 Risk 2).
-- The Workflow builder: whether a Workflow step can call native connectors directly or message a user
-  (ADR-011 Risk 4), and how the Agent Scheduler trigger is wired.
-- Whether a **non-MCP** connector yields callable operations (Risk 2) — the mocks will use MCP, but Vachana has no
-  valid non-`mcp` prefix, so this decides whether Vachana needs an MCP shim in front of it.
+**Connectors — 11, all active.** The four KIRRO mock surfaces are registered as MCP connectors, and the platform
+discovered every tool from our MCP endpoint:
+
+| Connector             | Base URL          | Tools discovered (n)                                                                                                                                            |
+| --------------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mcp_venue_kirro`     | `…/venue/mcp`     | 9 — `list_releases`, `get_release`, `create_hold`, `get_hold`, `release_hold`, `confirm_booking`, `declare_interest`, `list_pool_entries`, `cancel_declaration` |
+| `mcp_pinelabs_kirro`  | `…/pinelabs/mcp`  | 5 — `create_mandate`, `get_mandate_balance`, `execute`, `release`, `refund`                                                                                     |
+| `mcp_allocator_kirro` | `…/allocator/mcp` | 1 — `draw`                                                                                                                                                      |
+| `mcp_delhivery_kirro` | `…/delhivery/mcp` | 3 — `pincode_serviceability`, `create_shipment`, `track`                                                                                                        |
+
+That validates ADR-012 end to end: stateless streamable HTTP, the Host allow-list and the JSON schemas all work
+with the platform's registration-time discovery.
+
+Pre-existing, unchanged: `whatsapp_kirro` (meta_business, 5 tools), `tally` (3), `zoho_books` (4), `gstn` (4),
+`banking_aa` (2), `stripe` (2), and **`pinelabs_plural` — only `create_order` + `check_order_status` (2 tools)**.
+ADR-010 recorded six operations for it; this tenant exposes two, so the real charge leg cannot assume
+`create_payment_link` / `get_order_status` / `initiate_refund` without re-checking. `twilio` and `agent_scheduler`
+remain unregistered.
+
+**Agents — 5, all shadow/untouched** (Vendor Manager, Support Triage, Compliance Guard, It Operations, Contract
+Intelligence). No active agents, no workflows, 0 pending approvals.
+
+## 6. Workflow builder (verified 2026-10-02)
+
+`/dashboard/workflows/new`. Two entry points: **Describe in English** (AI generates the steps from a ≤5000-char
+prompt) or **Use Template**. Configuration:
+
+- `Workflow Name`, `Version`, `Domain` (finance, hr, marketing, ops, engineering, backoffice)
+- **`Trigger Type`: `Manual`, `Schedule`, `Webhook`, `Api Event`, `Email Received`, `Mongodb Schedule`** — a native
+  `Schedule` trigger exists, so the Workflow does **not** need the `agent_scheduler` connector to fire at a release
+  time (workflow-spec §1's `schedule_agent_task` route can be simplified).
+- `Enable adaptive replanning` — AI re-plans the remaining steps when one fails (max 3 attempts)
+- `Define Steps (JSON)`: steps are authored as a JSON array; "Add Step Type" appends a skeleton.
+
+**Step skeletons (taken from the builder itself):**
+
+| Type             | Fields (beyond `step`, `name`, `on_success`, `on_failure`)                    |
+| ---------------- | ----------------------------------------------------------------------------- |
+| `agent`          | `type:"agent"`, `agent_type`, `action`, `inputs`                              |
+| `condition`      | `type`, `condition`, `true_path`, `false_path`                                |
+| `parallel`       | `type`, `branches`                                                            |
+| `wait`           | `type`, `duration_minutes`                                                    |
+| `wait_for_event` | `type`, `event_name`, `timeout_minutes`                                       |
+| `human_in_loop`  | `type`, `prompt`, `approvers`                                                 |
+| `transform`      | `type`, `expression`                                                          |
+| `notify`         | `type`, `channel`, `message`                                                  |
+| `collaboration`  | opens the agent picker first; then `agents`, `aggregation`, `timeout_minutes` |
+
+The base skeleton the builder starts from is
+`{"step":1,"name":"Step 1","agent_type":"ap_processor","action":"process","inputs":{},"on_success":"next","on_failure":"halt"}`.
+
+**Risk 4 answered:** `notify` carries `channel` + `message`, so a Workflow *can* message a user directly instead of
+delegating to an Agent step. What `action` references (a connector tool, and its exact id syntax) is still to be
+confirmed while authoring the allocation steps.
+
+## 7. Still open / not yet inspected
+
+- The Agent creation wizard's Role/Prompt/Behavior/Review steps, and the exact shape of the **Authorized Tools**
+  checklist (dot vs `__` identifiers) — the next thing to inspect.
+- Whether a **non-MCP** connector yields callable operations (Risk 2). The four mocks use MCP, so this now only
+  matters for Vachana, which has no valid non-`mcp` prefix.
+- How a workflow step's `action` names a connector tool.
 - Audit Log / Observatory export specifics for Q1.2 (ADR-011 §7.6).
