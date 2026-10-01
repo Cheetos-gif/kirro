@@ -304,3 +304,34 @@ platform to explain why one connector's tools validate and an identically-shaped
 **Also found:** the agent page exposes `Chat with Agent` and `Run Agent` — the practical route for the L01–L22 evals
 without phone/WhatsApp. The four probe connectors used for these tests were deleted; the tenant is back to its 11
 connectors (7 pre-existing + our 4 mocks).
+
+### Scoping: what it actually is (final, tested)
+
+Further attempts narrowed it to this, and no further:
+
+- **Scoping is per-connector and deterministic.** `mcp_pinelabs_kirro`'s tools can be scoped; `mcp_venue_kirro`,
+  `mcp_allocator_kirro` and `mcp_delhivery_kirro` cannot — reproducibly, including when each is linked on its own.
+- **A PATCH fails as a whole if it names any unscopable tool.** Mixing venue tools with pinelabs tools returns a 422
+  that lists only a *subset* of the offending names, and linking an unscopable connector returns
+  `503 "Unable to refresh agent authorization scopes; no changes were committed."`. So the ACL is all-or-nothing per
+  request, which is why the error text is misleading about *which* name is at fault.
+- **Ruled out, each by direct test:** category, `is_trusted`, name family (`mcp_pinelabs_*` with the venue URL),
+  base URL (venue URL under a neutral name), tool-name suffix, tool-schema shape (venue's and delhivery's are
+  structurally identical to pinelabs's simpler ones), creation timing, and UI-form registration vs raw API
+  registration (a UI-registered venue clone was rejected identically).
+- **`PUT /api/v1/connectors/{id}` does not re-discover tools** — changing `base_url` leaves the old `tool_functions`
+  in place — and it silently ignores `category` and `is_trusted`.
+- **`GET /api/v1/tools` never contains any custom connector's tools** (559 registry names only), so the error's own
+  advice ("use GET /api/v1/tools") is misleading.
+- **The agent's `authorized_tools` can be reconciled server-side**: a list that had three valid entries was observed
+  trimmed to one without a successful PATCH from us.
+
+Conclusion: the platform will not reliably grant a custom MCP connector's tools to an agent. `mcp_pinelabs_kirro`
+happens to work; three identically-shaped connectors do not, and nothing observable distinguishes them. This needs a
+platform-side answer, not more probing. Practical options, in order: ask the platform why one connector's tools
+scope and the others' do not (we have a minimal repro: two connectors, same shape, different outcome); re-register
+the failing three in the working connector's exact family and re-test later; or move KIRRO's tool invocation off the
+agent ACL (the `agenticorg` SDK / A2A-MCP path on `/dashboard/integrations`) — a design change requiring an ADR.
+
+Tenant left clean: 11 connectors (7 pre-existing + `mcp_venue_kirro`, `mcp_pinelabs_kirro`, `mcp_allocator_kirro`,
+`mcp_delhivery_kirro`), all probes deleted.
