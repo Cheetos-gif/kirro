@@ -45,7 +45,8 @@ price, and confirms only what external systems confirmed.
 ```
 agent/state/machine.py     states, transition table, guards (the only place state is assigned)
 agent/state/fields.py      deterministic parsers: event, date (incl. Hinglish), group size, price, time window
-agent/state/store.py       in-memory/JSON store + idempotency ledger (key = sha256(decl|state|scope))
+agent/state/store.py       in-memory/JSON store + idempotency ledger (key = sha256(decl|state|scope)); reloads from
+                           disk on startup when given a directory (KIRRO_DATA_DIR in the deployment)
 agent/policies/*.yaml|py   money / voice / allocation / retry policy; money.py parses and guards amounts
 agent/core.py              Engine: orchestrates intake, authorise, events, allocation, hold, pay, unwind, logging
 agent/tools/               tool surface for the LLM (toolset.py), user-facing text (messages.py), fencing (render.py)
