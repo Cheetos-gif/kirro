@@ -3,9 +3,20 @@ import Link from 'next/link';
 
 import { auth, signOut } from '@/auth';
 import { BackendError } from '@/components/backend-error';
+import { StateBadge } from '@/components/state-badge';
 import { Button } from '@/components/ui/button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { listDeclarations, listEvalRuns } from '@/lib/kirro';
-import type { EvalRunSummary, StateView } from '@/lib/kirro';
+import type { DeclarationSummary, EvalRunSummary } from '@/lib/kirro';
+
+import { EvalRunsTable } from './eval-runs';
 
 export const metadata: Metadata = {
   title: 'Dashboard — KIRRO',
@@ -13,7 +24,7 @@ export const metadata: Metadata = {
 
 export default async function DashboardPage() {
   const session = await auth();
-  let data: [StateView[], EvalRunSummary[]];
+  let data: [DeclarationSummary[], EvalRunSummary[]];
   try {
     data = await Promise.all([listDeclarations(), listEvalRuns()]);
   } catch (error) {
@@ -26,7 +37,7 @@ export default async function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Signed in as {session?.user?.email}</p>
+          <p className="text-sm text-muted-foreground">{session?.user?.email}</p>
         </div>
         <form
           action={async () => {
@@ -41,40 +52,39 @@ export default async function DashboardPage() {
       </div>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold">Declarations (this process)</h2>
+        <h2 className="text-lg font-semibold">Declarations</h2>
         {declarations.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            None yet. State is in memory per process — declarations made via /declare while this
-            KIRRO Core instance is running will show up here.
+            Nothing yet — declarations made via /declare will show up here.
           </p>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-border">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-2 font-medium">Declaration</th>
-                  <th className="px-4 py-2 font-medium">State</th>
-                  <th className="px-4 py-2 font-medium">Booking ref</th>
-                </tr>
-              </thead>
-              <tbody>
-                {declarations.map(d => (
-                  <tr key={d.declaration_id} className="border-t border-border">
-                    <td className="px-4 py-2">
-                      <Link
-                        href={`/dashboard/${d.declaration_id}`}
-                        className="text-primary hover:underline"
-                      >
-                        {d.declaration_id}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2">{d.state}</td>
-                    <td className="px-4 py-2 text-muted-foreground">{d.booking_ref ?? '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Declaration</TableHead>
+                <TableHead>State</TableHead>
+                <TableHead>Booking ref</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {declarations.map(d => (
+                <TableRow key={d.declaration_id}>
+                  <TableCell>
+                    <Link
+                      href={`/dashboard/${d.declaration_id}`}
+                      className="text-primary hover:underline"
+                    >
+                      {d.declaration_id}
+                    </Link>
+                  </TableCell>
+                  <TableCell>
+                    <StateBadge state={d.state} />
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{d.booking_ref ?? '—'}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </section>
 
@@ -82,19 +92,11 @@ export default async function DashboardPage() {
         <h2 className="text-lg font-semibold">Eval runs</h2>
         {evalRuns.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            None recorded yet. Run{' '}
-            <code className="rounded bg-muted px-1 py-0.5">scripts/run_eval.sh all</code> on the
-            KIRRO Core host to populate this.
+            None yet — run{' '}
+            <code className="rounded bg-muted px-1 py-0.5">scripts/run_eval.sh all</code>.
           </p>
         ) : (
-          <ul className="flex flex-col gap-2">
-            {evalRuns.map(r => (
-              <li key={r.run_id} className="rounded-lg border border-border p-3 text-sm">
-                <span className="font-medium">{r.run_id}</span>{' '}
-                <span className="text-muted-foreground">{JSON.stringify(r.verdict)}</span>
-              </li>
-            ))}
-          </ul>
+          <EvalRunsTable runs={evalRuns} />
         )}
       </section>
     </main>

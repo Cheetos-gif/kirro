@@ -8,14 +8,20 @@ import * as z from 'zod';
 
 import { kirroApi, request } from '@/api';
 
+// `state_view()` on the backend (agent/tools/toolset.py) never includes `declaration_id` or
+// `booking_ref` — those are added per-endpoint. GET /declarations/{id} returns this shape bare;
+// POST /declarations adds `declaration_id`; GET /declarations adds both. Three schemas, not one,
+// because validating against a shape the endpoint cannot return is the bug this file exists to catch.
 const stateViewSchema = z.object({
-  declaration_id: z.string(),
   state: z.string(),
   confirmed_fields: z.record(z.string(), z.unknown()),
   open_field: z.string().nullable(),
   open_field_note: z.string().nullable(),
   readback_presented: z.boolean(),
   allowed_actions: z.array(z.string()),
+});
+const createdDeclarationSchema = stateViewSchema.extend({ declaration_id: z.string() });
+const listedDeclarationSchema = createdDeclarationSchema.extend({
   booking_ref: z.string().nullable(),
 });
 
@@ -77,9 +83,28 @@ const decisionRecordSchema = z.object({
   user_message: z.string().nullable(),
 });
 
+const evalCheckSchema = z.object({
+  name: z.string(),
+  passed: z.boolean(),
+  detail: z.string(),
+  builtin: z.boolean(),
+});
+
+const evalVerdictSchema = z.object({
+  run_id: z.string(),
+  case: z.string(),
+  name: z.string(),
+  mode: z.string(),
+  policy: z.string(),
+  prompt_version: z.string(),
+  passed: z.boolean(),
+  final_state: z.string(),
+  checks: z.array(evalCheckSchema),
+});
+
 const evalRunSummarySchema = z.object({
   run_id: z.string(),
-  verdict: z.record(z.string(), z.unknown()),
+  verdict: evalVerdictSchema,
 });
 
 const evalRunDetailSchema = evalRunSummarySchema.extend({
@@ -87,17 +112,18 @@ const evalRunDetailSchema = evalRunSummarySchema.extend({
   transcript: z.string(),
 });
 
-const declaredSchema = stateViewSchema.extend({ declaration_id: z.string() });
-
 export type StateView = z.infer<typeof stateViewSchema>;
+export type CreatedDeclaration = z.infer<typeof createdDeclarationSchema>;
+export type DeclarationSummary = z.infer<typeof listedDeclarationSchema>;
 export type DeclarationFull = z.infer<typeof declarationFullSchema>;
 export type DecisionRecord = z.infer<typeof decisionRecordSchema>;
+export type EvalCheck = z.infer<typeof evalCheckSchema>;
 export type EvalRunSummary = z.infer<typeof evalRunSummarySchema>;
 export type EvalRunDetail = z.infer<typeof evalRunDetailSchema>;
 export type EvalVerdict = EvalRunSummary['verdict'];
 
 export async function createDeclaration() {
-  return request({ method: 'POST', url: '/declarations', schema: declaredSchema });
+  return request({ method: 'POST', url: '/declarations', schema: createdDeclarationSchema });
 }
 
 export async function setField(did: string, field: string, evidence: string, userText: string) {
@@ -136,7 +162,7 @@ export async function getDeclarationState(did: string) {
 }
 
 export async function listDeclarations() {
-  return request({ method: 'GET', url: '/declarations', schema: z.array(stateViewSchema) });
+  return request({ method: 'GET', url: '/declarations', schema: z.array(listedDeclarationSchema) });
 }
 
 export async function getDeclarationFull(did: string) {

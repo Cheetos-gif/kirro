@@ -3,6 +3,7 @@ import Image from 'next/image';
 
 import { signIn } from '@/auth';
 import { Button } from '@/components/ui/button';
+import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 
 export const metadata: Metadata = {
   title: 'Sign in — KIRRO',
@@ -17,13 +18,11 @@ export default async function LoginPage({
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center px-6 py-24">
-      <div className="flex w-full max-w-sm flex-col items-center gap-6 text-center">
+      <Card className="w-full max-w-sm items-center gap-6 p-8 text-center">
         <Image src="/kirro.png" alt="KIRRO" width={48} height={48} className="rounded-xl" />
         <div className="flex flex-col gap-1.5">
-          <h1 className="text-xl font-semibold tracking-tight">Sign in</h1>
-          <p className="text-sm text-muted-foreground">
-            Dashboard access for KIRRO — declarations, decision log, eval runs.
-          </p>
+          <CardTitle className="text-xl">Sign in</CardTitle>
+          <CardDescription>View declarations and the decision log.</CardDescription>
         </div>
         <form
           action={async () => {
@@ -36,7 +35,7 @@ export default async function LoginPage({
             Continue with Google
           </Button>
         </form>
-      </div>
+      </Card>
     </main>
   );
 }

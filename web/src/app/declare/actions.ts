@@ -10,7 +10,7 @@ import {
   getReadback,
   setField,
 } from '@/lib/kirro';
-import type { DeclarationFull, StateView } from '@/lib/kirro';
+import type { CreatedDeclaration, DeclarationFull, StateView } from '@/lib/kirro';
 
 export interface DeclareFields {
   event: string;
@@ -21,7 +21,7 @@ export interface DeclareFields {
   time_window?: string;
 }
 
-export async function startDeclaration(): Promise<StateView> {
+export async function startDeclaration(): Promise<CreatedDeclaration> {
   return createDeclaration();
 }
 

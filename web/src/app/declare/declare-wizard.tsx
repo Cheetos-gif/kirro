@@ -4,6 +4,9 @@ import { useState } from 'react';
 import * as z from 'zod';
 
 import { Button } from '@/components/ui/button';
+import { Card, CardDescription, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useZodForm } from '@/hooks/use-zod-form';
 import type { DeclarationFull } from '@/lib/kirro';
 
@@ -85,20 +88,18 @@ export function DeclareWizard() {
 
   if (step === 'readback') {
     return (
-      <div className="flex w-full max-w-2xl flex-col gap-4">
-        <h2 className="text-xl font-semibold">Here is what I understood</h2>
-        <p className="rounded-lg border border-border bg-muted/40 p-4 text-sm leading-6">
-          {readbackText}
-        </p>
+      <Card className="w-full max-w-xl p-6">
+        <CardTitle className="text-xl">Is this right?</CardTitle>
+        <p className="rounded-2xl bg-muted/40 p-4 text-sm leading-6">{readbackText}</p>
         <div className="flex gap-3">
           <Button onClick={() => onReadbackResponse(true)} disabled={pending}>
-            Yes, that is right
+            Yes, go ahead
           </Button>
           <Button variant="outline" onClick={() => onReadbackResponse(false)} disabled={pending}>
-            No, let me redo it
+            Let me redo it
           </Button>
         </div>
-      </div>
+      </Card>
     );
   }
 
@@ -107,71 +108,73 @@ export function DeclareWizard() {
       ? (result.mandate_paise / 100).toLocaleString('en-IN')
       : null;
     return (
-      <div className="flex w-full max-w-2xl flex-col gap-3">
-        <h2 className="text-xl font-semibold">Declared and authorised</h2>
-        <p className="text-sm text-muted-foreground">
-          State: <span className="font-medium text-foreground">{result.state}</span>
-        </p>
+      <Card className="w-full max-w-xl p-6">
+        <CardTitle className="text-xl">You&apos;re in</CardTitle>
+        <CardDescription>
+          Status: <span className="font-medium text-foreground">{result.state}</span>
+        </CardDescription>
         {rupees && (
-          <p className="text-sm text-muted-foreground">
-            Blocked, not charged: <span className="font-medium text-foreground">₹{rupees}</span>
-          </p>
+          <CardDescription>
+            Up to <span className="font-medium text-foreground">₹{rupees}</span> is held, not
+            charged.
+          </CardDescription>
         )}
         <p className="text-sm leading-6 text-muted-foreground">
-          Nothing more to do. KIRRO waits for the booking window to open, allocates by a seeded fair
-          draw, then charges and confirms — or releases the hold and tells you honestly. No
-          refreshing needed.
+          Nothing more to do. We&apos;ll charge you only if you get a slot, and tell you either way.
         </p>
-      </div>
+      </Card>
     );
   }
 
   if (step === 'error') {
     return (
-      <div className="flex w-full max-w-2xl flex-col gap-3">
+      <Card className="w-full max-w-xl gap-4 p-6">
         <p className="text-sm text-destructive">{error}</p>
-        <Button variant="outline" onClick={() => setStep('intake')}>
+        <Button variant="outline" onClick={() => setStep('intake')} className="w-fit">
           Try again
         </Button>
-      </div>
+      </Card>
     );
   }
 
   return (
-    <form onSubmit={form.handleSubmit(onIntake)} className="flex w-full max-w-2xl flex-col gap-4">
-      <Field
-        label="What do you want to book?"
-        placeholder="Badminton court"
-        error={form.formState.errors.event}
-      >
-        <input className={inputClass} {...form.register('event')} />
-      </Field>
-      <Field label="When?" placeholder="Saturday" error={form.formState.errors.date}>
-        <input className={inputClass} {...form.register('date')} />
-      </Field>
-      <Field label="Group size" placeholder="4 people" error={form.formState.errors.group_size}>
-        <input className={inputClass} {...form.register('group_size')} />
-      </Field>
-      <Field label="Max price per person" placeholder="300" error={form.formState.errors.max_price}>
-        <input className={inputClass} {...form.register('max_price')} />
-      </Field>
-      <Field label="Minimum acceptable group size (optional)" placeholder="2 people">
-        <input className={inputClass} {...form.register('min_group_size')} />
-      </Field>
-      <Field label="Preferred time window (optional)" placeholder="7-9 am">
-        <input className={inputClass} {...form.register('time_window')} />
-      </Field>
-      {openFieldNote && <p className="text-sm text-destructive">{openFieldNote}</p>}
-      {error && <p className="text-sm text-destructive">{error}</p>}
-      <Button type="submit" disabled={pending}>
-        {pending ? 'Declaring…' : 'Declare'}
-      </Button>
-    </form>
+    <Card className="w-full max-w-xl p-6">
+      <form onSubmit={form.handleSubmit(onIntake)} className="flex flex-col gap-4">
+        <Field
+          label="What do you want?"
+          placeholder="Badminton court"
+          error={form.formState.errors.event}
+        >
+          <Input {...form.register('event')} />
+        </Field>
+        <Field label="When?" placeholder="Saturday" error={form.formState.errors.date}>
+          <Input {...form.register('date')} />
+        </Field>
+        <Field label="Group size" placeholder="4 people" error={form.formState.errors.group_size}>
+          <Input {...form.register('group_size')} />
+        </Field>
+        <Field
+          label="Max price per person"
+          placeholder="₹300"
+          error={form.formState.errors.max_price}
+        >
+          <Input {...form.register('max_price')} />
+        </Field>
+        <Field label="Minimum group size" placeholder="optional">
+          <Input {...form.register('min_group_size')} />
+        </Field>
+        <Field label="Preferred time" placeholder="optional, e.g. 7-9 am">
+          <Input {...form.register('time_window')} />
+        </Field>
+        {openFieldNote && <p className="text-sm text-destructive">{openFieldNote}</p>}
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <Button type="submit" disabled={pending}>
+          {pending ? 'Declaring…' : 'Declare'}
+        </Button>
+      </form>
+    </Card>
   );
 }
-
-const inputClass =
-  'h-10 rounded-lg border border-border bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30';
 
 function Field({
   label,
@@ -185,11 +188,11 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-sm font-medium">{label}</span>
+    <div className="flex flex-col gap-1.5">
+      <Label>{label}</Label>
       {children}
-      <span className="text-xs text-muted-foreground">e.g. {placeholder}</span>
+      <span className="text-xs text-muted-foreground">{placeholder}</span>
       {error?.message && <span className="text-xs text-destructive">{error.message}</span>}
-    </label>
+    </div>
   );
 }
