@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { isEmptyDetail } from '@/lib/format-check';
 import type { EvalRunSummary } from '@/lib/kirro';
 
 import { CheckName } from './check-name';
@@ -60,7 +61,7 @@ export function EvalRunsTable({ runs }: { runs: EvalRunSummary[] }) {
                         </Badge>
                       </TableCell>
                       <TableCell className="max-w-72 min-w-72 whitespace-normal text-muted-foreground">
-                        {c.detail || '—'}
+                        {isEmptyDetail(c.detail) ? '—' : c.detail}
                       </TableCell>
                     </TableRow>
                   ))}

@@ -14,3 +14,11 @@ export function parseCheckName(raw: string): Record<string, unknown> | null {
     return null;
   }
 }
+
+// Check `detail` strings come straight from Python's checks.py (e.g. `str(bad)` for an empty
+// list, `f"{...}"` for everything else) — `"[]"` and `"{}"` are real values meaning "nothing
+// found", not useful to show next to a passing check.
+const EMPTY_DETAILS = new Set(['', '[]', '{}']);
+export function isEmptyDetail(detail: string): boolean {
+  return EMPTY_DETAILS.has(detail.trim());
+}

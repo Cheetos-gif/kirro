@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseCheckName } from '../format-check';
+import { isEmptyDetail, parseCheckName } from '../format-check';
 
 describe('parseCheckName', () => {
   it('returns null for a builtin (plain-English) name', () => {
@@ -29,5 +29,19 @@ describe('parseCheckName', () => {
   it('returns null for a JSON array or primitive', () => {
     expect(parseCheckName('[1,2,3]')).toBeNull();
     expect(parseCheckName('42')).toBeNull();
+  });
+});
+
+describe('isEmptyDetail', () => {
+  it('treats an empty Python list/dict repr as empty', () => {
+    expect(isEmptyDetail('[]')).toBe(true);
+    expect(isEmptyDetail('{}')).toBe(true);
+    expect(isEmptyDetail('')).toBe(true);
+    expect(isEmptyDetail('  []  ')).toBe(true);
+  });
+
+  it('treats a real value as not empty', () => {
+    expect(isEmptyDetail('create_hold called 1x')).toBe(false);
+    expect(isEmptyDetail("['AWAITING_USER', 'CLOSED']")).toBe(false);
   });
 });
