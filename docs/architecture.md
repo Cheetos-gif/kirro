@@ -25,11 +25,11 @@ conversations. So the LLM is kept to conversation and legal-action choice; every
 ## Data flow (happy path)
 
 1. User turn -> `receive_user_turn` -> policy calls `set_field(field, evidence)` -> parser validates -> state updates.
-2. When all required fields are set, code asks the read-back. User says yes -> `confirm_readback` -> VALIDATED.
-3. `request_authorisation` -> mandate = group_size x max_price (paise) -> AUTHORISED -> WAITING_FOR_WINDOW.
-4. `window_open` event -> balance check -> release lookup -> DIFD allocation -> hold -> verify hold alive -> charge
-   (<= ceiling x group and <= mandate) -> booking confirmation -> CONFIRMED -> release unused mandate -> CLOSED.
-5. Any failure unwinds in order hold -> mandate and tells the user exactly what was and was not confirmed.
+1. When all required fields are set, code asks the read-back. User says yes -> `confirm_readback` -> VALIDATED.
+1. `request_authorisation` -> mandate = group_size x max_price (paise) -> AUTHORISED -> WAITING_FOR_WINDOW.
+1. `window_open` event -> balance check -> release lookup -> DIFD allocation -> hold -> verify hold alive -> charge
+   (\<= ceiling x group and \<= mandate) -> booking confirmation -> CONFIRMED -> release unused mandate -> CLOSED.
+1. Any failure unwinds in order hold -> mandate and tells the user exactly what was and was not confirmed.
 
 ## What is deterministic
 

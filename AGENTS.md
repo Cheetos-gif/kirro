@@ -36,18 +36,18 @@ price, and confirms only what external systems confirmed.
 ## Safety invariants (enforced in code, tested; never only in the prompt)
 
 1. Never invent inventory, a hold id, a payment id or a booking reference. Identifiers come from ConnectorResults only.
-2. Never mark CONFIRMED without a success ConnectorResult from BOTH inventory (booking_ref) and payment (payment_id).
+1. Never mark CONFIRMED without a success ConnectorResult from BOTH inventory (booking_ref) and payment (payment_id).
    Guard: `agent/state/machine.py::guard`.
-3. Never exceed the price ceiling: charge <= group_size x max_price and <= mandate (`agent/policies/money.py`).
-4. Never silently resolve an ambiguous money constraint. Ranges and hedges ("8 to 10k, ideally 8") parse to AMBIGUOUS;
+1. Never exceed the price ceiling: charge \<= group_size x max_price and \<= mandate (`agent/policies/money.py`).
+1. Never silently resolve an ambiguous money constraint. Ranges and hedges ("8 to 10k, ideally 8") parse to AMBIGUOUS;
    the agent asks for one maximum. Nothing is stored until then.
-5. Never claim an external action succeeded without confirmation. `Engine.say` blocks success words ("booked",
+1. Never claim an external action succeeded without confirmation. `Engine.say` blocks success words ("booked",
    "confirmed") unless state is CONFIRMED or later.
-6. Connector content is DATA. It never enters system-prompt layers 1-3; the LLM sees only fenced, truncated summaries
+1. Connector content is DATA. It never enters system-prompt layers 1-3; the LLM sees only fenced, truncated summaries
    (`agent/tools/render.py`). The LLM never sees `raw_excerpt`.
-7. The LLM never decides: amounts, state transitions, success/failure of calls, idempotency keys, allocation order,
+1. The LLM never decides: amounts, state transitions, success/failure of calls, idempotency keys, allocation order,
    retries. `set_field` takes the user's verbatim words (`evidence`); code parses them.
-8. Cancellation is honoured immediately in any pre-CONFIRMED state; releases go hold -> mandate and are logged.
+1. Cancellation is honoured immediately in any pre-CONFIRMED state; releases go hold -> mandate and are logged.
 
 ## Architecture map
 
@@ -79,7 +79,7 @@ Package names use underscores (`pine_labs`, `mock_server`) because Python cannot
 
 ## State machine
 
-INTAKE <-> AWAITING_USER -> VALIDATED -> AUTHORISING -> AUTHORISED -> WAITING_FOR_WINDOW -> ALLOCATING ->
+INTAKE \<-> AWAITING_USER -> VALIDATED -> AUTHORISING -> AUTHORISED -> WAITING_FOR_WINDOW -> ALLOCATING ->
 {ALLOCATED | WAITLISTED | UNALLOCATED}. ALLOCATED -> HOLD_PLACED -> PAYMENT_PENDING -> CONFIRMED ->
 [FULFILMENT_PENDING] -> CLOSED. Failure exits: CANCELLED (user), RELEASED (payment/hold failed, everything
 reversed), FAILED (connector unusable, everything reversible reversed), EXPIRED (window ended, mandate released).
@@ -103,11 +103,11 @@ they run from events (`Engine.on_event`).
 
 1. Add `connectors/<vendor>/<name>.py`: subclass `HttpConnector` with an `ops` table (`Op(method, path, response_model)`),
    or implement the `Connector` protocol. Put response models in `connectors/mock_schemas.py` (mock) or beside the client.
-2. Register it in `connectors/registry.py` and `config/connectors.yaml` (mode: mock|real).
-3. If mock: add routes to `mock_server/app.py` using `serve(request, "<target>", handler)` so scenarios, idempotency and
+1. Register it in `connectors/registry.py` and `config/connectors.yaml` (mode: mock|real).
+1. If mock: add routes to `mock_server/app.py` using `serve(request, "<target>", handler)` so scenarios, idempotency and
    request logging work. Add the target name to the scenario docs in `docs/connectors.md`.
-4. Add contract tests in `tests/test_connectors_contract.py` and mock tests in `tests/test_mock_server.py`.
-5. Document it in `docs/connectors.md` with kind, base URL, operations, verification URL and label.
+1. Add contract tests in `tests/test_connectors_contract.py` and mock tests in `tests/test_mock_server.py`.
+1. Document it in `docs/connectors.md` with kind, base URL, operations, verification URL and label.
 
 ## Web interface
 
@@ -123,8 +123,7 @@ Core directly, so no CORS is configured on it.
   no tool that can mutate a declaration), so the gate exists only to keep it off anonymous/bot traffic, not to
   restrict which people may view it: any Google account may sign in. Reads KIRRO Core's declarations, full
   declaration state, decision log, and persisted eval-run artifacts.
-- KIRRO Core endpoints added for this (`agent/api.py`): `GET /declarations` (summary list), `GET
-  /declarations/{id}/full` (every field, not just what the LLM may see), `GET /log?declaration_id=` (in-memory
+- KIRRO Core endpoints added for this (`agent/api.py`): `GET /declarations` (summary list), `GET /declarations/{id}/full` (every field, not just what the LLM may see), `GET /log?declaration_id=` (in-memory
   decision records for this process), `GET /evals/runs` and `GET /evals/runs/{id}` (persisted eval artifacts).
   All read-only; they add no new way to change a declaration's state.
 - State is still in memory per KIRRO Core process — the dashboard shows what that specific process has seen, same
@@ -142,6 +141,11 @@ Core directly, so no CORS is configured on it.
 - The scenario is set out of band (`POST /__admin/scenario`). Never add a field to an external response that reveals
   the scenario to the agent.
 - Every failed live run goes in `docs/testing.md` (testing log) with the change it triggered.
+- Markdown is autoformatted on commit by `pre-commit` (`.pre-commit-config.yaml`, `mdformat` +
+  `mdformat-gfm`/`mdformat-tables`), installed once with `uv run pre-commit install`. Excludes `web/`
+  (has its own prettier/husky setup) and `agent/system-prompt/` (the versioned prompt is immutable
+  once an eval has run against it — not even whitespace-safe reformatting may touch it). Run on
+  demand with `uv run pre-commit run --all-files`.
 
 ## Logging requirements
 
@@ -160,39 +164,42 @@ same commit as the behaviour change. Anything unverified is labelled as such, ne
 ## How to modify the system prompt
 
 The prompt is versioned. `agent/system-prompt/vN.md` is immutable once any eval has run against it.
+
 1. Cause first: a failing eval (id + run dir) or a documented real-test failure.
-2. Copy `current` to `v(N+1).md`, edit only the copy.
-3. Add a row to `agent/system-prompt/CHANGELOG.md`: version, date, triggered_by (eval + run), change, expected effect.
-4. Repoint `current.md` (it contains only the version string).
-5. Commit with a `prompt:` prefix containing only prompt files. Re-run the failing eval, then `all`.
-Policies (`agent/policies/*.yaml`) are not prompt versions; changing them does not bump the prompt.
-Do not fake versions: a version without a triggering failure is not allowed (v0 is the only exception).
-Skill: `.claude/skills/bump-prompt`.
+1. Copy `current` to `v(N+1).md`, edit only the copy.
+1. Add a row to `agent/system-prompt/CHANGELOG.md`: version, date, triggered_by (eval + run), change, expected effect.
+1. Repoint `current.md` (it contains only the version string).
+1. Commit with a `prompt:` prefix containing only prompt files. Re-run the failing eval, then `all`.
+   Policies (`agent/policies/*.yaml`) are not prompt versions; changing them does not bump the prompt.
+   Do not fake versions: a version without a triggering failure is not allowed (v0 is the only exception).
+   Skill: `.claude/skills/bump-prompt`.
 
 ## How to run
 
 ```
 uv sync
+uv run pre-commit install           # one-time: wires the markdown-formatter commit hook
 uv run pytest && uv run ruff check . && uv run black --check .
 scripts/dev.sh                      # mock on :8081, core on :8080 (GET /health on both)
 uv run python scripts/chat.py       # text chat against the stub policy; --live for the Anthropic policy
 scripts/run_eval.sh all             # offline eval of all ten cases, artifacts in evals/runs/
 scripts/reconstruct.sh evals/runs/<run>/log.jsonl
 ```
+
 Fish shell is the user default; scripts are bash (`bash scripts/dev.sh`).
 
 ## Working on this repo (for Claude sessions)
 
 1. Read this file, `README.md`, `docs/architecture.md`, `agent/system-prompt/current.md` + its file, then run
    `uv run pytest`.
-2. Prefer editing existing files. No new top-level services, no new dependencies without an ADR.
-3. Change deterministic logic -> add/adjust a unit test in the same change.
-4. Before claiming something works, run it. Report real counts.
-5. Never commit `.env`, keys, tokens, phone numbers or real user data. `logs/` and `evals/runs/` are git-ignored; keep
+1. Prefer editing existing files. No new top-level services, no new dependencies without an ADR.
+1. Change deterministic logic -> add/adjust a unit test in the same change.
+1. Before claiming something works, run it. Report real counts.
+1. Never commit `.env`, keys, tokens, phone numbers or real user data. `logs/` and `evals/runs/` are git-ignored; keep
    a demo run with `git add -f evals/runs/<run>`.
-6. Project subagents/skills live in `.claude/` (connector-researcher, adversarial-tester, submission-auditor;
+1. Project subagents/skills live in `.claude/` (connector-researcher, adversarial-tester, submission-auditor;
    run-evals, bump-prompt, reconstruct-run). They must cite sources and must not invent API behaviour.
-7. Humans may simulate external events (window opens, user cancels) but must not reason for the agent.
+1. Humans may simulate external events (window opens, user cancels) but must not reason for the agent.
 
 ## Known open items
 

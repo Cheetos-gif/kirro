@@ -76,8 +76,8 @@ primary declaration channel, and `scripts/chat.py` remains the primary local dev
 ## Eval workflow
 
 1. Pick a case in `evals/cases/` (E01 happy path to E10 group cannot be fulfilled).
-2. `scripts/run_eval.sh E0X` writes `evals/runs/<ts>_p<prompt>_E0X_<slug>/{log.jsonl,transcript.md,verdict.json}`.
-3. Offline runs prove the harness, guards and mocks. Live runs test the prompt. A failure goes into `docs/testing.md`
+1. `scripts/run_eval.sh E0X` writes `evals/runs/<ts>_p<prompt>_E0X_<slug>/{log.jsonl,transcript.md,verdict.json}`.
+1. Offline runs prove the harness, guards and mocks. Live runs test the prompt. A failure goes into `docs/testing.md`
    and, if it needs a prompt change, becomes a new version under `agent/system-prompt/` (see AGENTS.md).
 
 ## Current limitations

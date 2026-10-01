@@ -13,7 +13,12 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.6", "black>=24"]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "black>=24",
+    "pre-commit>=4.6.2",
+]
 
 [tool.uv]
 package = false

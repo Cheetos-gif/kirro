@@ -1,10 +1,12 @@
 # Testing
 
 ## Why this exists
+
 Everything that can be proven offline is proven offline, so a hackathon team can change the agent quickly without keys
 or phones.
 
 ## What runs
+
 `uv run pytest` runs offline in a few seconds: money parsing, field parsers, state machine guards, allocator
 properties, connector contracts (provenance, retry policy, malformed handling), mock server scenarios (including a real
 uvicorn thread for timeout/delay), engine safety tests, decision log redaction, eval harness (all ten cases through the
@@ -18,17 +20,20 @@ cancel from every pre-CONFIRMED state), no CONFIRMED without external confirmati
 malformed responses handled safely (`test_malformed_*`).
 
 ## Loop
+
 Eval case -> run -> verdict -> on failure add a row below -> change prompt (new version) or code -> rerun -> before
 recording run `all` with the final prompt version. Naming: runs `YYYYMMDD-HHMMSS_p<ver>_E0X_<slug>`, commits
 `feat|fix|prompt|eval|docs:`.
 
 ## Testing log
+
 Every failed live run goes here.
 
-| date | run id | case | prompt | outcome | evidence path | change made |
-|---|---|---|---|---|---|---|
-| (none yet: no live runs have been made) | | | | | | |
+| date                                    | run id | case | prompt | outcome | evidence path | change made |
+| --------------------------------------- | ------ | ---- | ------ | ------- | ------------- | ----------- |
+| (none yet: no live runs have been made) |        |      |        |         |               |             |
 
 ## Failure cases to test by hand once credentials exist
+
 Outbound call blocked by handset spam filter; Gnani silence/interruption timeouts; real Hinglish transcription of
 "any day"; Pine Labs sandbox mandate creation needing OTP.

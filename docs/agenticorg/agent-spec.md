@@ -12,12 +12,12 @@ the Prompt step offers, and split into the Behavior step only if the UI forces a
 
 ## 1. Persona
 
-| Field | Value |
-|---|---|
-| Employee Name | `Kirro` |
-| Designation | `Declared-Interest Booking Agent` |
-| Avatar URL | optional, leave blank or use `kirro.png` from repo root if the field accepts an upload/URL |
-| Domain | `Ops` (alternates seen in the picker: `Commerce`, `Travel` — Ops is recommended: this is an internal booking/allocation workflow, not a storefront checkout) |
+| Field         | Value                                                                                                                                                        |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Employee Name | `Kirro`                                                                                                                                                      |
+| Designation   | `Declared-Interest Booking Agent`                                                                                                                            |
+| Avatar URL    | optional, leave blank or use `kirro.png` from repo root if the field accepts an upload/URL                                                                   |
+| Domain        | `Ops` (alternates seen in the picker: `Commerce`, `Travel` — Ops is recommended: this is an internal booking/allocation workflow, not a storefront checkout) |
 
 ## 2. Role
 
@@ -130,10 +130,10 @@ RULES, in priority order:
 - **State-gating (the platform's Authorized Tools ACL is static, not per-state — ADR-010/011 Risk 5)**: the agent
   must self-enforce this order and refuse to call out of order even though the platform will not stop it:
   1. `set_field` (any number of times) until all required fields are set and unambiguous.
-  2. `present_readback` / read-back text — only after all required fields are set.
-  3. mandate-hold tool — only after an explicit yes to the read-back.
-  4. pool-declare tool — only after the mandate-hold tool returns a success/duplicate result with an id.
-  5. Nothing else. This agent never calls the allocator, the capture/release ops, or the booking-confirm op —
+  1. `present_readback` / read-back text — only after all required fields are set.
+  1. mandate-hold tool — only after an explicit yes to the read-back.
+  1. pool-declare tool — only after the mandate-hold tool returns a success/duplicate result with an id.
+  1. Nothing else. This agent never calls the allocator, the capture/release ops, or the booking-confirm op —
      those belong to the Window Allocation Workflow.
 - **Never advance past a refusal.** If a tool call returns a failure, do not proceed to the next step in the list
   above; report the failure and either retry the same step once or end the conversation per the Prompt's
@@ -145,13 +145,13 @@ Exact platform tool-id syntax (dot vs. double-underscore separator) was not conf
 page showed both `connector.tool` and `connector__tool` forms, possibly a rendering artifact (ADR-011 Risk 2).
 Select by connector + operation name below; confirm the exact id string in the live Authorized Tools checklist.
 
-| Connector | Operation(s) this agent needs | Kind |
-|---|---|---|
-| `venue_inventory` (budgeted mock #1) | `get_release`, `declare_interest` (pool-declare, new — ADR-011 §2) | mock |
-| `pine_labs_mandate` (budgeted mock #2) | `create_mandate` (hold), `get_mandate_balance` | mock |
-| `twilio` (native) | none as an agent-called tool — this is the inbound/outbound call transport, not something the agent invokes mid-conversation | real, channel-level |
-| `vachana` (custom, real) | none as an agent-called tool — STT/TTS happens at the channel level between Twilio and the agent's text turns, not as a tool call inside the conversation | real, channel-level |
-| `whatsapp` (native, `whatsapp_kirro`) | `send_text_message` — only if WhatsApp is also a declare channel, to send the pool-confirmation text | real |
+| Connector                              | Operation(s) this agent needs                                                                                                                             | Kind                |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| `venue_inventory` (budgeted mock #1)   | `get_release`, `declare_interest` (pool-declare, new — ADR-011 §2)                                                                                        | mock                |
+| `pine_labs_mandate` (budgeted mock #2) | `create_mandate` (hold), `get_mandate_balance`                                                                                                            | mock                |
+| `twilio` (native)                      | none as an agent-called tool — this is the inbound/outbound call transport, not something the agent invokes mid-conversation                              | real, channel-level |
+| `vachana` (custom, real)               | none as an agent-called tool — STT/TTS happens at the channel level between Twilio and the agent's text turns, not as a tool call inside the conversation | real, channel-level |
+| `whatsapp` (native, `whatsapp_kirro`)  | `send_text_message` — only if WhatsApp is also a declare channel, to send the pool-confirmation text                                                      | real                |
 
 **Deliberately excluded** from this agent's Authorized Tools, even though they exist on the platform or in the mock
 budget: `pine_labs_mandate.execute`/`release`, `/allocator/draw`, `venue_inventory.create_hold`/`confirm_booking`,
@@ -161,39 +161,41 @@ more tools than it needs is the one lever the static-ACL limitation (Risk 5) lea
 ## 6. Tool invocation contracts
 
 ### `venue_inventory.get_release`
+
 - Input: `{release_id}` or `{event_id, date}` to look it up.
 - Output used: `opens_at` (to tell the user when the window opens and to schedule the Workflow trigger).
 - Failure: if not found, tell the user that event/date combination has no scheduled release yet; do not invent one.
 
 ### `venue_inventory.declare_interest` (pool-declare — new, part of budgeted mock #1, ADR-011 §2)
-- Input: `{release_id, declaration_id, user_contact, acceptable_slot_ids_or_constraints, group_size,
-  min_group_size, max_price_paise, mandate_id}`.
+
+- Input: `{release_id, declaration_id, user_contact, acceptable_slot_ids_or_constraints, group_size, min_group_size, max_price_paise, mandate_id}`.
 - Output: `{pool_entry_id}`.
 - Idempotency: same `declaration_id` + `release_id` must not create a duplicate pool entry — treat a
   success/duplicate result the same way.
 - Failure: if the release's window has already opened (pool closed), tell the user plainly; do not retry.
 
 ### `pine_labs_mandate.create_mandate`
-- Input: `{customerReference: user_id, amount: {value: group_size * max_price_paise, currency: "INR"},
-  paymentMethod: "RESERVE_PAY"}`.
+
+- Input: `{customerReference: user_id, amount: {value: group_size * max_price_paise, currency: "INR"}, paymentMethod: "RESERVE_PAY"}`.
 - Output used: `authorizationId` (the mandate id), `status`.
 - Success condition: `status` is `ACTIVE` or the call reports `duplicate`, AND `authorizationId` is present.
 - Failure: any other result — tell the user the amount could not be reserved, offer retry or cancel; never say
   "reserved" without this condition holding.
 
 ### `pine_labs_mandate.get_mandate_balance`
+
 - Input: `{authorizationId}`.
 - Use: only if re-confirming an existing mandate is needed mid-conversation (e.g. resuming after a drop).
 
 ## 7. Failure-handling rules
 
-| Situation | Rule |
-|---|---|
-| `create_mandate` fails (insufficient balance, timeout, malformed) | Tell the user plainly; offer retry once, then offer cancel. Never create a pool entry without a successful mandate. |
-| `declare_interest` fails because the window already opened | Tell the user they're too late for this window; offer to declare for the next one if a future release exists. |
-| Tool call times out or returns malformed data | Treat as failure for this conversation — report it as "could not confirm", retry at most once, never claim success. |
-| User goes silent after a question | Repeat only the open question. |
-| User interrupts mid-sentence | Stop, re-ask only the open question, do not advance. |
+| Situation                                                                             | Rule                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `create_mandate` fails (insufficient balance, timeout, malformed)                     | Tell the user plainly; offer retry once, then offer cancel. Never create a pool entry without a successful mandate.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `declare_interest` fails because the window already opened                            | Tell the user they're too late for this window; offer to declare for the next one if a future release exists.                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Tool call times out or returns malformed data                                         | Treat as failure for this conversation — report it as "could not confirm", retry at most once, never claim success.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| User goes silent after a question                                                     | Repeat only the open question.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| User interrupts mid-sentence                                                          | Stop, re-ask only the open question, do not advance.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | User says a word matching CANCEL intent at any point before the pool-declare succeeds | Cancel immediately; if a mandate was already created, this agent does not have a release tool (Risk 5/§5) — escalate by telling the user their reservation will be released and let the Window Allocation Workflow's cleanup path (or a manual admin action) release it. **Gap**: this agent currently has no safe way to self-release a mandate it just created before pooling; flag for the implementation pass whether `pine_labs_mandate.release` must be added to this agent's tool list for the cancel-after-mandate-before-pool window specifically. |
 
 ## 8. Agent memory / state requirements

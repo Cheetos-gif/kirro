@@ -25,13 +25,10 @@ hold/release, DIFD allocator; Delhivery mocked in addition, not counted against 
 ## Pine Labs
 
 - **Native on AgenticOrg**: `Pine Labs (Plural)` connector, already registered and active in this tenant as
-  `pinelabs_plural` (`Auth: API_KEY`). Tools: `create_order, create_payment_link, get_order_status,
-get_payout_analytics, get_settlement_report, initiate_refund`. A second native connector, `Pinelabs Online
-payment` (QR `create_payment/create_qr_transaction/check_payment_status/cancel_payment/cancel_qr_transaction/
-get_qr_transaction_status`), exists but is not registered in this tenant. Use `pinelabs_plural` for the real
+  `pinelabs_plural` (`Auth: API_KEY`). Tools: `create_order, create_payment_link, get_order_status, get_payout_analytics, get_settlement_report, initiate_refund`. A second native connector, `Pinelabs Online payment` (QR `create_payment/create_qr_transaction/check_payment_status/cancel_payment/cancel_qr_transaction/ get_qr_transaction_status`), exists but is not registered in this tenant. Use `pinelabs_plural` for the real
   charge/order/refund leg.
 - **Gap (why we still mock)**: none of the above is an authorize-then-hold-then-capture-or-release primitive.
-  KIRRO's mandate (reserve `group_size x max_price`, hold, capture <= ceiling, release unused) has no native
+  KIRRO's mandate (reserve `group_size x max_price`, hold, capture \<= ceiling, release unused) has no native
   match — see ADR-010 decision 2.
 - **Verified from package source** (`pinelabs-online-p3p-server-sdk` 1.3.0, import `pinelabs_p3p_server`, inspected from
   the PyPI wheel): server instance methods `create_mandate`, `get_mandate`, `get_mandate_balance`, `revoke_mandate`,

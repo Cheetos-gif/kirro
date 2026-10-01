@@ -23,14 +23,12 @@ flag (can live on the venue-inventory mock, since it already tracks per-release 
 ## 2. Steps
 
 1. **Fetch the pool.** `venue_inventory.list_pool_entries {release_id}` (new op, same mock as
-   `declare_interest` — ADR-011 §2). Returns every pending bid: `{declaration_id, user_contact,
-acceptable_slot_ids_or_constraints, group_size, min_group_size, max_price_paise, mandate_id}`.
+   `declare_interest` — ADR-011 §2). Returns every pending bid: `{declaration_id, user_contact, acceptable_slot_ids_or_constraints, group_size, min_group_size, max_price_paise, mandate_id}`.
    - Empty pool: nothing to do, end the Workflow.
-2. **Fetch the release.** `venue_inventory.get_release {release_id}` for current slots/capacity/`opens_at`.
-3. **Run the draw.** `allocator.draw {release_id, window_open_iso: opens_at, slots, bids: <pool, mapped to the
-allocator's Bid shape>}` (the budgeted DIFD mock, ADR-011 §2). Returns one `AllocationResult` per bid:
+1. **Fetch the release.** `venue_inventory.get_release {release_id}` for current slots/capacity/`opens_at`.
+1. **Run the draw.** `allocator.draw {release_id, window_open_iso: opens_at, slots, bids: <pool, mapped to the allocator's Bid shape>}` (the budgeted DIFD mock, ADR-011 §2). Returns one `AllocationResult` per bid:
    `{declaration_id, slot_id|null, group_size_allocated, status: ALLOCATED|WAITLISTED|UNALLOCATED, reason}`.
-4. **For each ALLOCATED result** (winner):
+1. **For each ALLOCATED result** (winner):
    a. `venue_inventory.create_hold {release_id, declaration_id, slot_id, quantity: group_size_allocated, ttl_s}`.
    Failure (4xx, slot taken between draw and hold): fall back to the next acceptable slot per the bid's
    preference order if capacity allows, same rule as the existing Python oracle (`agent/core.py` ALLOCATED→
@@ -49,14 +47,14 @@ allocator's Bid shape>}` (the budgeted DIFD mock, ADR-011 §2). Returns one `All
      notify the user their charge could not be confirmed as a booking (never claim success).
    - Confirmed: `pine_labs_mandate.release` for any unused residual mandate amount
      (`group_size * max_price_paise - charge`), notify as a win with the booking reference (step 6).
-5. **For each WAITLISTED or UNALLOCATED result** (loser): `pine_labs_mandate.release {authorizationId: mandate_id}`
+1. **For each WAITLISTED or UNALLOCATED result** (loser): `pine_labs_mandate.release {authorizationId: mandate_id}`
    to release their full reserved amount immediately — "losing claims aren't released quickly" is an explicit
    brief failure mode; release must happen in the same Workflow run, not deferred. Notify (step 6).
-6. **Notify every bid's `user_contact`** via `whatsapp.send_text_message` (native, `whatsapp_kirro`) with the
+1. **Notify every bid's `user_contact`** via `whatsapp.send_text_message` (native, `whatsapp_kirro`) with the
    outcome: win (event, date, time, slot, amount charged, booking reference) or loss (plain statement, mandate
    released, invite to redeclare for a future window — item 14 of the brief's list, handled by pointing back at
    Kirro Declare).
-7. **Mark the release as drawn** (the de-duplication flag from §1) so a second scheduling trigger for the same
+1. **Mark the release as drawn** (the de-duplication flag from §1) so a second scheduling trigger for the same
    `release_id` is a no-op.
 
 ## 3. Idempotency

@@ -38,8 +38,7 @@ supersedes ADR-005's context and records what was found plus the resulting decis
   the platform's ACL).
 - **Connector catalog**: 101 native connectors (`Dashboard > Connectors > Marketplace`). Confirmed present:
   **Twilio** (`comms`: `make_call, send_sms, send_whatsapp, get_recordings, get_message_status`), **WhatsApp**,
-  **Gmail**, **Pine Labs (Plural)** (`create_order, create_payment_link, get_order_status, get_payout_analytics,
-  get_settlement_report, initiate_refund` — already registered and active in this tenant as `pinelabs_plural`),
+  **Gmail**, **Pine Labs (Plural)** (`create_order, create_payment_link, get_order_status, get_payout_analytics, get_settlement_report, initiate_refund` — already registered and active in this tenant as `pinelabs_plural`),
   **Pinelabs Online payment** (QR create/status/cancel, not yet registered). Confirmed **absent**: Gnani, Vachana,
   Delhivery, Exotel, Telegram, Google Sheets. Nothing in the catalog models a time-boxed inventory hold, a
   payment mandate (authorize-then-capture-then-release), or a fair-draw allocation — closest neighbours
@@ -72,29 +71,29 @@ supersedes ADR-005's context and records what was found plus the resulting decis
    `https://api.vachana.ai`, Auth Type API Key, header `X-API-Key-ID`.
    Telephony (dialing out, answering in) is **Twilio**, native to the platform — Exotel is not in the catalog and
    is dropped. Twilio carries the call; Vachana turns the audio into text and back, replacing Inya entirely.
-2. **Pine Labs**: real, native `pinelabs_plural` connector covers `create_order`, `create_payment_link`,
+1. **Pine Labs**: real, native `pinelabs_plural` connector covers `create_order`, `create_payment_link`,
    `get_order_status`, `get_payout_analytics`, `get_settlement_report`, `initiate_refund`. It has no
-   authorize/hold/release primitive — KIRRO's mandate (reserve `group_size x max_price`, hold, capture <= ceiling,
+   authorize/hold/release primitive — KIRRO's mandate (reserve `group_size x max_price`, hold, capture \<= ceiling,
    release unused) is not representable with those six operations. The mandate hold/release step is mocked (one of
    the 3 budgeted capabilities below), fronting whichever of `create_order`/`create_payment_link` actually moves
    money when a hold converts to a charge.
-3. **Delhivery**: mocked, mandatory per the brief, registered as an **MCP** Custom/Generic Connector (checkbox on)
+1. **Delhivery**: mocked, mandatory per the brief, registered as an **MCP** Custom/Generic Connector (checkbox on)
    pointing at our own hosted mock server (Vercel or equivalent). Endpoints and field names mirror the documented
    Delhivery Express shapes exactly (`docs/connectors.md`). **Delhivery's mock does not count against the 3-slot
    budget** — the brief's own wording scopes the 3 slots to "capabilities that Gnani, Pine Labs or Delhivery don't
    offer today"; Delhivery's own (mocked) surface is the mandatory baseline, not an extra.
-4. **Mock-capability budget: exactly 3**, all load-bearing to the core booking loop, none of which any native
+1. **Mock-capability budget: exactly 3**, all load-bearing to the core booking loop, none of which any native
    connector (Vachana, Twilio, Pine Labs, or the other 98 catalog connectors) provides:
    - Venue/slot inventory with a time-boxed hold (`POST .../holds`, `DELETE .../holds/{id}`) — no rail anywhere
      exposes inventory with an expiring claim.
    - Pine Labs mandate hold/release (authorize, balance, capture, release) — see (2).
    - The deterministic fair-draw allocator (DIFD) — KIRRO's own mechanism by design (ADR-002); never an external
      capability.
-   **Priority if a stricter reading ever forces a hard global cap of 3 including Delhivery**: drop Delhivery first.
-   It is explicitly non-core to the booking loop (ADR-004: "Delhivery is not in the core booking loop"; the primary
-   demo recording uses digital inventory and never calls it). The three capabilities above are not droppable —
-   without any one of them there is no booking loop.
-5. **Everything else stays real**, consistent with the brief: `whatsapp_kirro` (already connected) for the "team
+     **Priority if a stricter reading ever forces a hard global cap of 3 including Delhivery**: drop Delhivery first.
+     It is explicitly non-core to the booking loop (ADR-004: "Delhivery is not in the core booking loop"; the primary
+     demo recording uses digital inventory and never calls it). The three capabilities above are not droppable —
+     without any one of them there is no booking loop.
+1. **Everything else stays real**, consistent with the brief: `whatsapp_kirro` (already connected) for the "team
    member plays the user" channel; Gmail for any routed external input (e.g. a forwarded bank SMS) if that need
    arises.
 
