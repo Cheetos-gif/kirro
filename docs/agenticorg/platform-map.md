@@ -586,3 +586,30 @@ connector, the tool ACL, the prompt, and both agent roles.
 Evidence that this is the last blocker: the mock receives nothing, `Tool Calls (24h)` stays 0, `enforce-audit` stays
 empty (an escalation is not a denial), and every turn — including a perfect read-back at 85% — produces an approval
 row instead of a tool call.
+
+### Wizard attempt: what worked, what blocked, and the exact state
+
+Ran the wizard again for `Kirro` (renaming the previous record to free the name, as before). Persona, Role and
+Prompt all filled and advanced cleanly; the **Behavior** step accepted both settings:
+
+- **`HITL Condition` (the field that actually matters) was set to `confidence < 0.5`** — a plain text input,
+  placeholder `confidence < 0.88 OR amount > 500000`.
+- **`Confidence Floor` is a real `<input type="range">` with `min="0.5" max="0.99" step="0.01"`** — so 0.50 is the
+  lowest the UI allows, and the earlier API-created `confidence_floor: 0.5` was already at that minimum.
+
+Automation mechanics worth keeping:
+
+- **Synthetic events do not move that slider.** Setting `.value` through the native setter and dispatching
+  `input`/`change`, and dispatching `ArrowLeft` keydowns, both left it at 0.88 (React's state never changed).
+- **A real mouse click does.** `tab.clickAt()` on the track works: 50 % of the width gave `0.75`, and clicking 1 px
+  from the left edge gave the minimum, `0.5`.
+
+**Where it stopped:** with floor `0.5` and condition `confidence < 0.5` both set (consistent), the step's `Next`
+button is **disabled**, and I could not find the reason — `Select All` in the tool picker did not re-enable it, and
+the page reports no validation error. The wizard has no draft persistence, so leaving the page loses the work.
+
+**Exact next step for whoever picks this up:** get an agent created whose `hitl_condition` reads
+`confidence < 0.5`. The wizard is the only surface that edits that field; if `Next` stays disabled, the practical
+alternative is to find how the wizard stores it (its network payload on save) and replay that through
+`POST /api/v1/agents`, since `POST` *does* honour `confidence_floor` and the tools/connectors can then be fixed with
+`PATCH` as proven above. Everything else is ready: mock, `mcp_kirro_all`, the ACL, the prompt, and both agent roles.
