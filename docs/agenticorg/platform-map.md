@@ -190,3 +190,41 @@ confirmed while authoring the allocation steps.
   matters for Vachana, which has no valid non-`mcp` prefix.
 - How a workflow step's `action` names a connector tool.
 - Audit Log / Observatory export specifics for Q1.2 (ADR-011 §7.6).
+
+## 8. Agent creation wizard (verified 2026-10-02)
+
+`Create Agent` → `/dashboard/agents/new` → **Skip to manual setup** → 5 steps. What each step actually is (the spec
+in `agent-spec.md` had assumed two of these were prose boxes; they are not):
+
+| Step       | Reality                                                                                                                                                                                                                                                                                                                                |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 Persona  | `Employee Name *` (e.g. "Priya, Arjun, Maya"), `Designation`, `Avatar URL`, `Domain` (finance, hr, marketing, ops, backoffice, comms, compliance, commerce, travel, quick_commerce, ecommerce)                                                                                                                                         |
+| 2 Role     | **Not prose.** A `Create custom agent type` checkbox → a **slug** input (e.g. `customer_success`); otherwise pick an existing type (Support Triage, Vendor Manager, …). Plus `Specialization` (textarea), `Routing Filters` ("when multiple agents share this type…"), and `Reports To` (org-chart parent; empty = escalates to human) |
+| 3 Prompt   | One `Prompt Text *` box (+ a template picker). The full `agent-spec.md` §3 prompt pastes here verbatim (6,545 chars)                                                                                                                                                                                                                   |
+| 4 Behavior | **Not prose.** LLM model (only `azure_openai — deployment:gpt-4o` / `-mini` are usable in this tenant), LLM routing (Auto/Economy/Standard/Premium/Disabled), Confidence Floor (default 88% → HITL), HITL condition, Max Retries, **and `Connectors` — linking is what feeds the Authorized Tools list below**                         |
+| 5 Review   | (not yet reached)                                                                                                                                                                                                                                                                                                                      |
+
+The wizard also states: *"New agents start in Shadow Mode"* and *"The agent will auto-register on Grantex with a
+unique DID and scoped token for A2A/MCP external access."*
+
+**Connector linking (step 4)** is a single-select `<select>` whose options are the tenant's connectors by UUID, with
+a `+ Add connector` sentinel; each linked connector appears as a removable chip.
+
+**Authorized Tools (step 4, below the link list)** is a scrollable list with the hint
+`Click to add · Shift+click to add a range`, plus `Select All` and `Browse Marketplace Tools`. Leaving it empty is
+allowed: *"No tools selected. Default tools will be assigned based on agent type."*
+
+**Tool-id syntax — ADR-011 Risk 2 answered: `connector__tool` (double underscore)**, e.g.
+`agent_scheduler__schedule_agent_task`, `zoom__create_meeting`, `ahrefs__get_backlinks`.
+
+**Blocker found (needs resolving before the agent can be least-privileged):** with `mcp_venue_kirro` linked, the
+picker renders 558 tool ids but they span only the **native registry** set (`agent_scheduler` → `zoom`); no
+`mcp_*_kirro__*` id appears at all. So a custom MCP connector's discovered tools are not offered in the ACL picker
+yet. Unverified hypotheses, in the order worth checking: (a) the connector's MCP registration is subject to a
+Grantex scope check ("verified for Grantex scope compatibility" per the registration tooltip) that ours has not
+passed; (b) custom/MCP tools live behind `Browse Marketplace Tools` rather than this list; (c) the list needs a
+reload after linking. Until it is resolved, leaving the selection empty assigns *default* tools, which is broader
+than the least-privilege intent of `agent-spec.md` §5.
+
+**Draft state at the time of writing:** the wizard sits at step 4/5 with Persona + Prompt filled, agent type
+`declared_interest_booking`, and `mcp_venue_kirro` linked — **unsaved**. Nothing has been created.
