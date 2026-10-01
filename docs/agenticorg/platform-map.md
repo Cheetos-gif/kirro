@@ -375,3 +375,38 @@ supply them either (its auth-type list has no `meta_business`).
 
 `PATCH /api/v1/agents/{id} {"connector_ids":[…]}` currently returns 503 for every variant tried, including dropping
 whatsapp, so the agent's linked set cannot be changed while this is broken.
+
+### Resolved: **one untrusted custom connector per agent** — and the fix
+
+Tested on a fresh agent (created with only `mcp_pinelabs_kirro` + `mcp_venue_kirro`, no whatsapp, so no unhealthy
+connector to poison the refresh — and indeed `connector_ids` PATCHes succeed there, confirming the 503 on `Kirro` is
+caused by the unhealthy whatsapp):
+
+| Agent | custom connectors linked | venue tools | pinelabs tools |
+| ----- | ------------------------ | ----------- | -------------- |
+| Kirro | venue, pinelabs          | 422         | **200**        |
+| probe | venue, pinelabs          | **200**     | 422            |
+
+and on the probe agent, **both venue tools together** scoped fine (`200`, scope
+`tool:abb61bca-…__mcp_venue_kirro:write`), while **any mix with pinelabs** failed. Combined with `Kirro`, whose
+custom set was also {venue, pinelabs} but scoped pinelabs + native `whatsapp_kirro`, the rule that fits every
+observation is:
+
+> **At most one untrusted custom connector's tools can be scoped per agent.** Native/trusted connectors
+> (`whatsapp_kirro`) scope alongside it; a second custom one never does.
+
+Which custom connector wins appears to be arbitrary (creation/refresh order) — not settable by reordering
+`connector_ids`, which the API re-sorts.
+
+**The fix this points to: expose the whole mock through a single MCP connector.** Since *all* tools of the one scoped
+custom connector are grantable (all five pinelabs tools were), the answer is one aggregate MCP surface serving venue
+
+- pinelabs (+ allocator + delhivery) at a single endpoint, registered as **one** connector. The Declare Agent then
+  links exactly one custom connector and can be granted `get_release`, `declare_interest`, `create_mandate`,
+  `get_mandate_balance`, and optionally `send_text_message` if a native connector is also linked.
+
+Implementation: add an aggregate MCP server to `mock_server/mcp_surface.py` mounted at `/mcp` (all four surfaces'
+tools in one MCPServer — the builders already exist), rebuild and redeploy, register it as e.g. `mcp_kirro_all`,
+point a rebuilt agent at it, and grant the tool list. That stays inside ADR-012's design; no ADR change needed.
+
+Probe agent deleted; tenant is back to `Kirro` + the 5 shadow agents and 11 connectors.
