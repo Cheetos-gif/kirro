@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
+  name: kirro
+  labels:
+    # Matches the cluster's shared namespace-baseline convention (components/namespace-baseline in
+    # the vps repo) — duplicated by necessity since this manifest is sourced from a different repo.
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted

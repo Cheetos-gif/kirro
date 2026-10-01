@@ -1,0 +1,103 @@
+# One image (ghcr.io/cheetos-gif/kirro), two Deployments: kirro-core is the public-facing API
+# (api-kirro.upayan.dev), kirro-mock is the fake-vendor backend kirro-core talks to internally.
+# kirro-mock has no Ingress and no public host — see networkpolicy.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kirro-mock
+  labels:
+    app: kirro-mock
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kirro-mock
+  template:
+    metadata:
+      labels:
+        app: kirro-mock
+    spec:
+      priorityClassName: low-priority
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - vps
+      containers:
+        - name: kirro-mock
+          image: ghcr.io/cheetos-gif/kirro:latest
+          imagePullPolicy: Always
+          command: ["uvicorn", "mock_server.app:app", "--host", "0.0.0.0", "--port", "8081"]
+          ports:
+            - containerPort: 8081
+          readinessProbe:
+            httpGet: { path: /health, port: 8081 }
+            initialDelaySeconds: 3
+          resources:
+            requests: { cpu: 50m, memory: 96Mi }
+            limits: { cpu: 200m, memory: 256Mi }
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kirro-core
+  labels:
+    app: kirro-core
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kirro-core
+  template:
+    metadata:
+      labels:
+        app: kirro-core
+    spec:
+      priorityClassName: low-priority
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - vps
+      initContainers:
+        - name: wait-for-mock
+          image: ghcr.io/cheetos-gif/kirro:latest
+          imagePullPolicy: Always
+          command:
+            - python
+            - -c
+            - |
+              import time, urllib.request
+              while True:
+                  try:
+                      urllib.request.urlopen("http://kirro-mock:8081/health", timeout=2)
+                      break
+                  except Exception:
+                      time.sleep(1)
+      containers:
+        - name: kirro-core
+          image: ghcr.io/cheetos-gif/kirro:latest
+          imagePullPolicy: Always
+          command: ["uvicorn", "agent.api:app_factory", "--factory", "--host", "0.0.0.0", "--port", "8080"]
+          ports:
+            - containerPort: 8080
+          env:
+            - name: MOCK_SERVER_URL
+              value: http://kirro-mock:8081
+          readinessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 3
+          resources:
+            requests: { cpu: 50m, memory: 96Mi }
+            limits: { cpu: 200m, memory: 256Mi }

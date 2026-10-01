@@ -1,0 +1,25 @@
+# kirro-core only. kirro-mock is internal-only (the fake-vendor backend) — no Ingress, no public
+# host, by design (see AGENTS.md "Connector rules"). Scenario control for a demo uses
+# `kubectl port-forward svc/kirro-mock 8081:8081 -n kirro`, not a public endpoint.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kirro-core-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  # No `tls:` block: Traefik serves the *.upayan.dev default certificate (TLSStore `default` in
+  # kube-system, Cloudflare Origin CA).
+  rules:
+    - host: api-kirro.upayan.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kirro-core
+                port:
+                  number: 8080
