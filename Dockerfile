@@ -1,6 +1,6 @@
-# One image, two entrypoints (KIRRO Core and the mock server) — k8s/deployments.yaml picks the
-# command per Deployment. No LLM dependency on this path: agent/api.py drives the Engine directly
-# and never calls Anthropic, so no API key is required to run either service.
+# Single service: the mock server (mock external services the AgenticOrg-hosted KIRRO agent calls).
+# No LLM and no API key on this path — the decision-making brain lives on the AgenticOrg platform
+# (docs/decisions/ADR-011-kirro-brain-moves-to-agenticorg.md), not in this image.
 FROM python:3.13-slim
 
 RUN pip install --no-cache-dir uv
@@ -19,4 +19,5 @@ ENV PATH="/app/.venv/bin:${PATH}"
 RUN useradd --create-home --uid 10001 kirro
 USER kirro
 
-EXPOSE 8080 8081
+EXPOSE 8081
+CMD ["uvicorn", "mock_server.app:app", "--host", "0.0.0.0", "--port", "8081"]

@@ -2,36 +2,37 @@
 
 ## Why this exists
 
-Everything that can be proven offline is proven offline, so a hackathon team can change the agent quickly without keys
-or phones.
+Everything that can be proven offline is proven offline, so the mock services the AgenticOrg-hosted agent calls stay
+trustworthy without keys, network or phones. The agent's own behaviour is tested on the platform — see
+`docs/agenticorg/evals.md`.
 
 ## What runs
 
-`uv run pytest` runs offline in a few seconds: money parsing, field parsers, state machine guards, allocator
-properties, connector contracts (provenance, retry policy, malformed handling), mock server scenarios (including a real
-uvicorn thread for timeout/delay), engine safety tests, decision log redaction, eval harness (all ten cases through the
-stub), and the Anthropic policy wiring with a fake client. Live API calls are never made by tests.
+`uv run pytest` runs offline in a few seconds and covers exactly two things:
 
-The six bootstrap proofs: invalid price rejected (`test_money`, `test_engine`), missing field creates no claim
-(`test_missing_field_blocks_claim_and_authorisation`), cancellation (`test_user_cancellation_releases_in_order`,
-cancel from every pre-CONFIRMED state), no CONFIRMED without external confirmation (`test_state_machine`,
-`test_booking_needs_external_confirmation_end_to_end`), duplicate responses create no duplicate action
-(`test_duplicate_window_event_creates_no_second_action`, `test_ledger_returns_stored_result_without_second_call`),
-malformed responses handled safely (`test_malformed_*`).
+- **Mock-server scenarios** (`tests/test_mock_server.py`): the whole scenario table, idempotency and replay, isolated
+  runs, the declared-interest pool round trip, the Delhivery shapes, request/response logging, and the timeout/delay
+  scenarios driven through a real `uvicorn` thread over real HTTP so the client timeout path is genuinely exercised.
+  It also asserts that no response ever names a scenario, and that a bad scenario is rejected.
+- **Allocator properties** (`tests/test_allocator.py`): determinism and input-order independence, capacity respected,
+  ceiling respected with UNALLOCATED when nothing fits, min-group partial rules, time constraints as a hard filter,
+  one win per user per release, speed buying nothing, and the seed/weights being reproducible.
+
+There is no LLM in the test suite and no code in this repo that makes one. Live API calls are never made by tests.
 
 ## Loop
 
-Eval case -> run -> verdict -> on failure add a row below -> change prompt (new version) or code -> rerun -> before
-recording run `all` with the final prompt version. Naming: runs `YYYYMMDD-HHMMSS_p<ver>_E0X_<slug>`, commits
-`feat|fix|prompt|eval|docs:`.
+Mock behaviour change -> update `tests/test_mock_server.py` and `docs/connectors.md` in the same change. The agent's
+behaviour loop lives on AgenticOrg: eval case -> run -> verdict -> on failure record it below and change the agent's
+Prompt/Behavior configuration.
 
 ## Testing log
 
-Every failed live run goes here.
+Every failed run against the live agent goes here.
 
-| date                                    | run id | case | prompt | outcome | evidence path | change made |
-| --------------------------------------- | ------ | ---- | ------ | ------- | ------------- | ----------- |
-| (none yet: no live runs have been made) |        |      |        |         |               |             |
+| date                                         | run id | case | prompt | outcome | evidence path | change made |
+| -------------------------------------------- | ------ | ---- | ------ | ------- | ------------- | ----------- |
+| TBD — nothing has run against the live agent |        |      |        |         |               |             |
 
 ## Failure cases to test by hand once credentials exist
 

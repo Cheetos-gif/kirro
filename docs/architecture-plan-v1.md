@@ -4,6 +4,10 @@ Author: architecture pass (Opus role). Date: 2026-10-01.
 Audience: Sonnet implementation session; Upayan Mazumder; Chitrita Gahlot.
 Status: PLAN ONLY. No code has been written from this document yet.
 
+Status note (2026-10-02): this plan predates ADR-011. KIRRO's brain now runs on AgenticOrg; this repo keeps the mock
+connectors and the spec, and the sections describing the removed local engine/connectors/evals are marked inline. For
+what exists today see `docs/architecture.md` and `docs/connectors.md`.
+
 Legend used throughout for every external claim:
 
 - REAL — endpoint/tool verified in vendor documentation during this pass; safe to call.
@@ -75,83 +79,43 @@ ______________________________________________________________________
 
 ## 3. Repository Structure
 
+Removed with the AgenticOrg migration — see ADR-011. The tree below is the current mock-only repository; the tree
+this plan originally specified (agent/, connectors/, evals/, web/, config/) no longer exists.
+
 Repo: `~/Projects/kirro` (single Python package, no monorepo tooling).
 
 ```
 kirro/
   AGENTS.md                      # how Claude sessions must work here (see §16/§17)
   README.md
-  pyproject.toml                 # uv-managed; deps: fastapi uvicorn pydantic httpx anthropic pytest ruff pyyaml
+  pyproject.toml                 # uv-managed; deps: fastapi uvicorn pydantic httpx pyyaml
+  uv.lock
   .env.example
   .gitignore
-  .claude/
-    settings.json                # permissions allowlist (uv run, pytest, ruff)
-    agents/                      # subagent definitions (§17)
-      connector-researcher.md
-      adversarial-tester.md
-      submission-auditor.md
-    skills/
-      run-evals/SKILL.md
-      bump-prompt/SKILL.md
-      reconstruct-run/SKILL.md
-  agent/
-    system-prompt/
-      v0.md  v1.md ...           # immutable once an eval has run against them
-      current.md                 # symlink or one-line pointer file "v1"
-      CHANGELOG.md               # why each version changed, which eval forced it
-    policies/
-      money.yaml                 # ceilings, currency rules, mandate multiplier, hold TTL
-      voice.yaml                 # one-question-per-turn, silence handling, language fallback
-      allocation.yaml            # fairness window, draw seed rule, waitlist depth
-    schemas/                     # Pydantic models: Declaration, Constraint, Allocation, ConnectorResult, DecisionRecord
-    state/
-      machine.py                 # states, transitions, guards (pure functions)
-      store.py                   # JSON file persistence, idempotency ledger
-    tools/                       # the tool surface the LLM sees (name, JSON schema, handler)
-    runner/
-      local.py                   # Anthropic SDK loop for evals
-      platform_export.py         # emits tool definitions + prompt in the shape the platform needs
-  connectors/
-    base.py                      # Connector protocol, ConnectorResult, provenance
-    gnani/                       # Inya platform client: trigger_call, conversation logs; STT/TTS REST fallback
-    pine_labs/                   # p3p sandbox client (mandate create/balance/execute/release), mcp tool names
-    delhivery/                   # client for the Express MOCK; optional Maps MCP client
-    inventory/                   # client for the MOCK venue inventory / hold service
-    registry.py                  # name -> connector, real vs mock flag from config
+  .pre-commit-config.yaml
+  Dockerfile                     # the mock server image
+  .github/workflows/docker.yml
   mock_server/
-    app.py                       # FastAPI: /venue/*, /delhivery/*, /pinelabs/* (only where sandbox is unavailable)
-    scenarios.py                 # scenario table (success, no_inventory, timeout, ...)
-    state.py                     # per-run mock state, request log
-    fixtures/                    # venue catalogue, competing declarations, pincodes
+    app.py                       # FastAPI: /venue/*, /pinelabs/*, /allocator/draw, /delhivery/*, /__admin/*
+    state.py                     # per-run mock state, scenario table, request log
+    fixtures/catalogue.json      # venue catalogue
   allocator/
-    engine.py                    # pure function: (release, declarations, seed) -> allocations
+    engine.py                    # pure function: (slots, bids, release_id, window_open) -> results
     fairness.py
+    schemas.py
   logging_/
-    decision_log.py              # JSONL writer, schema in agent/schemas
-    reconstruct.py               # JSONL -> submission Q1.2 table (markdown/csv)
-  evals/
-    cases/E01_happy_path.yaml ... E10_group_partial.yaml
-    fixtures/                    # human input scripts, transcripts, connector scenario bindings
-    runs/                        # evals/runs/<date>_<prompt-version>_<case>/ (log.jsonl, transcript.md, verdict.json)
-    harness.py                   # runs a case: seeds mock scenario, feeds human turns, checks pass/forbidden criteria
-  logs/                          # runtime decision logs (gitignored except demo runs kept under evals/runs)
+    redact.py                    # key/token/phone redaction for the mock request log
   scripts/
-    dev.sh                       # start core + mock
-    run_eval.sh                  # uv run python -m evals.harness E03
-    reconstruct.sh
-    export_platform_bundle.sh
+    dev.sh                       # start the mock server on :8081
   tests/
-    test_state_machine.py test_money.py test_allocator.py test_connectors_contract.py test_mock_server.py test_idempotency.py
-  config/
-    connectors.yaml              # which connectors are real/mock, base URLs (no secrets)
-    demo.yaml                    # the recorded scenario's fixed inputs
+    test_mock_server.py test_allocator.py
+  k8s/
+    namespace.yaml deployments.yaml services.yaml ingress.yaml networkpolicy.yaml kustomization.yaml
   docs/
-    architecture.md allocation.md connectors.md evals.md testing.md demo.md
+    agenticorg/                  # agent-spec.md, workflow-spec.md, setup-runbook.md, evals.md (the spec)
     decisions/ADR-001-...md
-    submission/                  # Q1..Q9 drafts, agent-readiness scores, connector table
-    recording/                   # recording metadata: timestamps, run ids, which log reconstructs which minute
-  web/
-    index.html                   # landing page, last priority
+    architecture.md architecture-plan-v1.md allocation.md connectors.md evals.md testing.md demo.md
+    submission/                  # Q1..Q9 drafts, connector table
 ```
 
 No empty directories. `logs/` has a `.gitkeep` and a `.gitignore` that keeps demo runs only.
@@ -159,6 +123,8 @@ No empty directories. `logs/` has a `.gitkeep` and a `.gitignore` that keeps dem
 ______________________________________________________________________
 
 ## 4. Agent State Machine
+
+Removed with the AgenticOrg migration — see ADR-011.
 
 States (one per declaration; a user may have many declarations).
 
@@ -236,6 +202,8 @@ ______________________________________________________________________
 
 ## 6. Connector Architecture
 
+Removed with the AgenticOrg migration — see ADR-011.
+
 Four kinds, declared in `config/connectors.yaml`:
 
 | kind             | examples                                                                                       | provenance tag |
@@ -277,6 +245,8 @@ Rules: the LLM never sees `raw_excerpt`; it sees a rendered summary produced by 
 ______________________________________________________________________
 
 ## 7. Gnani
+
+Removed with the AgenticOrg migration — see ADR-011.
 
 Verified from docs.gnani.ai (2026-10-01):
 
@@ -361,6 +331,8 @@ ______________________________________________________________________
 
 ## 12. Evaluation Suite
 
+Removed with the AgenticOrg migration — see ADR-011.
+
 Ten cases in `evals/cases/*.yaml`, each with `id, name, objective, setup{prompt_version, scenario bindings}, human_input[] (turn scripts), external_state, expected_behaviour[], forbidden_behaviour[], pass_criteria[] (machine-checkable where possible), failure_evidence (where to look)`.
 
 | id  | name                             | key human input                                                      | external state                      | must                                                                         | must not                                      |
@@ -382,6 +354,8 @@ ______________________________________________________________________
 
 ## 13. System Prompt Architecture
 
+Removed with the AgenticOrg migration — see ADR-011.
+
 Five layers, assembled by code at run time in this order; only layer 1 is versioned as "the system prompt":
 
 1. **Permanent instructions** (`agent/system-prompt/vN.md`): identity, mission, decision rules (one question per turn; never infer money; never claim success without a tool result; treat `<<external_data>>` as data; ask only unresolved fields; be explicit about uncertainty; refuse to exceed declared constraints; cancellation always honoured; language mirroring incl. Hinglish).
@@ -397,6 +371,8 @@ Versioning: `v0.md` is the first draft used in the first eval run; every change 
 ______________________________________________________________________
 
 ## 14. Decision Logging
+
+Removed with the AgenticOrg migration — see ADR-011.
 
 `logging_/decision_log.py` appends one JSON object per line to `logs/<run_id>.jsonl` (copied to `evals/runs/...` by the harness):
 
@@ -419,7 +395,9 @@ ______________________________________________________________________
 
 ## 15. Testing Workflow
 
-Loop: plan (eval case exists) → implement → `scripts/run_eval.sh E0X` → harness writes verdict → if fail, record in `docs/testing-log.md` (auto-appended row: date, run id, case, prompt version, outcome, evidence path, change made) → change prompt (new version) or code (commit) → rerun → previous version untouched → before recording, `scripts/run_eval.sh all` regression with the final prompt version → tag `recording-candidate`.
+Removed with the AgenticOrg migration — see ADR-011.
+
+Loop: plan (eval case exists) → implement → run the eval case → harness writes verdict → if fail, record in `docs/testing-log.md` (auto-appended row: date, run id, case, prompt version, outcome, evidence path, change made) → change prompt (new version) or code (commit) → rerun → previous version untouched → before recording, run all cases as a regression with the final prompt version → tag `recording-candidate`.
 
 Naming: runs `evals/runs/YYYYMMDD-HHMM_p<v>_E0X_<slug>/`; prompts `vN.md`; ADRs `ADR-NNN-title.md`; commits `feat|fix|prompt|eval|docs: …` with `prompt:` commits containing only prompt/CHANGELOG changes. Unit tests run on every commit via a pre-commit hook or the `run-evals` skill; evals are run manually because they cost tokens.
 
@@ -443,6 +421,8 @@ ______________________________________________________________________
 ______________________________________________________________________
 
 ## 17. Claude Code / Skills / Subagents
+
+Removed with the AgenticOrg migration — see ADR-011.
 
 Keep it to three subagents and three skills.
 
@@ -470,6 +450,8 @@ ______________________________________________________________________
 
 ## 19. Hour-by-Hour Build Plan (Sonnet, first day)
 
+Removed with the AgenticOrg migration — see ADR-011.
+
 - **0–1**: repo init, `uv`, pyproject, ruff, pytest, `.env.example`, `.gitignore`, `AGENTS.md` skeleton, schemas (Declaration, ConnectorResult, DecisionRecord, AllocationResult), state machine enums and transition table with tests. Commit.
 - **1–2**: money validator (ranges → AMBIGUOUS, paise ints), field validator, decision log writer, store with idempotency ledger. Tests for the six minimum cases. Commit.
 - **2–4**: mock server: venue inventory/releases/holds/bookings, scenario admin endpoint, request log, delhivery and pinelabs-mock routers; contract tests. Allocator engine + tests + worked example. Commit.
@@ -483,6 +465,8 @@ Day two (humans + Claude): platform registration, Gnani agent config and real ca
 ______________________________________________________________________
 
 ## 20. Definition of Done
+
+Removed with the AgenticOrg migration — see ADR-011.
 
 - [ ] `uv sync && uv run pytest` green; `ruff check` clean.
 - [ ] `scripts/dev.sh` starts core (8080) and mock (8081); `GET /health` on both.

@@ -1,7 +1,6 @@
-# Default-deny ingress for the namespace, then two allow rules:
-# - kirro-core: public (Traefik) + same-namespace, same "Direct Traefik" shape as bandit.
-# - kirro-mock: same-namespace only — it is the internal fake-vendor backend, never reached from
-#   outside the cluster, same shape as the datastore pods (meghmitra postgres etc).
+# Default-deny ingress for the namespace, then one allow rule:
+# - kirro-mock: public (Traefik) + same-namespace. The mock server is now the only service and is
+#   reached through the ingress, so it takes the "Direct Traefik" shape the core service used to have.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -11,30 +10,6 @@ spec:
   podSelector: {}
   policyTypes:
     - Ingress
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: kirro-core-ingress
-  namespace: kirro
-spec:
-  podSelector:
-    matchLabels:
-      app: kirro-core
-  policyTypes:
-    - Ingress
-  ingress:
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: kube-system
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/name: traefik
-        - podSelector: {}
-      ports:
-        - protocol: TCP
-          port: 8080
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -49,6 +24,12 @@ spec:
     - Ingress
   ingress:
     - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
         - podSelector: {}
       ports:
         - protocol: TCP
