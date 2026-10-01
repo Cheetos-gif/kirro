@@ -6,8 +6,17 @@ Read this first. It should be enough to work on KIRRO without the original conve
 ## What KIRRO is
 
 A declared-interest booking agent for scarce inventory (tennis courts, movie seats, F1 tickets, society badminton).
-Built for The Ken's Case-Build Competition 2026, Round 3, "Getting the slot". It runs on Pine Labs' agent platform
-with Gnani (voice) and Pine Labs (payments) as real rails and Delhivery as a competition-required mock.
+Built for The Ken's Case-Build Competition 2026, Round 3, "Getting the slot". It runs as a Virtual Employee on Pine
+Labs' AgenticOrg platform: the AgenticOrg agent and a scheduled AgenticOrg Workflow make every decision and call
+connectors directly (real: Vachana for voice STT/TTS, Twilio for the call leg, `pinelabs_plural` for orders/
+payment-links/refunds, WhatsApp for notifications; mocked: venue inventory+hold+pool, Pine Labs mandate hold/
+release, the DIFD allocator — 3 budgeted capabilities — plus a mandatory, additional Delhivery mock). This repo is
+connector/mock infrastructure plus a deterministic spec and local test oracle for that platform agent, **not** a
+service the platform calls to get its decisions — see `docs/decisions/ADR-010-agenticorg-platform-vachana-mock-budget.md`,
+`docs/decisions/ADR-011-kirro-brain-moves-to-agenticorg.md`, and `docs/agenticorg/` for the full migration plan and
+copy-pasteable AgenticOrg configuration. **As of 2026-10-02 this is planning only; nothing in `docs/agenticorg/`
+has been implemented or registered on the live platform yet** — until it is, `agent/core.py`'s Engine (below)
+remains the only thing actually running, as the local oracle it is now scoped to be.
 
 Flow: DECLARE -> VERIFY -> AUTHORISE -> WAIT -> ALLOCATE -> CAPTURE/RELEASE -> CONFIRM.
 
@@ -48,15 +57,17 @@ agent/state/fields.py      deterministic parsers: event, date (incl. Hinglish), 
 agent/state/store.py       in-memory/JSON store + idempotency ledger (key = sha256(decl|state|scope)); reloads from
                            disk on startup when given a directory (KIRRO_DATA_DIR in the deployment)
 agent/policies/*.yaml|py   money / voice / allocation / retry policy; money.py parses and guards amounts
-agent/core.py              Engine: orchestrates intake, authorise, events, allocation, hold, pay, unwind, logging
+agent/core.py              Engine: LOCAL ORACLE ONLY (ADR-011) — deterministic reference the AgenticOrg Prompt/
+                            Behavior rules in docs/agenticorg/agent-spec.md were transcribed from; not the demo path
 agent/tools/               tool surface for the LLM (toolset.py), user-facing text (messages.py), fencing (render.py)
 agent/runner/              session.py, stub.py (offline policy), anthropic_policy.py (live), prompt.py (assembly)
 agent/system-prompt/       vN.md versioned prompt, current.md pointer, CHANGELOG.md
-agent/api.py               KIRRO Core FastAPI (port 8080): declare-flow wrappers over Engine, plus read-only
-                            /declarations, /declarations/{id}/full, /log, /evals/runs endpoints for the dashboard
+agent/api.py               Local dev/test HTTP surface over the oracle Engine (evals/harness.py's TestClient uses
+                            it); never pointed at by the live AgenticOrg agent (ADR-011) — not the "production brain"
 allocator/                 DIFD: pure deterministic allocation (engine.py, fairness.py)
 connectors/                base.py (ConnectorResult, HttpConnector), per-vendor dirs, registry.py, mock_schemas.py
-mock_server/               FastAPI mock of venue inventory, Pine Labs, Delhivery, Gnani extract (port 8081)
+mock_server/               FastAPI mock: venue inventory+holds, Pine Labs mandate hold/release, DIFD allocator
+                            (the 3 budgeted capabilities), plus mandatory Delhivery mock (additional, not budgeted)
 logging_/                  decision_log.py (JSONL), redact.py, reconstruct.py (Q1.2 table)
 evals/                     cases/E01..E10.yaml, checks.py, harness.py, runs/ (artifacts)
 config/connectors.yaml     real vs mock per connector (no secrets)
@@ -186,3 +197,9 @@ Fish shell is the user default; scripts are bash (`bash scripts/dev.sh`).
 ## Known open items
 
 See README "Current limitations" and `docs/connectors.md` (credentials, platform binding, unverified endpoints).
+Where KIRRO's orchestration runs is now decided: the AgenticOrg platform (agent + scheduled Workflow) is the sole
+decision-maker; `agent/core.py` and `agent/state/machine.py` are the local spec/oracle, never the production path
+(`docs/decisions/ADR-011-kirro-brain-moves-to-agenticorg.md`). That ADR's own §7 lists what is still genuinely
+open and unverified (non-MCP custom-connector tool discovery, cross-conversation pool persistence, whether a
+Workflow can message a user directly, governance/audit-log duplication) — do not assume any of those are resolved
+without live verification on `agenticorg.hackathon.pinelabs.com`.

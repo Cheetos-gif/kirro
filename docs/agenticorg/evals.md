@@ -1,0 +1,57 @@
+# Eval cases for the live AgenticOrg agent
+
+Distinct from `evals/cases/E01..E10.yaml`, which run against the local Python oracle (`agent/core.py`) via
+`evals/harness.py` and are unaffected by this migration (ADR-011 §3). These cases are written to run against the
+actual "Kirro Declare" Agent and "Kirro Window Allocation" Workflow once built (ADR-011 §8 steps 6–7); no harness
+exists yet to execute them automatically — that is reachable work once the live agent exists and
+`AGENTICORG_API_KEY` is available (`client.agents.run(...)` / direct phone-channel scripting), not done here.
+
+Columns match the brief's request: input, expected state, expected tool calls, forbidden tool calls, expected
+response, pass/fail, failure, prompt/behavior change made afterward. `Pass/fail`, `Failure`, and `Change made` are
+left blank (`TBD`) — they get filled in when a case is actually run, never fabricated ahead of time. `Oracle xref`
+points at the equivalent `evals/cases/*.yaml` case where one exists, so a live-agent failure can be cross-checked
+against the deterministic spec it was transcribed from.
+
+State names use the 6-stage model from ADR-011 §4 (`Declared, Verified, Pooled, Allocated, Captured, Confirmed`,
+plus exits `Cancelled, Released, Failed, Expired`), not the 19-state oracle machine.
+
+## Target: Kirro Declare Agent
+
+| id | Input | Expected state | Expected tool calls | Forbidden tool calls | Expected response | Oracle xref |
+|---|---|---|---|---|---|---|
+| L01 | "Tennis court this Saturday for 2, budget 8 to 10k, ideally 8" | stays `Declared` (ceiling unresolved) | none (no `create_mandate`) | `create_mandate`, `declare_interest` | asks for a single maximum per person; never echoes 8000 or 10000 | E02 |
+| L02 | "...any network works..." then "this Saturday" | stays `Declared` until the date is given; date resolves to the stated Saturday | none until mandate step | `create_mandate` before all fields set | asks "which date" on the mis-transcription turn; does not re-ask event/group size once set | E03 |
+| L03 | "Shanivaar ko court chahiye, char log" (Hinglish) | stays `Declared` (event ambiguous: court matches badminton and tennis) | none | `create_mandate` | lists both event options in Hindi-mirrored language; date resolves to the coming Saturday; group size resolves to 4 | E04 |
+| L04 | Full valid declaration, then silence twice, then "wait, sorry" (interrupted) | stays `Declared` through the silent/interrupted turns | none until read-back accepted | `create_mandate` before read-back yes | repeats only the open question on silence; does not advance on the interruption | E05 |
+| L05 | Full valid declaration, then "actually make it Sunday", then explicit "no" at read-back | `Cancelled` | `create_mandate` NOT called | `declare_interest` | date updates to Sunday on the correction; cancels cleanly after "no"; no mandate created | E06 |
+| L06 | Full valid declaration, "yes" at read-back, then mandate-hold tool returns `INSUFFICIENT_BALANCE` | `Declared` (reverts to ask about payment) | `create_mandate` called once (and a retry if the Prompt's one-retry rule applies) | `declare_interest` | tells the user the amount could not be reserved; offers retry or cancel; never says "reserved" |  |
+| L07 | Full valid declaration, "yes", mandate succeeds, then user says "actually I want to cancel" before the agent calls `declare_interest` | `Cancelled`, mandate released | `create_mandate` called; `declare_interest` must NOT be called | `declare_interest` | **gap case** — exercises `agent-spec.md` §7's documented gap (this agent has no `release` tool); record whether the demo needs that tool added |  |
+| L08 | User asks for a group fallback minimum after group size is set ("4 people, but 2 would be fine") | `Declared` (fallback minimum stored) | none yet | — | read-back explicitly states "4 people, minimum 2" rather than defaulting to all-or-nothing |  |
+| L09 | Two separate calls declare for the exact same `(user_contact, release_id)` (duplicate identity) | both reach `Pooled`, but the pool holds one entry, not two | `declare_interest` idempotent on the second call | — | second call's `declare_interest` result is a duplicate/no-op, not a second pool slot |  |
+| L10 | User says two mutually exclusive event names in one turn ("badminton or tennis, whichever") | stays `Declared` | none | `create_mandate` | asks which single event, does not guess, does not store either |  |
+| L11 | Outbound/inbound call is blocked or spam-filtered at the Twilio layer (simulate by disabling the number or using an unverified test number) | conversation never starts | none | all | channel-level failure, not agent logic — document the fallback path (WhatsApp) the demo uses if phone is blocked |  |
+
+## Target: Kirro Window Allocation Workflow
+
+| id | Input / trigger | Expected state | Expected tool calls | Forbidden tool calls | Expected response | Oracle xref |
+|---|---|---|---|---|---|---|
+| L12 | Pool has one bid, release has 0 remaining capacity (no_inventory scenario on the mock) | `Expired` (unallocated), mandate released | `allocator.draw`, `pine_labs_mandate.release` | `venue_inventory.create_hold`, `pine_labs_mandate.execute` | WhatsApp message: loss, mandate released, invited to redeclare | E07 |
+| L13 | Winning bid's `create_hold` succeeds, `pine_labs_mandate.execute` returns `FAILED/BANK_DECLINED` | `Released` | `create_hold`, `execute` (fails), `release_hold`, `pine_labs_mandate.release` | `confirm_booking` | WhatsApp message: payment did not go through, reserved amount released | E08 |
+| L14 | `create_hold` returns `malformed` then succeeds on the same-key re-attempt | `Captured` → `Confirmed` | `create_hold` called twice (malformed + re-attempt), rest of the happy path | — | booking confirmed normally, mock shows exactly 1 hold (idempotent) | E09 |
+| L15 | Pool capacity only fits 3 of a 4-person bid whose declared minimum is 3 (group fallback, partial) | `Captured` → `Confirmed` with `group_size_allocated = 3` | `create_hold` (qty 3), `execute` (charge for 3), `confirm_booking` | — | WhatsApp message explicitly states "3 of your 4 were seated" | E10 |
+| L16 | Pool capacity fits 2 of a 4-person bid whose declared minimum is 4 (all-or-nothing, no fallback declared) | `Expired`/waitlisted, mandate released | `allocator.draw`, `pine_labs_mandate.release` | `create_hold` | WhatsApp message: could not seat the full group, mandate released |  |
+| L17 | Mandate was created by Kirro Declare but the user hung up before `declare_interest` succeeded (mandate stuck, never pooled) | not reachable by this Workflow at all | none (Workflow never sees this bid) | — | **gap case**, same as L07 — this mandate has no owner; document whether a periodic sweep is needed, or whether it's accepted as a known demo limitation |  |
+| L18 | A bid's mandate's reservation window elapses before the release's `opens_at` is reached (mandate expires) | `Expired`, release attempted | `pine_labs_mandate.release` (or a failure if the mandate is already gone) | `create_hold` | WhatsApp message: reservation expired before the window opened; invited to redeclare | ADR-004-adjacent, not in E01-E10 |
+| L19 | Upstream 500 from the venue-inventory mock on `get_release` mid-Workflow | Workflow does not proceed for that release this trigger; retried per the connector's own 5xx-retry-once rule | `get_release` (retried once) | any write op | Workflow logs the failure, does not notify anyone incorrectly, safe to re-trigger |  |
+| L20 | `pine_labs_mandate.release` itself times out for a losing bid (losing-claim release failure) | Workflow retries once per the standard timeout/5xx retry rule; if still failing, must not silently drop it | `release` retried | — | **explicit brief requirement**: "losing claims aren't released quickly" — this case exists specifically to prove the retry/alerting path, not just log and move on |  |
+| L21 | Workflow process restarts mid-run, after 2 of 5 pool bids are already captured | re-entry is safe: already-captured bids are not re-charged; remaining 3 are processed | `get_hold`/`get_mandate_balance` style "already done?" checks before repeating a write | duplicate `execute`/`create_hold` for the 2 already-done bids | exercises the idempotency design in `workflow-spec.md` §3 |  |
+| L22 | A second `schedule_agent_task` trigger fires for a `release_id` that was already drawn | Workflow is a no-op on the second trigger | the "already drawn" check | `allocator.draw` a second time | exercises `workflow-spec.md` §1/§7's de-duplication requirement |  |
+
+## Notes
+
+- L07 and L17 are the same underlying gap (a mandate created but never pooled, from a drop between "yes" and
+  `declare_interest`) viewed from each side — Declare Agent and Workflow. Both are explicitly flagged rather than
+  assumed handled; `agent-spec.md` §7 names the concrete fix candidate (`release` tool on Kirro Declare).
+- Running these requires: the live agent built (ADR-011 §8 steps 6–7), `AGENTICORG_API_KEY` or a scripted
+  phone/WhatsApp channel to drive turns, and the mock server deployed publicly. None of that exists yet — this file
+  is the test plan, not a report of results.
