@@ -537,3 +537,28 @@ Two conversational observations from the same run, both prompt-quality (not bugs
   than to the money field.
 - **The date was re-asked** after "300", although "this Saturday" had been given in turn 1 — while the group size
   *was* retained ("all 4 of you"). So memory works; date capture on a busy first turn does not.
+
+### ROOT CAUSE of the tool-call failure: the Confidence Floor escalates every turn to HITL
+
+Not a transport problem at all. Every reply lands at **0.60–0.79 confidence**, the agents' `confidence_floor` is
+**0.88** (the wizard default), so the platform escalates *every* turn to HITL and **holds the tool call**. The
+evidence lines up:
+
+- `/dashboard/approvals` had **9 pending items** (15 by the second run), all `HITL: declared_interest_booking — confidence 0.6xx < floor 0.88`, `Trigger: chat_policy`, `Role: ops`.
+- `Scope Dashboard` → **`Tool Calls (24h): 0`** — no tool call was ever dispatched.
+- `/dashboard/enforce-audit` → 0 entries: this is an **escalation, not a denial**, which is why nothing was denied
+  and nothing reached the mock.
+- The mock's log confirms it received nothing.
+
+So the agent's "There was an error while trying to create the mandate" is the consequence of a held approval, not of
+a failed connector call.
+
+**The fix is the Confidence Floor, and it cannot be set through the API.** `PATCH /api/v1/agents/{id}` with
+`confidence_floor` (0.5 float, or 50 as a percent → 422) and with `hitl_condition` alone returns `200` but the values
+never change — read-only, like `category` and `is_trusted`. It has to be set in the create wizard's **Behavior** step
+(the `Confidence Floor` control) *at creation time*, so the practical route is to **re-create both agents with a
+floor around 0.5** rather than trying to edit them.
+
+Worth noting for the submission: a floor of 0.88 is unusable for a conversational agent — ordinary, correct turns
+score 0.60–0.85 and would all need a human click. Also visible on the agent page: the platform is shadow-evaluating
+the agent (`Shadow Samples: 12`, `Shadow Accuracy: 66.3%`).
