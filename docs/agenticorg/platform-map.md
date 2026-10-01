@@ -226,5 +226,12 @@ passed; (b) custom/MCP tools live behind `Browse Marketplace Tools` rather than 
 reload after linking. Until it is resolved, leaving the selection empty assigns *default* tools, which is broader
 than the least-privilege intent of `agent-spec.md` §5.
 
+**Lead on the cause:** the connector record carries `is_trusted: false`, where `whatsapp_kirro` (native) is
+`is_trusted: true` — the most likely gate on whether a connector's tools are offered in the ACL picker. It is not
+settable from the connector page (only `Test Connection`, `Health Check`, `Back`, `Edit`), and running
+`Test Connection` updated `health_check_at` but left `is_trusted` `false`. So trust must come from elsewhere — a
+governance surface (Scope Dashboard / Approvals), a registration-time Grantex check ours has not passed, or an API
+field. Check that first.
+
 **Draft state at the time of writing:** the wizard sits at step 4/5 with Persona + Prompt filled, agent type
 `declared_interest_booking`, and `mcp_venue_kirro` linked — **unsaved**. Nothing has been created.
