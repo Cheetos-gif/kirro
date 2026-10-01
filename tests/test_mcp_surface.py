@@ -186,3 +186,23 @@ def test_mcp_host_header_allow_list(mcp_base):
         f"{mcp_base}/venue/mcp", json=body, headers={**base, "Host": "api-kirro.upayan.dev"}, timeout=10
     )
     assert allowed.status_code != 421
+
+
+def test_aggregate_surface_serves_every_tool(mcp_base):
+    """`/all/mcp` exists because AgenticOrg scopes only one untrusted custom connector per agent, so
+    the Declare Agent must be able to reach every tool through a single connector."""
+
+    async def go():
+        async with session(f"{mcp_base}/all/mcp") as s:
+            return sorted(t.name for t in (await s.list_tools()).tools)
+
+    names = asyncio.run(go())
+    assert len(names) == 18
+    assert {
+        "get_release",
+        "declare_interest",
+        "create_mandate",
+        "get_mandate_balance",
+        "draw",
+        "track",
+    } <= set(names)

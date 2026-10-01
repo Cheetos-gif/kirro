@@ -514,7 +514,11 @@ def create_app(log_dir: str | None = None) -> FastAPI:
     # exactly /<surface>/mcp. Mounting at /<surface>/mcp with an inner path of "/" makes Starlette
     # 307-redirect to /<surface>/mcp/, and behind the TLS-terminating ingress that Location is
     # http:// — which strict MCP clients refuse to follow (observed live).
-    mcp_surfaces.update(build_surfaces(app))
+    per_surface, aggregate = build_surfaces(app)
+    mcp_surfaces.update(per_surface)
+    # The aggregate holds every tool. AgenticOrg scopes at most one untrusted custom connector per
+    # agent, so the Declare Agent links this single connector instead of several.
+    mcp_surfaces["all"] = aggregate
     security = transport_security()
     for name, server in mcp_surfaces.items():
         app.mount(f"/{name}", server.streamable_http_app(stateless_http=True, transport_security=security))

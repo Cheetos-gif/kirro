@@ -70,12 +70,13 @@ as a tool instead of our Python engine calling it in process:
 Each surface is also exposed as an MCP server (ADR-012) — this is what AgenticOrg registers with the MCP checkbox
 on. Transport is stateless streamable HTTP.
 
-| Surface           | MCP endpoint     | Tools                                                                                                                                                       |
-| ----------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| venue             | `/venue/mcp`     | `list_releases`, `get_release`, `create_hold`, `get_hold`, `release_hold`, `confirm_booking`, `declare_interest`, `list_pool_entries`, `cancel_declaration` |
-| Pine Labs mandate | `/pinelabs/mcp`  | `create_mandate`, `get_mandate_balance`, `execute`, `release`, `refund`                                                                                     |
-| DIFD draw         | `/allocator/mcp` | `draw`                                                                                                                                                      |
-| Delhivery         | `/delhivery/mcp` | `pincode_serviceability`, `create_shipment`, `track`                                                                                                        |
+| Surface           | MCP endpoint     | Tools                                                                                                                                                                                                                                  |
+| ----------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| venue             | `/venue/mcp`     | `list_releases`, `get_release`, `create_hold`, `get_hold`, `release_hold`, `confirm_booking`, `declare_interest`, `list_pool_entries`, `cancel_declaration`                                                                            |
+| Pine Labs mandate | `/pinelabs/mcp`  | `create_mandate`, `get_mandate_balance`, `execute`, `release`, `refund`                                                                                                                                                                |
+| DIFD draw         | `/allocator/mcp` | `draw`                                                                                                                                                                                                                                 |
+| Delhivery         | `/delhivery/mcp` | `pincode_serviceability`, `create_shipment`, `track`                                                                                                                                                                                   |
+| **all four**      | **`/all/mcp`**   | **all 18 above** — use this one for AgenticOrg: it scopes at most one untrusted custom connector per agent (see `docs/agenticorg/platform-map.md`), so the agent links a single connector and can still be granted every tool it needs |
 
 Tools call the same routes **in process**, so validation, the idempotency ledger, the state store and the request
 log are shared rather than reimplemented. Every tool takes an optional `run_id` (sent as `X-Run-Id`; defaults to

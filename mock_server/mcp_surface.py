@@ -93,8 +93,7 @@ async def _call(
     return {"status_code": resp.status_code, "body": body}
 
 
-def _venue(client: httpx.AsyncClient) -> MCPServer:
-    mcp = MCPServer("venue_inventory", instructions=SURFACE_INSTRUCTIONS["venue"])
+def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 
     @mcp.tool(description="List releases, optionally filtered by event_id and/or date.")
     async def list_releases(event_id: str | None = None, date: str | None = None, run_id: str = DEFAULT_RUN) -> dict:
@@ -192,11 +191,8 @@ def _venue(client: httpx.AsyncClient) -> MCPServer:
             idem=idempotency_key,
         )
 
-    return mcp
 
-
-def _pinelabs(client: httpx.AsyncClient) -> MCPServer:
-    mcp = MCPServer("pine_labs_mandate", instructions=SURFACE_INSTRUCTIONS["pinelabs"])
+def _pinelabs(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 
     @mcp.tool(description="Reserve (authorise) an amount on the customer's mandate.")
     async def create_mandate(
@@ -250,11 +246,8 @@ def _pinelabs(client: httpx.AsyncClient) -> MCPServer:
             json={},
         )
 
-    return mcp
 
-
-def _allocator(client: httpx.AsyncClient) -> MCPServer:
-    mcp = MCPServer("difd_allocator", instructions=SURFACE_INSTRUCTIONS["allocator"])
+def _allocator(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 
     @mcp.tool(
         description="Run the DIFD draw for a release's pool. Deterministic for a given (release, window_open_iso)."
@@ -271,11 +264,8 @@ def _allocator(client: httpx.AsyncClient) -> MCPServer:
             payload["window_open_iso"] = window_open_iso
         return await _call(client, "POST", "/allocator/draw", run_id=run_id, idem=idempotency_key, json=payload)
 
-    return mcp
 
-
-def _delhivery(client: httpx.AsyncClient) -> MCPServer:
-    mcp = MCPServer("delhivery_mock", instructions=SURFACE_INSTRUCTIONS["delhivery"])
+def _delhivery(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 
     @mcp.tool(description="Pincode serviceability lookup (empty list means non-serviceable).")
     async def pincode_serviceability(filter_codes: str, run_id: str = DEFAULT_RUN) -> dict:
@@ -300,13 +290,38 @@ def _delhivery(client: httpx.AsyncClient) -> MCPServer:
             client, "GET", "/delhivery/api/v1/packages/json/", run_id=run_id, params={"waybill": waybill}
         )
 
-    return mcp
-
 
 BUILDERS = {"venue": _venue, "pinelabs": _pinelabs, "allocator": _allocator, "delhivery": _delhivery}
 
 
-def build_surfaces(app: Any) -> dict[str, MCPServer]:
-    """Build one MCP server per surface. Mount each at `/<surface>/mcp`."""
+def build_surfaces(app: Any) -> tuple[dict[str, MCPServer], MCPServer]:
+    """Build one MCP server per surface plus one **aggregate** server holding every tool.
+
+    Returns `(per_surface, aggregate)`. Mount the per-surface ones at `/<surface>/mcp` and the
+    aggregate at `/all/mcp`.
+
+    The aggregate exists because AgenticOrg scopes **at most one untrusted custom connector's tools
+    per agent**: two registrations of the same mock ended up in a state where whichever connector the
+    platform picked was scoped and the other's tools were rejected (`422 Invalid authorized_tools`),
+    reproducibly and in both directions. Serving every tool from a single connector means the agent
+    links one custom connector and can still be granted all of them. See
+    `docs/agenticorg/platform-map.md`.
+    """
     client = _client(app)
-    return {name: builder(client) for name, builder in BUILDERS.items()}
+    per_surface: dict[str, MCPServer] = {}
+    for name, register in BUILDERS.items():
+        mcp = MCPServer(f"kirro_{name}", instructions=SURFACE_INSTRUCTIONS[name])
+        register(mcp, client)
+        per_surface[name] = mcp
+
+    aggregate = MCPServer(
+        "kirro_mock",
+        instructions=(
+            "KIRRO mock: venue inventory/holds/declare pool, Pine Labs mandate, DIFD draw and Delhivery, "
+            "all in one catalog. Prefer the `/all/mcp` endpoint when the platform can only scope one "
+            "custom connector per agent."
+        ),
+    )
+    for register in BUILDERS.values():
+        register(aggregate, client)
+    return per_surface, aggregate
