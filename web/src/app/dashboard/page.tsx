@@ -2,8 +2,10 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { auth, signOut } from '@/auth';
+import { BackendError } from '@/components/backend-error';
 import { Button } from '@/components/ui/button';
 import { listDeclarations, listEvalRuns } from '@/lib/kirro';
+import type { EvalRunSummary, StateView } from '@/lib/kirro';
 
 export const metadata: Metadata = {
   title: 'Dashboard — KIRRO',
@@ -11,10 +13,16 @@ export const metadata: Metadata = {
 
 export default async function DashboardPage() {
   const session = await auth();
-  const [declarations, evalRuns] = await Promise.all([listDeclarations(), listEvalRuns()]);
+  let data: [StateView[], EvalRunSummary[]];
+  try {
+    data = await Promise.all([listDeclarations(), listEvalRuns()]);
+  } catch (error) {
+    return <BackendError error={error} context="dashboard data" />;
+  }
+  const [declarations, evalRuns] = data;
 
   return (
-    <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-10 px-6 py-16">
+    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-10 px-6 py-16">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>

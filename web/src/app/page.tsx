@@ -17,11 +17,11 @@ const STEPS = [
 
 export default function Home() {
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-16 px-6 py-24">
+    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-16 px-6 py-24">
       <div className="flex flex-col gap-5">
         <Image src="/kirro.png" alt="" width={56} height={56} className="rounded-xl" priority />
         <h1 className="text-4xl font-semibold tracking-tight">KIRRO</h1>
-        <p className="max-w-xl text-lg leading-8 text-muted-foreground">
+        <p className="max-w-2xl text-lg leading-8 text-muted-foreground">
           A declared-interest booking agent for scarce inventory — courts, seats, tickets. Speed
           buys nothing by design: you declare before the window opens, a seeded fair draw allocates
           when it does, and money moves only against a confirmed result.

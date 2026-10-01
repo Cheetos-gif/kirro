@@ -27,10 +27,16 @@ export function toApiError(error: unknown): ApiError {
   if (isAxiosError(error)) {
     const status = error.response?.status;
     const data = error.response?.data as Record<string, unknown> | undefined;
+    // A connection-level failure (refused, reset, timeout, DNS) never reaches `error.response`,
+    // and Node's AggregateError for ECONNREFUSED has an empty top-level `.message` — the only
+    // useful signal is axios's own `error.code`. Without this fallback the user sees "".
+    const message =
+      (data?.message as string | undefined) ??
+      (error.message || `Request failed: ${error.code ?? 'unknown error'}`);
     return new ApiError({
-      message: (data?.message as string | undefined) ?? error.message,
+      message,
       status,
-      code: data?.code as string | undefined,
+      code: (data?.code as string | undefined) ?? error.code,
       details: data,
     });
   }

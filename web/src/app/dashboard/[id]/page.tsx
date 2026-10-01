@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
+import { BackendError } from '@/components/backend-error';
 import { getDecisionLog, getDeclarationFull } from '@/lib/kirro';
+import type { DecisionRecord, DeclarationFull } from '@/lib/kirro';
 
 export const metadata: Metadata = {
   title: 'Declaration — KIRRO Dashboard',
@@ -13,10 +15,16 @@ export default async function DeclarationDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [declaration, log] = await Promise.all([getDeclarationFull(id), getDecisionLog(id)]);
+  let data: [DeclarationFull, DecisionRecord[]];
+  try {
+    data = await Promise.all([getDeclarationFull(id), getDecisionLog(id)]);
+  } catch (error) {
+    return <BackendError error={error} context={`declaration ${id}`} />;
+  }
+  const [declaration, log] = data;
 
   return (
-    <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-8 px-6 py-16">
+    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-6 py-16">
       <div className="flex flex-col gap-1">
         <Link href="/dashboard" className="text-sm text-muted-foreground hover:underline">
           ← Dashboard

@@ -13,7 +13,7 @@ export default function DashboardError({
   reset: () => void;
 }) {
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-start gap-4 px-6 py-24">
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-start gap-4 px-6 py-24">
       <h1 className="text-xl font-semibold tracking-tight">Could not load dashboard data</h1>
       <p className="text-sm text-muted-foreground">
         KIRRO Core did not return the expected data. It may be unreachable, restarting, or returning

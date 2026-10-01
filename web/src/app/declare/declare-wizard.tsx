@@ -85,7 +85,7 @@ export function DeclareWizard() {
 
   if (step === 'readback') {
     return (
-      <div className="flex max-w-lg flex-col gap-4">
+      <div className="flex w-full max-w-2xl flex-col gap-4">
         <h2 className="text-xl font-semibold">Here is what I understood</h2>
         <p className="rounded-lg border border-border bg-muted/40 p-4 text-sm leading-6">
           {readbackText}
@@ -107,7 +107,7 @@ export function DeclareWizard() {
       ? (result.mandate_paise / 100).toLocaleString('en-IN')
       : null;
     return (
-      <div className="flex max-w-lg flex-col gap-3">
+      <div className="flex w-full max-w-2xl flex-col gap-3">
         <h2 className="text-xl font-semibold">Declared and authorised</h2>
         <p className="text-sm text-muted-foreground">
           State: <span className="font-medium text-foreground">{result.state}</span>
@@ -128,7 +128,7 @@ export function DeclareWizard() {
 
   if (step === 'error') {
     return (
-      <div className="flex max-w-lg flex-col gap-3">
+      <div className="flex w-full max-w-2xl flex-col gap-3">
         <p className="text-sm text-destructive">{error}</p>
         <Button variant="outline" onClick={() => setStep('intake')}>
           Try again
@@ -138,7 +138,7 @@ export function DeclareWizard() {
   }
 
   return (
-    <form onSubmit={form.handleSubmit(onIntake)} className="flex max-w-lg flex-col gap-4">
+    <form onSubmit={form.handleSubmit(onIntake)} className="flex w-full max-w-2xl flex-col gap-4">
       <Field
         label="What do you want to book?"
         placeholder="Badminton court"
