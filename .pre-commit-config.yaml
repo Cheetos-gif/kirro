@@ -6,12 +6,6 @@ repos:
     hooks:
       - id: mdformat
         name: mdformat (autoformat Markdown)
-        # web/ has its own formatter (prettier via web/.husky + lint-staged); don't fight it.
-        # agent/system-prompt/vN.md is immutable once an eval has run against it (AGENTS.md) — a
-        # formatter must never touch it, not even whitespace-only (it renumbers ordered lists,
-        # which changes the literal bytes sent to the LLM). CHANGELOG.md lives alongside it and is
-        # excluded for the same reason (keep the directory's history byte-exact).
-        exclude: ^(web/|agent/system-prompt/)
         args: ["--wrap", "keep", "--end-of-line", "lf"]
         additional_dependencies:
           - mdformat-gfm # GitHub-flavoured markdown: tables, strikethrough, task lists
