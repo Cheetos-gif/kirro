@@ -463,3 +463,35 @@ platform's step model.
 
 Note the agent picker lists agent types, so a new agent type must be created for the allocator role the same way
 `declared_interest_booking` was (wizard step 2, `Create custom agent type`).
+
+### Built 2026-10-02
+
+Both halves of the ADR-011 design now exist on the platform.
+
+**`Kirro Allocator`** — created **via API** (no wizard needed): `POST /api/v1/agents` with a brand-new
+`agent_type: "kirro_allocator"` returned 201, so custom agent types do not require the wizard. id
+`7b1f072c-1019-434b-af81-1d66e517611b`, domain `ops`, linked to the single aggregate connector `mcp_kirro_all`, with
+**10 tools granted in one PATCH (200)**: `draw`, `create_hold`, `get_hold`, `release_hold`, `confirm_booking`,
+`execute`, `release`, `refund`, `list_releases`, `list_pool_entries`.
+
+**`Kirro Window Allocation`** — `POST /api/v1/workflows` returned 201, id
+`f22042ff-0682-4894-8c9c-cd3d3c835783`, domain `ops`, `trigger_type: manual`, with these steps persisted in
+`definition.steps`:
+
+| #   | name               | agent             | action              |
+| --- | ------------------ | ----------------- | ------------------- |
+| 1   | Fetch declare pool | `kirro_allocator` | `list_pool_entries` |
+| 2   | Fetch release      | `kirro_allocator` | `get_release`       |
+| 3   | Run DIFD draw      | `kirro_allocator` | `draw`              |
+| 4   | Hold for winner    | `kirro_allocator` | `create_hold`       |
+| 5   | Capture mandate    | `kirro_allocator` | `execute`           |
+| 6   | Confirm booking    | `kirro_allocator` | `confirm_booking`   |
+| 7   | Notify outcome     | —                 | `type: notify`      |
+
+Form mechanics learned on the way: the Workflow Name input is the one with placeholder
+`e.g. Invoice Processing Pipeline` (filling the first `input[type=text]` silently sets nothing and the form then
+reports "Workflow name is required"); steps are edited as a JSON array in the `Define Steps (JSON)` textarea and are
+stored under `definition.steps`; `GET /api/v1/workflows/{id}` returns the workflow.
+
+Still to do for Phase 3: switch `trigger_type` to `schedule` (or wire `schedule_agent_task`) and run L12–L22. Note
+step 7's `notify` needs `whatsapp_kirro`, which is currently unhealthy — see the credentials issue above.
