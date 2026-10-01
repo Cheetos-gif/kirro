@@ -1,144 +1,110 @@
 # AGENTS.md
 
-Read this first. It should be enough to work on KIRRO without the original conversation. Deeper design:
-`docs/architecture-plan-v1.md` (the Opus plan this repo implements) and `docs/architecture.md`.
+Read this first. It should be enough to work on this repo without the original conversation. What KIRRO the product
+is and how its agent behaves now live in `docs/agenticorg/` and
+`docs/decisions/ADR-011-kirro-brain-moves-to-agenticorg.md`; this file is about the code that is still here.
 
-## What KIRRO is
+## What this repo is
 
-A declared-interest booking agent for scarce inventory (tennis courts, movie seats, F1 tickets, society badminton).
-Built for The Ken's Case-Build Competition 2026, Round 3, "Getting the slot". It runs on Pine Labs' agent platform
-with Gnani (voice) and Pine Labs (payments) as real rails and Delhivery as a competition-required mock.
+The **mock connector infrastructure and the spec** for KIRRO, a declared-interest booking agent for scarce inventory
+(tennis courts, movie seats, F1 tickets, society badminton), built for The Ken's Case-Build Competition 2026, Round 3,
+"Getting the slot". The agent itself runs as a Virtual Employee on Pine Labs' AgenticOrg platform: the AgenticOrg
+agent and a scheduled AgenticOrg Workflow make every decision and call connectors directly. This repo is **not** the
+brain. There is no decision-making service here.
 
-Flow: DECLARE -> VERIFY -> AUTHORISE -> WAIT -> ALLOCATE -> CAPTURE/RELEASE -> CONFIRM.
+What is here:
 
-The user states what they want before the booking window (event, date, alternatives, group size, max price per person,
-hard constraints). KIRRO verifies it, reserves a capped amount (a mandate = group_size x max_price), waits, and when
-the window opens a deterministic seeded fair draw (DIFD, `allocator/`) assigns slots. Then it holds, charges the real
-price, and confirms only what external systems confirmed.
+- `mock_server/` — the mock external services the platform agent calls: venue inventory + holds + declared-interest
+  pool, Pine Labs mandate hold/release, the DIFD draw, and the mandatory Delhivery mock.
+- `allocator/` — the DIFD seeded fair draw, the reference the mock's `/allocator/draw` transcribes.
+- `logging_/redact.py` — key/token/phone redaction shared by the mock request log.
+- `tests/` — mock-server scenarios and allocator properties.
+- `docs/` — the spec: `docs/agenticorg/` (agent, workflow, runbook, evals), `docs/decisions/` (ADRs), plus
+  architecture, connector, testing and submission notes.
+- `Dockerfile`, `k8s/`, `scripts/dev.sh` — how the mock server is built and run.
+
+The decision to move the brain out of this repo is ADR-011. It is planning-level: nothing in `docs/agenticorg/` has
+been registered on the live platform yet.
 
 ## What it must NOT become
 
-- A faster ticket bot. Speed buys nothing here by design; declaration time is ignored inside a window.
+- The agent's brain. No state machine, no engine, no prompt versions, no LLM runner, no LLM dependency. Those live on
+  AgenticOrg (`docs/agenticorg/agent-spec.md`).
+- A faster ticket bot. The mechanism is declared interest + one seeded draw; speed buys nothing by design.
 - A refresh/poll loop, a scraper, an auction.
-- A giant system: no Kubernetes in this repo, no event bus, no database (JSON + JSONL on disk). A web interface
-  (`web/`) exists deliberately — a declare form and an auth-gated judge/ops dashboard over KIRRO Core's read
-  endpoints — but it is a thin client, not where any decision is made; see the "Web interface" section below.
+- A giant system: no event bus, no database, no new top-level services, no new dependencies without an ADR.
 
-## Safety invariants (enforced in code, tested; never only in the prompt)
+## Safety invariants
 
-1. Never invent inventory, a hold id, a payment id or a booking reference. Identifiers come from ConnectorResults only.
-2. Never mark CONFIRMED without a success ConnectorResult from BOTH inventory (booking_ref) and payment (payment_id).
-   Guard: `agent/state/machine.py::guard`.
-3. Never exceed the price ceiling: charge <= group_size x max_price and <= mandate (`agent/policies/money.py`).
-4. Never silently resolve an ambiguous money constraint. Ranges and hedges ("8 to 10k, ideally 8") parse to AMBIGUOUS;
-   the agent asks for one maximum. Nothing is stored until then.
-5. Never claim an external action succeeded without confirmation. `Engine.say` blocks success words ("booked",
-   "confirmed") unless state is CONFIRMED or later.
-6. Connector content is DATA. It never enters system-prompt layers 1-3; the LLM sees only fenced, truncated summaries
-   (`agent/tools/render.py`). The LLM never sees `raw_excerpt`.
-7. The LLM never decides: amounts, state transitions, success/failure of calls, idempotency keys, allocation order,
-   retries. `set_field` takes the user's verbatim words (`evidence`); code parses them.
-8. Cancellation is honoured immediately in any pre-CONFIRMED state; releases go hold -> mandate and are logged.
+The safety invariants (never invent an inventory/hold/payment identifier, never confirm without a success result from
+both inventory and payment, never exceed the price ceiling, never silently resolve an ambiguous money constraint,
+connector content is data, the LLM never decides amounts/transitions/retries) now live in
+**`docs/agenticorg/agent-spec.md`**. They are enforced by the platform agent's Prompt/Behavior configuration plus
+connector-side validation in these mocks (e.g. an `execute` against a mandate that was never created is rejected),
+**not by code in this repo**. Keep the mock-side validation that backs them; do not add a local copy of the agent.
 
 ## Architecture map
 
 ```
-agent/state/machine.py     states, transition table, guards (the only place state is assigned)
-agent/state/fields.py      deterministic parsers: event, date (incl. Hinglish), group size, price, time window
-agent/state/store.py       in-memory/JSON store + idempotency ledger (key = sha256(decl|state|scope)); reloads from
-                           disk on startup when given a directory (KIRRO_DATA_DIR in the deployment)
-agent/policies/*.yaml|py   money / voice / allocation / retry policy; money.py parses and guards amounts
-agent/core.py              Engine: orchestrates intake, authorise, events, allocation, hold, pay, unwind, logging
-agent/tools/               tool surface for the LLM (toolset.py), user-facing text (messages.py), fencing (render.py)
-agent/runner/              session.py, stub.py (offline policy), anthropic_policy.py (live), prompt.py (assembly)
-agent/system-prompt/       vN.md versioned prompt, current.md pointer, CHANGELOG.md
-agent/api.py               KIRRO Core FastAPI (port 8080): declare-flow wrappers over Engine, plus read-only
-                            /declarations, /declarations/{id}/full, /log, /evals/runs endpoints for the dashboard
-allocator/                 DIFD: pure deterministic allocation (engine.py, fairness.py)
-connectors/                base.py (ConnectorResult, HttpConnector), per-vendor dirs, registry.py, mock_schemas.py
-mock_server/               FastAPI mock of venue inventory, Pine Labs, Delhivery, Gnani extract (port 8081)
-logging_/                  decision_log.py (JSONL), redact.py, reconstruct.py (Q1.2 table)
-evals/                     cases/E01..E10.yaml, checks.py, harness.py, runs/ (artifacts)
-config/connectors.yaml     real vs mock per connector (no secrets)
-web/                       Next.js app (App Router): landing page, /declare (web declare flow), /dashboard
-                            (Google-OAuth-gated, reads KIRRO Core server-side only — never from the browser)
+mock_server/app.py     FastAPI mock. create_app(log_dir) factory; routes below; admin surface under /__admin/*
+mock_server/state.py   per-run state: scenario table, scenario bindings, holds, bookings, mandates, payments,
+                       declarations, request log; catalogue loaded from mock_server/fixtures/
+allocator/engine.py    DIFD: pure deterministic allocation over (slots, bids, release_id, window_open)
+allocator/fairness.py  weighted-permutation fairness
+allocator/schemas.py   allocation request/result models
+logging_/redact.py     key/token/phone redaction applied before anything is logged
+tests/                 test_mock_server.py (scenarios, incl. a real uvicorn thread), test_allocator.py
+k8s/                   Deployment, Service, Ingress, NetworkPolicy (single service: kirro-mock)
+scripts/dev.sh         starts the mock server on :8081 in the foreground
+docs/                  agenticorg/ (spec), decisions/ (ADRs), architecture.md, connectors.md, ...
 ```
 
-Package names use underscores (`pine_labs`, `mock_server`) because Python cannot import hyphenated names.
+Mock routes, by surface:
 
-## State machine
+- `/health`
+- `/venue/*` — catalogue, releases, holds, bookings, declared-interest declarations (the declare pool)
+- `/pinelabs/*` — mandates create/balance/execute/release, refunds
+- `/allocator/draw` — the DIFD draw
+- `/delhivery/*` — pincode serviceability, order create, package tracking
+- `/__admin/*` — scenario, reset, state (harness only; out of band)
 
-INTAKE <-> AWAITING_USER -> VALIDATED -> AUTHORISING -> AUTHORISED -> WAITING_FOR_WINDOW -> ALLOCATING ->
-{ALLOCATED | WAITLISTED | UNALLOCATED}. ALLOCATED -> HOLD_PLACED -> PAYMENT_PENDING -> CONFIRMED ->
-[FULFILMENT_PENDING] -> CLOSED. Failure exits: CANCELLED (user), RELEASED (payment/hold failed, everything
-reversed), FAILED (connector unusable, everything reversible reversed), EXPIRED (window ended, mandate released).
-Every transition goes through `Engine._go`, which validates and writes a DecisionRecord. LLM tool calls are further
-restricted to `allowed_actions(state)` (`toolset.py`). Allocation, holds, charges and confirmation are NOT LLM tools;
-they run from events (`Engine.on_event`).
+Package names use underscores (`mock_server`) because Python cannot import hyphenated names.
 
-## Connector rules
+## Mock-server rules
 
-- Every call returns `ConnectorResult` with provenance: source, connector, kind (real|mock|internal|human), operation,
-  request_id, idempotency_key, timestamp, latency_ms, status (success|failure|timeout|malformed|duplicate).
-- Retry: timeout and 5xx once with the SAME idempotency key; never 4xx or malformed (ADR-007 for the one same-key
-  re-attempt the engine makes on unreadable hold/charge/booking responses).
-- Only final results enter the idempotency ledger; timeouts/malformed/5xx stay retryable.
-- Label every endpoint REAL / DOCUMENTED / MOCK REQUIRED / UNKNOWN in `docs/connectors.md`. Do not invent vendor API
-  fields or SDK method names. Mock-only shapes live in `connectors/mock_schemas.py` and are labelled MOCK.
-- Real connectors sit behind `config/connectors.yaml` modes and return a honest NOT_CONFIGURED failure without
-  credentials. Never call a connector labelled UNKNOWN on the demo path.
+- **Scenario control is out of band.** A harness or a human sets it with
+  `POST /__admin/scenario {run_id, target, scenario, delay_s, options}` (or `sequence` for multi-step) before the
+  run. The agent's request carries only normal business payload plus the `X-Run-Id` correlation header.
+- **No response ever names a scenario.** Never add a field to an external response that reveals the scenario to the
+  agent.
+- **Mock response shapes are KIRRO mock contracts, not vendor APIs.** They are realistic but not vendor-verified.
+  Never claim a mock shape is a vendor API; unknown fields are namespaced under `mock_` or marked MOCK in
+  `docs/connectors.md`.
+- Every request/response is appended to `logs/mock/<run_id>.jsonl` (or `MOCK_LOG_DIR`) with ts, request_id, path,
+  target, scenario, request, response, status and latency_ms, after redaction.
+- Scenario table: `success`, `no_inventory`, `insufficient_balance`, `timeout`, `delayed`, `malformed`, `duplicate`,
+  `booking_expired`, `payment_failure`, `partial_group`, `upstream_500`. Keep it in sync with `docs/connectors.md`.
 
-### How to add a connector
+### How to add a mock route
 
-1. Add `connectors/<vendor>/<name>.py`: subclass `HttpConnector` with an `ops` table (`Op(method, path, response_model)`),
-   or implement the `Connector` protocol. Put response models in `connectors/mock_schemas.py` (mock) or beside the client.
-2. Register it in `connectors/registry.py` and `config/connectors.yaml` (mode: mock|real).
-3. If mock: add routes to `mock_server/app.py` using `serve(request, "<target>", handler)` so scenarios, idempotency and
-   request logging work. Add the target name to the scenario docs in `docs/connectors.md`.
-4. Add contract tests in `tests/test_connectors_contract.py` and mock tests in `tests/test_mock_server.py`.
-5. Document it in `docs/connectors.md` with kind, base URL, operations, verification URL and label.
-
-## Web interface
-
-`web/` is a Next.js (App Router) app, deployed separately (Vercel), that talks to KIRRO Core only server-side
-(Server Components, Route Handlers, Server Actions via `web/src/lib/kirro.ts`) — the browser never calls KIRRO
-Core directly, so no CORS is configured on it.
-
-- `/` — static landing page, no backend calls.
-- `/declare` — a web alternative to the voice declaration call. Submits the user's own words as `evidence` to
-  `POST /declarations/{id}/fields`, same as the voice policy would; code still does all parsing. Walks read-back
-  and authorisation the same way the voice flow does.
-- `/dashboard` — judge/ops view, gated by Google OAuth (`web/src/auth.ts`, `web/src/proxy.ts`). Read-only (it has
-  no tool that can mutate a declaration), so the gate exists only to keep it off anonymous/bot traffic, not to
-  restrict which people may view it: any Google account may sign in. Reads KIRRO Core's declarations, full
-  declaration state, decision log, and persisted eval-run artifacts.
-- KIRRO Core endpoints added for this (`agent/api.py`): `GET /declarations` (summary list), `GET
-  /declarations/{id}/full` (every field, not just what the LLM may see), `GET /log?declaration_id=` (in-memory
-  decision records for this process), `GET /evals/runs` and `GET /evals/runs/{id}` (persisted eval artifacts).
-  All read-only; they add no new way to change a declaration's state.
-- State is still in memory per KIRRO Core process — the dashboard shows what that specific process has seen, same
-  limitation as everything else in this repo.
+1. Add the route to `mock_server/app.py` and route it through `serve(request, "<target>", handler)` so scenarios,
+   idempotency and request logging all apply. Add state to `mock_server/state.py` if needed.
+1. Add the target name and its scenarios to the mock scenario docs in `docs/connectors.md`.
+1. Add tests in `tests/test_mock_server.py` covering the success path and at least one failure scenario.
+1. Keep the handler deterministic for a given `(run_id, scenario, request)`.
 
 ## Testing rules
 
-- `uv run pytest` must pass offline: no API key, no network, no real credentials. Keep it that way.
+- `uv run pytest` must pass offline: no keys, no network, no real credentials, no uvicorn bind to a public interface.
+  Keep it that way.
 - `uv run ruff check .` must be clean; `uv run black --check .` must be clean (format with `uv run black .`).
-- Unit tests for deterministic logic (money, fields, machine, allocator), contract tests for connectors, mock-server
-  tests, engine/state tests, eval-harness tests all live in `tests/`.
-- Evals: `scripts/run_eval.sh E01|all [--mode offline|live]`. Offline uses `agent/runner/stub.py`, a deterministic
-  stand-in for the LLM: it validates harness, engine, guards and mocks, NOT prompt quality. Only live mode
-  (needs ANTHROPIC_API_KEY, default model claude-sonnet-5-5, override with KIRRO_MODEL) evaluates a prompt version.
-- The scenario is set out of band (`POST /__admin/scenario`). Never add a field to an external response that reveals
-  the scenario to the agent.
-- Every failed live run goes in `docs/testing.md` (testing log) with the change it triggered.
-
-## Logging requirements
-
-Every state change, connector call, user message and refused action writes a DecisionRecord (`logging_/decision_log.py`):
-ts, run_id, seq, declaration_id, state_before/after, input, input_source, connector, decision, decided_by, rule, action,
-recipient, tool_call, tool_response, result, user_message. Redaction (`logging_/redact.py`) strips keys, tokens and
-phone numbers (last 4 only) on write. Do not log secrets or real user data. Q1.2 of the submission is produced with
-`scripts/reconstruct.sh <log.jsonl>`.
+- `uv run pre-commit run --all-files` must be clean.
+- Mock-server tests cover the scenario table, idempotency and provenance; the timeout/delay scenarios exercise a real
+  `uvicorn` thread in a background thread over real HTTP so the client timeout path is genuinely tested.
+- Allocator tests assert the DIFD properties: determinism, capacity-respecting, ceiling-respecting, fairness-weighted
+  ordering, waitlist order.
+- Markdown is autoformatted on commit by `pre-commit` (`.pre-commit-config.yaml`, `mdformat` +
+  `mdformat-gfm`/`mdformat-tables`), installed once with `uv run pre-commit install`.
 
 ## Documentation rules
 
@@ -146,43 +112,34 @@ Practical, short: why it exists, how it works, failure cases, how to test it. Ar
 `docs/decisions/ADR-NNN-title.md` (context, decision, consequences). No marketing tone, no emojis. Update docs in the
 same commit as the behaviour change. Anything unverified is labelled as such, never stated as fact.
 
-## How to modify the system prompt
-
-The prompt is versioned. `agent/system-prompt/vN.md` is immutable once any eval has run against it.
-1. Cause first: a failing eval (id + run dir) or a documented real-test failure.
-2. Copy `current` to `v(N+1).md`, edit only the copy.
-3. Add a row to `agent/system-prompt/CHANGELOG.md`: version, date, triggered_by (eval + run), change, expected effect.
-4. Repoint `current.md` (it contains only the version string).
-5. Commit with a `prompt:` prefix containing only prompt files. Re-run the failing eval, then `all`.
-Policies (`agent/policies/*.yaml`) are not prompt versions; changing them does not bump the prompt.
-Do not fake versions: a version without a triggering failure is not allowed (v0 is the only exception).
-Skill: `.claude/skills/bump-prompt`.
-
 ## How to run
 
 ```
 uv sync
 uv run pytest && uv run ruff check . && uv run black --check .
-scripts/dev.sh                      # mock on :8081, core on :8080 (GET /health on both)
-uv run python scripts/chat.py       # text chat against the stub policy; --live for the Anthropic policy
-scripts/run_eval.sh all             # offline eval of all ten cases, artifacts in evals/runs/
-scripts/reconstruct.sh evals/runs/<run>/log.jsonl
+uv run pre-commit install           # one-time: wires the markdown-formatter commit hook
+uv run pre-commit run --all-files
+uv run uvicorn mock_server.app:app --port 8081      # or:
+bash scripts/dev.sh                 # mock server on :8081 (GET /health)
 ```
+
 Fish shell is the user default; scripts are bash (`bash scripts/dev.sh`).
 
 ## Working on this repo (for Claude sessions)
 
-1. Read this file, `README.md`, `docs/architecture.md`, `agent/system-prompt/current.md` + its file, then run
-   `uv run pytest`.
-2. Prefer editing existing files. No new top-level services, no new dependencies without an ADR.
-3. Change deterministic logic -> add/adjust a unit test in the same change.
-4. Before claiming something works, run it. Report real counts.
-5. Never commit `.env`, keys, tokens, phone numbers or real user data. `logs/` and `evals/runs/` are git-ignored; keep
-   a demo run with `git add -f evals/runs/<run>`.
-6. Project subagents/skills live in `.claude/` (connector-researcher, adversarial-tester, submission-auditor;
-   run-evals, bump-prompt, reconstruct-run). They must cite sources and must not invent API behaviour.
-7. Humans may simulate external events (window opens, user cancels) but must not reason for the agent.
+1. Read this file and `README.md`, then `docs/architecture.md`, then run `uv run pytest`.
+1. Prefer editing existing files. No new top-level services, no new dependencies without an ADR.
+1. Mock behaviour change -> update `tests/test_mock_server.py` and `docs/connectors.md` in the same change.
+1. Before claiming something works, run it. Report real counts.
+1. Never commit `.env`, keys, tokens, phone numbers or real user data. `logs/` is git-ignored.
+1. Keep the mock's response shapes honest: label MOCK, never invent vendor fields or SDK method names.
+1. Humans may set scenarios and simulate external events, but must not reason for the agent.
 
 ## Known open items
 
-See README "Current limitations" and `docs/connectors.md` (credentials, platform binding, unverified endpoints).
+ADR-011 §7 lists what is genuinely open and unverified: field-parsing determinism once the LLM owns parsing,
+non-MCP custom-connector tool discovery on AgenticOrg, declared-interest pool persistence, whether a Workflow can
+message a user directly, static per-agent tool ACLs needing connector-side validation, and duplication between any
+local decision log and AgenticOrg's Audit Log/Observatory (which is also what Q1.2 reconstruction now depends on). Do
+not
+assume any of those are resolved without live verification on `agenticorg.hackathon.pinelabs.com`.

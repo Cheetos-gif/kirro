@@ -6,10 +6,8 @@ __pycache__/
 .env
 .env.*
 !.env.example
-# runtime logs: kept out of git; demo runs are copied to evals/runs and added with git add -f
+# runtime logs: kept out of git
 logs/*
 !logs/.gitkeep
-evals/runs/*
-!evals/runs/.gitkeep
 *.jsonl.tmp
 .DS_Store

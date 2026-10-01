@@ -1,0 +1,107 @@
+1. What is the outcome your agent is accountable for?
+
+Kirro is accountable for getting you and your group the slot you declared, at or under the price you set, without any of you being present when booking opens.
+
+2. What is the level of autonomy your agent has?
+
+L4.
+
+Kirro takes one instruction, then runs unattended for days or weeks. It holds the claim, verifies the mandate activated, waits for release, runs allocation against the pool, captures on a win, releases on a loss, and re-declares into the next window if it lost. It plans several steps, executes them, checks its own work at each stage, and is judged on a single outcome: did you get the slot.
+
+It comes back to the human exactly once, when the group cannot be seated together, because a four-of-six decision is the caller's to make and not ours.
+
+The readback at declaration is not an approval step. It happens while the human is already on the phone giving the instruction, and it is part of taking that instruction correctly, not asking permission to act. Our testing is why it exists: the agent confirmed a ceiling of ₹10,000 when the caller had said ₹8,000, so the readback is an accuracy mechanism, not an autonomy limit.
+
+Honest caveat: Kirro is L4 only once the contingent basket mandate and cross-payer atomic capture exist. On today's rails it runs at L3, because one live claim at a time and no group atomicity push more exceptions back to the human. We score the agent we are designing, and state the floor.
+
+3. What states does your agent go through?
+
+Happy flow: Declared → Verified → Pooled → Allocated → Captured → Confirmed
+
+The caller speaks one declaration: event, dates, ceiling, group size. Kirro reads all four back and takes the correction if there is one. A UPI One-Time Mandate blocks the ceiling amount in the caller's own account, and the claim is Verified once the subscription reaches ACTIVE. It then sits Pooled with every other claim, doing nothing, for days. At release the allocation rule runs once across the whole pool. Winners' mandates capture, losers' blocks release, and everyone is told which they were.
+
+Unhappy flows. The first six were observed on Gnani Agent Builder on 25 September 2026, across five calls to a real handset, Prisma v2.5 with Inverse Text Normalisation enabled.
+
+1. Confident mis-capture. The caller said "eight to ten thousand, ideally eight." Kirro asked "is the maximum ₹10,000?", accepted "yes I do need it" as confirmation, read back ₹10,000, and closed the call as declaration_complete. The readback ran perfectly and confirmed the wrong number.
+Response: the ceiling is the one value Kirro never accepts on a single confirmation. It restates the figure against the caller's own words, not against its own capture, and treats non-committal assent as no answer. No fund block is created from a ceiling stated only once.
+
+2. Detected mis-capture. "Any day" transcribed as "any network." Kirro proposed the correction itself: "I think you meant any date."
+Response: this is the behaviour we keep. Propose, ask, proceed.
+
+3. Event name lost mid-sentence. A Hinglish declaration beginning "Travis Scott ke liye chahiye" transcribed from "chaahiye" onward. The artist was gone.
+Response: a missing event is a failed declaration, not a partial one. Kirro re-asks rather than building a claim on the constraints that survived.
+
+4. Silence causes regression. After a non-response, Kirro re-asked a question already answered and took four extra turns to recover.
+Response: confirmed values are never reopened. On silence it repeats only the outstanding question.
+
+5. Bundled questions get cut off. Kirro asked three things in one turn and was interrupted at 12% spoken; the caller answered one.
+Response: one question per turn. The interruption threshold is 1.2 seconds, so a long turn will be cut.
+
+6. The outbound call is flagged as fraud. Our test call was blocked by handset spam filtering before it rang.
+Response: the group fallback is our only outbound call and it runs against an expiring venue hold, so it cannot assume the call connects. It falls back to text and treats no answer within the hold window as a pass.
+
+The remaining failures sit below the voice layer.
+
+7. Claim never activates. The subscription stays at CREATED because the caller never approved the mandate. Excluded from the pool, and the caller is told before the window rather than after it.
+
+8. Capture fails after winning. A Presentation failed webhook on an allocated slot. The slot returns to the pool and goes to the next ranked claim rather than sitting empty.
+
+9. Group cannot be fully seated. The one human interrupt. Outbound call to the organiser with one either/or: take four of six, or pass.
+
+10. Mandate expires before release. OTM validity caps at 60 days, so a declaration made further ahead needs re-authorisation, requested before the window opens.
+
+11. Caller wants out. Pine Labs documents that a customer cannot revoke an active OTM from their UPI app and must contact the merchant. Withdrawal is a first-class path in Kirro, not an afterthought.
+
+12. Losing claims are not released fast enough. Every loser's money stays blocked. This is the failure that breaks the product's promise, and it is the gap named in Q4.
+
+5. Does your agent need a fourth rail?
+
+Yes — an allocation rail. KFin Technologies has the engine; ONDC has the distribution.
+
+Our whole design assumes the inventory owner will let someone else decide who gets what. No Indian system lets them do that.
+
+Picture it at 8:59pm. Forty residents have declared which badminton slot they want, each with money blocked, and Kirro knows exactly who should get the six courts. Now it has to tell the society's booking app the answer — and there is nowhere to put it. That app knows one thing: a resident tapped a button, so give them the court. There is no field for "an outside system worked out who should get these, here is the list." So Kirro either goes back to racing, which is the thing we refuse to do, or it gets a custom integration built for every society one at a time.
+
+What the rail does. The venue publishes a release in a standard format — how many units, opening when, allocated by which rule. It accepts a result computed elsewhere instead of only responding to whoever clicks fastest. And it keeps a record a losing claimant can check, because a fair rule nobody can verify is just a different black box.
+
+Who builds it. The engine already exists, privately, in India. When an IPO is oversubscribed, KFin Technologies or Link Intime receives every application, runs the computerised lottery under SEBI's rules, and handles the blocked funds and the unblocking. Declared intent, blocked money, allocation by rule at a deadline, automatic release for losers, one claim per verified identity, auditable afterwards — that is our mechanism, running at national scale, today. It has been pointed at exactly one asset class because that is the only one a regulator forced. Nobody has asked a registrar to allocate concert tickets.
+
+What KFin lacks is any relationship with venues. That is ONDC's part: it already standardises commerce between parties who have never met, across discovery, order and fulfilment, and what it has no primitive for is inventory that is allocated rather than sold first-come. Add that primitive, and a KFin-class allocation engine reaches any venue on the network without a bilateral deal.
+
+The capability is built, the distribution exists, and nobody has connected them.
+
+6. How will a human interact with your agent?
+
+Four touchpoints, and the third one is deliberately empty.
+
+Declaring — by voice. A phone call or a WhatsApp voice note. The declaration is a four-constraint sentence people say in one breath: "Travis Scott, any night, under 8000, four of us." We tested this on a real handset and it works, including in Hinglish. A typed form exists for people who prefer it, but voice is the default because a form makes you fill four fields for something you'd say in five seconds.
+
+The agent ends every declaration by reading all four values back and stating the ceiling as a rupee figure. That exists because of what we found testing: a caller said "eight to ten thousand, ideally eight" and the agent confirmed ₹10,000 and closed the call as complete. So the ceiling is the one value Kirro will not accept on a single confirmation, and vague assent — "yes I do need it" — is treated as no answer.
+
+Authorising — once. The standard UPI mandate screen. One PIN entry. The blocked amount and its release date are shown plainly, because we are freezing their money and hiding that is the fastest way to lose them.
+
+Waiting — nothing. No app to open, no alarm, no refreshing, for days or weeks. This absence is the product. One respondent described the alternative as having to be "seated down with all of the funds ready" before the window opens.
+
+Finding out. A WhatsApp message at allocation, win or lose, with the release confirmed for losers. The exception is the group fallback, which is a voice call to the organiser, because a four-of-six decision needs a real answer inside a short window. Our test call was flagged as potential fraud by the handset and never rang, so that path falls back to text and treats no answer within the venue's hold as a pass.
+
+The one screen that matters is the live claims ledger: what you've declared, how much of your money is blocked right now, and when each block releases. When an agent is holding your funds, you need somewhere to see it without asking.
+
+7. What is the name of your agent?
+
+Kirro.
+
+It has no dictionary meaning, deliberately. Every real word we tried dragged an existing category in with it — the Hindi options read as a government scheme, the English ones described a queue we're trying to abolish. Kirro carries a faint echo of queue, the thing it replaces, and it reads unambiguously for anyone in any language.
+
+8. Which Indian company has the best chance of creating an agent just like yours?
+
+MyGate.
+
+It runs amenity booking across more than 27,000 housing societies, collects maintenance dues, and verifies every resident — the users, the payment relationship and a verified identity, in one place. More importantly, its inventory owner is an RWA that earns nothing from the scramble and absorbs every complaint about it. That makes MyGate the only player whose supply side has no reason to resist a fairer allocation rule.
+
+Two of The Ken's own respondents describe precisely MyGate's inventory: a condo tennis court released daily at 9pm thirteen days out, and society badminton booked "at the exact time the window opens."
+
+We'll say the limit plainly. MyGate cannot reach the concert and F1 half of this opening — it has no promoter relationships and no route to one. District and BookMyShow do, but their revenue improves when scarcity creates urgency, so they have the best distribution and the worst incentive. A fair-allocation mechanism can only be proven where the inventory owner doesn't profit from the scramble, and society amenities are the largest such pool in India. MyGate is where this starts, not where it ends.
+
+Our guess at why they haven't built it: MyGate sells itself as visitor-security software. The badminton court is a checkbox feature in that pitch, not a market, so nobody there has looked at slot allocation as a mechanism problem worth solving.
+
+We name a different company here than in Q5 deliberately. KFin has the allocation engine and no consumer relationship; MyGate has the consumer relationship and no allocation engine. The rail and the agent are different businesses, and no single company in India currently holds both.

@@ -1,8 +1,9 @@
-"""KIRRO mock server: venue inventory/holds, Pine Labs mandate mock, Delhivery Express mock, Gnani extract mock.
+"""KIRRO mock server: venue inventory/holds + declare-interest pool, Pine Labs mandate mock, Delhivery Express
+mock and the DIFD draw endpoint — the four AgenticOrg-facing surfaces (ADR-010/ADR-011).
 
 Scenario control is OUT OF BAND: the harness calls POST /__admin/scenario before a run. Requests from the
 agent carry only X-Run-Id (a correlation id) plus business payload; no response ever names a scenario.
-Response bodies are MOCK schemas (connectors/mock_schemas.py), not vendor-verified contracts.
+Response bodies are KIRRO mock contracts, not vendor APIs (see docs/connectors.md).
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from urllib.parse import parse_qs
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from allocator.engine import Bid, Slot, allocate
 from logging_.redact import redact
 from mock_server.state import SCENARIOS, MockState, RunState
 
@@ -281,6 +283,49 @@ def create_app(log_dir: str | None = None) -> FastAPI:
 
         return await serve(request, "venue.booking", h)
 
+    # ------------------------------------------------------------------ declare-interest pool (venue capability A, sub-capability)
+    @app.post("/venue/releases/{release_id}/declarations")
+    async def declare_interest(release_id: str, request: Request):
+        def h(sc: str, body: dict, run: RunState):
+            if not find_release(release_id):
+                return err(404, "NOT_FOUND", "release not found")
+            for f in ("group_size", "min_group_size", "max_price_paise"):
+                if not isinstance(body.get(f), int) or body[f] < 0:
+                    return err(400, "BAD_REQUEST", f"{f} must be a non-negative integer")
+            if body["min_group_size"] > body["group_size"]:
+                return err(400, "BAD_REQUEST", "min_group_size must not exceed group_size")
+            wanted = body.get("acceptable_slot_ids")
+            if not isinstance(wanted, list) or not wanted or not all(isinstance(s, str) and s for s in wanted):
+                return err(400, "BAD_REQUEST", "acceptable_slot_ids must be a non-empty list of slot ids")
+            did = body.get("declaration_id") or run.next_id("decl")
+            run.declarations.setdefault(release_id, {})[did] = {**body, "declaration_id": did, "status": "DECLARED"}
+            return 200, {"declaration_id": did, "release_id": release_id, "status": "DECLARED"}
+
+        return await serve(request, "venue.declare_interest", h)
+
+    @app.get("/venue/releases/{release_id}/declarations")
+    async def list_declarations(release_id: str, request: Request):
+        def h(sc: str, body: dict, run: RunState):
+            if not find_release(release_id):
+                return err(404, "NOT_FOUND", "release not found")
+            entries = [
+                b for b in run.declarations.get(release_id, {}).values() if b.get("status", "DECLARED") == "DECLARED"
+            ]
+            return 200, {"release_id": release_id, "declarations": entries}
+
+        return await serve(request, "venue.list_declarations", h, body={})
+
+    @app.delete("/venue/releases/{release_id}/declarations/{declaration_id}")
+    async def cancel_declaration(release_id: str, declaration_id: str, request: Request):
+        def h(sc: str, body: dict, run: RunState):
+            pool = run.declarations.get(release_id, {})
+            if declaration_id not in pool:
+                return err(404, "NOT_FOUND", "declaration not found")
+            del pool[declaration_id]
+            return 200, {"declaration_id": declaration_id, "release_id": release_id, "status": "CANCELLED"}
+
+        return await serve(request, "venue.cancel_declaration", h, body={})
+
     # ------------------------------------------------------------------ Pine Labs mock (shapes: MOCK)
     def money(v: int) -> dict:
         return {"value": v, "currency": "INR"}
@@ -352,6 +397,43 @@ def create_app(log_dir: str | None = None) -> FastAPI:
 
         return await serve(request, "pinelabs.refund", h)
 
+    # ------------------------------------------------------------------ DIFD draw (capability C, MOCK)
+    @app.post("/allocator/draw")
+    async def allocator_draw(request: Request):
+        def h(sc: str, body: dict, run: RunState):
+            rel = find_release(body.get("release_id", ""))
+            if not rel:
+                return err(404, "NOT_FOUND", "release not found")
+            slots = [
+                Slot(
+                    slot_id=s["slot_id"],
+                    capacity=s["capacity"],
+                    price_per_person_paise=s["price_per_person_paise"],
+                    starts_at=s["starts_at"],
+                )
+                for s in (slot_view(run, "success", s) for s in rel["slots"])
+            ]
+            bids: list[Bid] = []
+            for b in body.get("bids") or []:
+                bids.append(
+                    Bid(
+                        declaration_id=b["declaration_id"],
+                        user_id=b["user_id"],
+                        acceptable_slot_ids=tuple(b.get("acceptable_slot_ids") or ()),
+                        group_size=b["group_size"],
+                        min_group_size=b.get("min_group_size", b["group_size"]),
+                        max_price_paise=b["max_price_paise"],
+                        allocations_last_30d=b.get("allocations_last_30d", 0),
+                        mandate_active=b.get("mandate_active", True),
+                        constraints=b.get("constraints") or {},
+                    )
+                )
+            window_open_iso = body.get("window_open_iso") or rel["opens_at"]
+            results = allocate(slots, bids, rel["release_id"], window_open_iso)
+            return 200, {"release_id": rel["release_id"], "results": [r.model_dump() for r in results]}
+
+        return await serve(request, "allocator.draw", h)
+
     # ------------------------------------------------------------------ Delhivery Express mock
     @app.get("/delhivery/c/api/pin-codes/json/")
     async def pincodes(request: Request):
@@ -406,26 +488,6 @@ def create_app(log_dir: str | None = None) -> FastAPI:
             return 200, {"ShipmentData": [{"Shipment": {"AWB": wb, "Status": {"Status": s["status"]}}}]}
 
         return await serve(request, "delhivery.track", h, body={})
-
-    # ------------------------------------------------------------------ Gnani extract mock (capability B)
-    @app.post("/gnani/extract")
-    async def gnani_extract(request: Request):
-        from datetime import date
-
-        from connectors.gnani.extract import extract_intake
-
-        def h(sc: str, body: dict, run: RunState):
-            today = date.fromisoformat(body.get("today", date.today().isoformat()))
-            ex = extract_intake(body.get("transcript", ""), today=today, catalogue=st.catalogue["events"])
-            return 200, {
-                "language": ex.language,
-                "fields": {
-                    c.field: {"value": c.value, "confidence": c.confidence, "evidence": c.evidence, "status": c.status}
-                    for c in ex.candidates
-                },
-            }
-
-        return await serve(request, "gnani.extract", h)
 
     return app
 

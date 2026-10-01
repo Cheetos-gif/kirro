@@ -1,0 +1,142 @@
+CAPABILITY 1
+Name: take_declaration
+Used at: Declared
+Rail: Voice
+What you send it: Live caller audio to the agent's botId
+What comes back: Transcript, plus event, dates, ceiling and group size as typed extraction fields
+When it fails: A constraint arrives missing or corrupted
+What it must never do: Invent a value the caller did not say
+What exists today: Gnani Agent Builder single-prompt agent; STT Realtime WebSocket (/api/STT/stt-websocket, base https://api.vachana.ai); Post-call Data Extraction with typed fields; Inverse Text Normalisation. We built and called this agent on the platform.
+Build Status: Exists
+
+CAPABILITY 2
+Name: confirm_constraints
+Used at: Declared to Verified
+Rail: Voice
+What you send it: The four captured values, read back aloud
+What comes back: Caller confirmation or correction
+When it fails: The caller confirms a value the agent captured wrongly. On a live call ours read back Rs 10,000 after the caller said "eight to ten thousand, ideally eight", accepted "yes I do need it" as confirmation, and closed the call as declaration_complete.
+What it must never do: Treat silence or vague assent as confirmation
+What exists today: Prompt-level readback; Disposition enum returned via /Platform/Get_Conversation_Stats
+Build Status: Exists
+
+CAPABILITY 3
+Name: verify_declaration_intent
+Used at: Declared to Verified
+Rail: Voice
+What you send it: Transcript plus the captured values
+What comes back: Per-field confidence, and a flag wherever the caller's own words contradict the captured value
+When it fails: No endpoint exists to call
+What it must never do: Let a ceiling reach a fund block on one unchallenged confirmation
+What exists today: Nothing. Extraction returns values with no confidence signal, so a wrong value arrives tagged declaration_complete exactly like a correct one.
+Build Status: Must Build
+
+CAPABILITY 4
+Name: call_group_organiser
+Used at: Allocated
+Rail: Voice
+What you send it: botId, the organiser's number, and the allocation result as dynamic variables
+What comes back: Call outcome, disposition code, full transcript
+When it fails: Handset spam filtering blocks the call before it rings. Our test call was flagged as potential fraud and never connected.
+What it must never do: Choose the group's fallback itself
+What exists today: Trigger Test Call (/Platform/Trigger_Call); Voicemail Detection; Twilio number import
+Build Status: Exists
+
+CAPABILITY 5
+Name: dedupe_voice_identity
+Used at: Verified
+Rail: Voice
+What you send it: Caller audio
+What comes back: Whether this voice already holds a live claim on this release
+When it fails: No endpoint exists to call
+What it must never do: Reject a caller on a weak match without a human path
+What exists today: Voice Clone Embeddings (/api/VC/voice-clone-embeddings) returns a speaker_embedding, but for synthesis. There is no 1:N speaker search anywhere in the API surface.
+Build Status: Must Build
+
+CAPABILITY 6
+Name: create_claim_block
+Used at: Verified
+Rail: Payments
+What you send it: POST /api/v1/public/subscriptions/ot with customer_id, plan_details.amount set to the declared ceiling, and validity_days; then POST /api/pay/v1/orders/{order_id}/payments with mandate_info.request_type CREATE_MANDATE
+What comes back: subscription_id, order_id, status CREATED, and a challenge_url (upi://mandate?...)
+When it fails: The caller never approves and the subscription stalls at CREATED
+What it must never do: Create a block before the ceiling has been confirmed aloud
+What exists today: UPI One-Time Mandate. Funds are blocked in the customer's own account, up to 60 days validity, Rs 1 lakh default cap, one UPI PIN entry at setup.
+Build Status: Exists
+
+CAPABILITY 7
+Name: verify_claim_active
+Used at: Verified to Pooled
+Rail: Payments
+What you send it: GET /api/v1/subscriptions/ot/{subscription_id}
+What comes back: status ACTIVE, execution_mode, plan_details
+When it fails: Still CREATED at release time, so the claim is excluded from the pool
+What it must never do: Let an unactivated claim enter allocation
+What exists today: OT subscription fetch API
+Build Status: Exists
+
+CAPABILITY 8
+Name: prove_agent_authority
+Used at: Verified, Captured
+Rail: Payments
+What you send it: Agent identity and the delegated spend limit
+What comes back: Authorisation the inventory owner can verify, plus a record of what the agent did
+When it fails: Authority cannot be proven and the venue refuses the claim
+What it must never do: Act beyond the limit the caller set
+What exists today: Grantex and the Pine Labs Payments Protocol, documented under Agentic Commerce
+Build Status: Exists
+
+CAPABILITY 9
+Name: capture_on_win
+Used at: Captured
+Rail: Payments
+What you send it: POST /api/v1/public/presentations with subscription_id and an amount at or below the stored ceiling
+What comes back: presentation_id, status PENDING, then the Subscription charged webhook
+When it fails: A Presentation failed webhook leaves a won slot with no money behind it
+What it must never do: Capture above the declared ceiling, or capture for a claim that did not win
+What exists today: Presentation API. One successful capture per mandate.
+Build Status: Exists
+
+CAPABILITY 10
+Name: release_losing_claims_at_scale
+Used at: Allocated to Confirmed
+Rail: Payments
+What you send it: Every losing claim's subscription_id, in bulk, at the moment allocation resolves
+What comes back: Confirmed release of each block within seconds, against a stated latency SLA
+When it fails: Losers' money stays frozen and they cannot declare into the next window
+What it must never do: Hold a losing claimant's funds a moment longer than the allocation needs
+What exists today: The One-Time Mandate overview documents releasing a block, but the OT direct-execution integration guide exposes no release endpoint, no bulk operation and no latency commitment. ASBA, the closest national-scale analogue, unblocks in 24 to 48 hours.
+Build Status: Must Build
+
+CAPABILITY 11
+Name: contingent_basket_mandate
+Used at: Verified, Allocated
+Rail: Payments
+What you send it: One authorisation covering N mutually exclusive claims, each with its own ceiling
+What comes back: A single block against which at most one claim captures, the rest voiding the instant allocation resolves
+When it fails: A user declaring three options has three separate blocks, freezing three times their ceiling
+What it must never do: Capture more than one claim from a single basket
+What exists today: Nothing in this shape. OTM allows one successful capture and the mandate closes after capture. UPI Reserve Pay allows multiple debits against one reserve until exhausted, which drains a pool rather than voiding alternatives.
+Build Status: Must Build
+
+CAPABILITY 12
+Name: atomic_group_capture
+Used at: Captured
+Rail: Payments
+What you send it: N subscription_ids held by N different payers, as one all-or-none transaction
+What comes back: All captures succeed, or none do and every block releases
+When it fails: 19 of 23 capture and four friends are orphaned at the same event
+What it must never do: Seat part of a group that declared as one
+What exists today: Nothing. Each presentation is independent and there is no cross-subscription transaction primitive.
+Build Status: Must Build
+
+LOGISTICS — DELHIVERY
+Name: None
+Used at: None
+Rail: Logistics
+What you send it: None
+What comes back: None
+When it fails: None
+What it must never do: None
+What exists today: We reviewed the developer portal and the Maps reference and call no endpoint. Every artifact in this flow is a digital claim on digital inventory, and nothing physical moves between declaration and confirmation. Where a won slot has physical collateral, a wristband or a pass, that is the venue's existing fulfilment and sits outside our loop.
+Build Status: None — this rail is not used

@@ -3,10 +3,8 @@
     "allow": [
       "Bash(uv run pytest:*)",
       "Bash(uv run ruff:*)",
-      "Bash(uv run python -m evals.harness:*)",
-      "Bash(uv run python -m logging_.reconstruct:*)",
-      "Bash(bash scripts/run_eval.sh:*)",
-      "Bash(bash scripts/reconstruct.sh:*)",
+      "Bash(uv run black:*)",
+      "Bash(uv run pre-commit:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)"

@@ -192,13 +192,98 @@ def live_url(tmp_path):
 
 
 def test_timeout_and_delayed_scenarios_over_real_http(live_url):
-    from connectors.inventory.venue import VenueInventoryConnector
-
-    c = httpx.Client(base_url=live_url)
-    conn = VenueInventoryConnector(c, "rt")
+    c = httpx.Client(base_url=live_url, headers={"X-Run-Id": "rt"})
     c.post("/__admin/scenario", json={"run_id": "rt", "target": "venue.release", "scenario": "timeout", "delay_s": 0.6})
-    res = conn.call("get_release", {"release_id": "rel_badminton_sat"}, idempotency_key="k", timeout_s=0.2)
-    assert res.status == "timeout" and res.error.code == "TIMEOUT"
+    with pytest.raises(httpx.TimeoutException):
+        c.get("/venue/releases/rel_badminton_sat", timeout=0.2)
     c.post("/__admin/scenario", json={"run_id": "rt", "target": "venue.release", "scenario": "delayed", "delay_s": 0.3})
-    res = conn.call("get_release", {"release_id": "rel_badminton_sat"}, idempotency_key="k2", timeout_s=2)
-    assert res.status == "success" and res.latency_ms >= 250
+    t0 = time.monotonic()
+    r = c.get("/venue/releases/rel_badminton_sat", timeout=2)
+    assert r.status_code == 200 and (time.monotonic() - t0) >= 0.25
+
+
+def draw_body(bids=None, release="rel_tennis_sat"):
+    return {"release_id": release, "window_open_iso": "2026-10-02T06:00:00Z", "bids": bids or []}
+
+
+def bid(declaration_id, user_id, group=4, min_group=None, price=60000, slots=None):
+    return {
+        "declaration_id": declaration_id,
+        "user_id": user_id,
+        "acceptable_slot_ids": slots or ["tn_0900"],
+        "group_size": group,
+        "min_group_size": min_group if min_group is not None else group,
+        "max_price_paise": price,
+    }
+
+
+def test_allocator_draw_allocates_then_waitlists_a_full_slot(mock_client):
+    bids = [bid("d1", "u1"), bid("d2", "u2")]  # one 4-seat slot, two 4-person bids
+    r = mock_client.post("/allocator/draw", json=draw_body(bids), headers=H(key="k1"))
+    assert r.status_code == 200
+    body = r.json()
+    assert body["release_id"] == "rel_tennis_sat"
+    results = {x["declaration_id"]: x for x in body["results"]}
+    statuses = sorted(x["status"] for x in results.values())
+    assert statuses == ["ALLOCATED", "WAITLISTED"]
+    winner = next(x for x in results.values() if x["status"] == "ALLOCATED")
+    loser = next(x for x in results.values() if x["status"] == "WAITLISTED")
+    assert winner["slot_id"] == "tn_0900" and winner["group_size_allocated"] == 4
+    assert loser["slot_id"] is None and loser["group_size_allocated"] == 0
+    assert all(x["seed"] for x in results.values())
+    # deterministic: same inputs -> same draw order and statuses
+    again = mock_client.post("/allocator/draw", json=draw_body(bids), headers=H(key="k2")).json()
+    assert [x["declaration_id"] for x in again["results"]] == [x["declaration_id"] for x in body["results"]]
+    assert [x["status"] for x in again["results"]] == [x["status"] for x in body["results"]]
+
+
+def test_allocator_draw_unknown_release(mock_client):
+    r = mock_client.post("/allocator/draw", json=draw_body(release="rel_nope"), headers=H())
+    assert r.status_code == 404 and r.json()["error"]["code"] == "NOT_FOUND"
+
+
+def declare_body(**over):
+    return {
+        "declaration_id": "dec_1",
+        "user_contact": "+91-9000000000",
+        "mandate_id": "auth_0001",
+        "acceptable_slot_ids": ["bd_0700", "bd_0800"],
+        "group_size": 4,
+        "min_group_size": 2,
+        "max_price_paise": 30000,
+    } | over
+
+
+def test_declare_pool_round_trip(mock_client):
+    body = declare_body()
+    r = mock_client.post("/venue/releases/rel_badminton_sat/declarations", json=body, headers=H(key="d1"))
+    assert r.status_code == 200
+    assert r.json() == {"declaration_id": "dec_1", "release_id": "rel_badminton_sat", "status": "DECLARED"}
+
+    listed = mock_client.get("/venue/releases/rel_badminton_sat/declarations", headers=H())
+    assert listed.status_code == 200 and listed.json()["release_id"] == "rel_badminton_sat"
+    assert listed.json()["declarations"] == [body | {"status": "DECLARED"}]
+
+    d = mock_client.delete("/venue/releases/rel_badminton_sat/declarations/dec_1", headers=H())
+    assert d.status_code == 200 and d.json()["status"] == "CANCELLED"
+    assert mock_client.get("/venue/releases/rel_badminton_sat/declarations", headers=H()).json()["declarations"] == []
+    assert mock_client.delete("/venue/releases/rel_badminton_sat/declarations/dec_1", headers=H()).status_code == 404
+
+
+@pytest.mark.parametrize(
+    "over",
+    [
+        {"group_size": "four"},
+        {"max_price_paise": None},
+        {"acceptable_slot_ids": []},
+        {"acceptable_slot_ids": "bd_0700"},
+        {"min_group_size": 5},
+    ],
+)
+def test_declare_pool_rejects_bad_bid(mock_client, over):
+    r = mock_client.post("/venue/releases/rel_badminton_sat/declarations", json=declare_body(**over), headers=H())
+    assert r.status_code == 400 and r.json()["error"]["code"] == "BAD_REQUEST"
+
+
+def test_gnani_route_is_gone(mock_client):
+    assert mock_client.post("/gnani/extract", json={"transcript": "x"}, headers=H()).status_code == 404

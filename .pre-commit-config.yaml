@@ -1,0 +1,12 @@
+# Installed with: uv run pre-commit install
+# Run on demand: uv run pre-commit run --all-files
+repos:
+  - repo: https://github.com/executablebooks/mdformat
+    rev: 0.7.22
+    hooks:
+      - id: mdformat
+        name: mdformat (autoformat Markdown)
+        args: ["--wrap", "keep", "--end-of-line", "lf"]
+        additional_dependencies:
+          - mdformat-gfm # GitHub-flavoured markdown: tables, strikethrough, task lists
+          - mdformat-tables # explicit table support/alignment
