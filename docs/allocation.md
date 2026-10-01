@@ -21,7 +21,11 @@ outcome inside a window and gives people who recently got nothing a better chanc
 
 Deviation from the plan: capacity is checked at assignment, not in eligibility. The plan's eligibility rule
 (`capacity >= min_group_size`) would make a full slot UNALLOCATED; with the change a full slot WAITLISTs the
-declaration, which is correct because cancellations can free capacity (E07, E10).
+declaration, which is correct because cancellations can free capacity.
+
+The same pure function is exposed to AgenticOrg as `POST /allocator/draw` (see `docs/connectors.md`): the request
+carries the release's slots (with remaining capacity) and the pool's bids, and the response is one
+`AllocationResult` per bid. Nothing else calls it — the live agent's Window Allocation Workflow does.
 
 ## Properties (each has a test in `tests/test_allocator.py`)
 
@@ -31,8 +35,8 @@ over rounds (fresh users win about 4x as often as users with 3 recent wins in a 
 ## Worked example
 
 Six declarations of 2 seats compete for a 4-seat slot. The seed fixes the weighted order; the first two get the slot,
-the next four are WAITLISTED in draw order. Re-running with the same inputs gives the same answer; the seed and order
-are written to the decision log (`decision: allocation`).
+the next four are WAITLISTED in draw order. Re-running with the same inputs gives the same answer; the seed and the
+per-bid `draw_position` are in the draw response, so the Workflow can log the order it acted on.
 
 ## Not built
 

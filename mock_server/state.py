@@ -38,6 +38,7 @@ class RunState:
         self.mandates: dict[str, dict] = {}
         self.payments: dict[str, dict] = {}
         self.shipments: dict[str, dict] = {}
+        self.declarations: dict[str, dict[str, dict]] = {}
         self.idem: dict[tuple[str, str], tuple[int, Any]] = {}
         self.scenarios: dict[str, deque] = {}
         self.delay: dict[str, float] = {}

@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from agent.schemas.models import AllocationResult
 from allocator.fairness import fairness_weight, make_seed, weighted_order
+from allocator.schemas import AllocationResult
 
 
 @dataclass(frozen=True)
