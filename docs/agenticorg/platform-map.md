@@ -495,3 +495,45 @@ stored under `definition.steps`; `GET /api/v1/workflows/{id}` returns the workfl
 
 Still to do for Phase 3: switch `trigger_type` to `schedule` (or wire `schedule_agent_task`) and run L12–L22. Note
 step 7's `notify` needs `whatsapp_kirro`, which is currently unhealthy — see the credentials issue above.
+
+### Open blocker: the agent's tool call never reaches the mock
+
+Running the first full declaration through `Chat with Agent` on the rebuilt `Kirro`
+(`4aec1080…`) worked conversationally and then failed at the first tool call. Transcript (one conversation, five
+turns): the ceiling was re-asked at first (see below), then "300" → date re-asked → "this Saturday" → group-fallback
+question → "2 would be fine" → **a correct, complete read-back** ("…for 4 people, with a maximum price of Rs 300 per
+person. If the full group cannot be seated, a minimum of 2 people is acceptable. Shall I go ahead?") → "yes" →
+
+> "There was an error while trying to create the mandate for your booking. Would you like me to try again or cancel
+> the request?"
+
+That response is itself correct behaviour (honest, offers retry/cancel, never claims success). The problem is the
+failure underneath it:
+
+- **The mock received nothing.** Its request log (`/app/data/logs/default.jsonl` on the PVC) contains only my own
+  test calls; no platform-originated request. A `tools/call` reaches the REST route in-process, so a real invocation
+  would be logged — it is not.
+- **No policy denial was recorded** either: `/dashboard/enforce-audit` shows 0 entries.
+- `GET /__admin/state?run_id=default` shows `mandates: 0`.
+
+So *discovery* works (registering `mcp_kirro_all` found all 18 tools and `health` reports `tool_count: 18`) but
+*invocation* from the agent does not land. Most likely candidate: our MCP server runs `stateless_http=True`, and the
+invocation flow (`initialize` → `notifications/initialized` → `tools/call`) may need a real session that a stateless
+endpoint does not keep. Next step is to run the MCP server **stateful** (or add the SSE transport) and re-register,
+then re-run this transcript.
+
+**Disambiguation that narrows the cause:** the same public endpoint *does* support invocation from an official MCP
+client. Before this run, an `mcp` SDK client called `declare_interest`, `list_pool_entries` and `draw` against
+`https://api-kirro.upayan.dev/venue/mcp` and `/allocator/mcp` successfully (their requests are the `mcpcheck` rows in
+the mock log, with `status: 200`). So the server, the stateless transport, the Host allow-list and the TLS path are
+all fine for `tools/call`; it is specifically AgenticOrg's invocation of the connector that does not arrive. That
+points the question at the platform's connector-call path (or a scope/trust check that only applies at invocation
+time) rather than at the mock.
+
+Two conversational observations from the same run, both prompt-quality (not bugs):
+
+- **False-positive ambiguity:** "max 300 each" is one number but the agent asked for the ceiling again. The turn also
+  contained 7, 9 and 4, so the "more than one distinct number" rule may be being applied to the whole turn rather
+  than to the money field.
+- **The date was re-asked** after "300", although "this Saturday" had been given in turn 1 — while the group size
+  *was* retained ("all 4 of you"). So memory works; date capture on a busy first turn does not.
