@@ -54,13 +54,20 @@ allocator/           DIFD seeded fair draw
 connectors/          ConnectorResult contract, gnani/, pine_labs/, delhivery/, inventory/, registry
 mock_server/         mock venue, Pine Labs and Delhivery APIs plus scenario control
 logging_/            decision log, redaction, Q1.2 reconstruction
-evals/               10 cases, checks, harness, run artifacts
+evals/               10 cases, checks.py, harness.py, runs/ (artifacts)
 config/              connector modes
 docs/                architecture, allocation, connectors, evals, testing, demo, decisions/, submission/
 tests/               unit, contract, mock server, state, eval harness
 scripts/             dev, eval, reconstruct, chat
+web/                 Next.js app: landing page, web declare flow, auth-gated judge/ops dashboard (see web/README.md)
 .claude/             project subagents and skills
 ```
+
+## Web interface
+
+`web/` is a separate Next.js app (deployed on Vercel) that talks to KIRRO Core server-side only — see
+`web/README.md` and `AGENTS.md` → "Web interface". It is not required to run KIRRO: voice (Gnani) remains the
+primary declaration channel, and `scripts/chat.py` remains the primary local dev/demo loop.
 
 ## Eval workflow
 
@@ -77,7 +84,7 @@ scripts/             dev, eval, reconstruct, chat
   platform configuration. They return an explicit NOT_CONFIGURED failure. See `docs/connectors.md`.
 - The Pine Labs mock collapses the real two-party flow (challenge, client token, server capture) into one call.
 - The Pine Labs platform (AgenticOrg) binding of the tool surface is not done and is unverified.
-- Waitlist promotion after a cancellation, group split-pay links, Delhivery Maps reachability constraints and the
-  landing page are not built. "Any day" or flexible dates are treated as not understood.
+- Waitlist promotion after a cancellation, group split-pay links, and Delhivery Maps reachability constraints are
+  not built. "Any day" or flexible dates are treated as not understood.
 - Questions are English-only in the stub and in code-generated messages; the live model mirrors Hinglish by prompt.
 - State is in memory per process; there is no persistence across restarts beyond optional JSON files.

@@ -20,7 +20,9 @@ price, and confirms only what external systems confirmed.
 
 - A faster ticket bot. Speed buys nothing here by design; declaration time is ignored inside a window.
 - A refresh/poll loop, a scraper, an auction.
-- A giant system: no Kubernetes, no event bus, no database (JSON + JSONL on disk), no frontend framework.
+- A giant system: no Kubernetes in this repo, no event bus, no database (JSON + JSONL on disk). A web interface
+  (`web/`) exists deliberately — a declare form and an auth-gated judge/ops dashboard over KIRRO Core's read
+  endpoints — but it is a thin client, not where any decision is made; see the "Web interface" section below.
 
 ## Safety invariants (enforced in code, tested; never only in the prompt)
 
@@ -49,13 +51,16 @@ agent/core.py              Engine: orchestrates intake, authorise, events, alloc
 agent/tools/               tool surface for the LLM (toolset.py), user-facing text (messages.py), fencing (render.py)
 agent/runner/              session.py, stub.py (offline policy), anthropic_policy.py (live), prompt.py (assembly)
 agent/system-prompt/       vN.md versioned prompt, current.md pointer, CHANGELOG.md
-agent/api.py               KIRRO Core FastAPI (port 8080), thin wrappers over Engine
+agent/api.py               KIRRO Core FastAPI (port 8080): declare-flow wrappers over Engine, plus read-only
+                            /declarations, /declarations/{id}/full, /log, /evals/runs endpoints for the dashboard
 allocator/                 DIFD: pure deterministic allocation (engine.py, fairness.py)
 connectors/                base.py (ConnectorResult, HttpConnector), per-vendor dirs, registry.py, mock_schemas.py
 mock_server/               FastAPI mock of venue inventory, Pine Labs, Delhivery, Gnani extract (port 8081)
 logging_/                  decision_log.py (JSONL), redact.py, reconstruct.py (Q1.2 table)
 evals/                     cases/E01..E10.yaml, checks.py, harness.py, runs/ (artifacts)
 config/connectors.yaml     real vs mock per connector (no secrets)
+web/                       Next.js app (App Router): landing page, /declare (web declare flow), /dashboard
+                            (Google-OAuth-gated, reads KIRRO Core server-side only — never from the browser)
 ```
 
 Package names use underscores (`pine_labs`, `mock_server`) because Python cannot import hyphenated names.
@@ -91,6 +96,27 @@ they run from events (`Engine.on_event`).
    request logging work. Add the target name to the scenario docs in `docs/connectors.md`.
 4. Add contract tests in `tests/test_connectors_contract.py` and mock tests in `tests/test_mock_server.py`.
 5. Document it in `docs/connectors.md` with kind, base URL, operations, verification URL and label.
+
+## Web interface
+
+`web/` is a Next.js (App Router) app, deployed separately (Vercel), that talks to KIRRO Core only server-side
+(Server Components, Route Handlers, Server Actions via `web/src/lib/kirro.ts`) — the browser never calls KIRRO
+Core directly, so no CORS is configured on it.
+
+- `/` — static landing page, no backend calls.
+- `/declare` — a web alternative to the voice declaration call. Submits the user's own words as `evidence` to
+  `POST /declarations/{id}/fields`, same as the voice policy would; code still does all parsing. Walks read-back
+  and authorisation the same way the voice flow does.
+- `/dashboard` — judge/ops view, gated by Google OAuth (`web/src/auth.ts`, `web/src/proxy.ts`). Read-only (it has
+  no tool that can mutate a declaration), so the gate exists only to keep it off anonymous/bot traffic, not to
+  restrict which people may view it: any Google account may sign in. Reads KIRRO Core's declarations, full
+  declaration state, decision log, and persisted eval-run artifacts.
+- KIRRO Core endpoints added for this (`agent/api.py`): `GET /declarations` (summary list), `GET
+  /declarations/{id}/full` (every field, not just what the LLM may see), `GET /log?declaration_id=` (in-memory
+  decision records for this process), `GET /evals/runs` and `GET /evals/runs/{id}` (persisted eval artifacts).
+  All read-only; they add no new way to change a declaration's state.
+- State is still in memory per KIRRO Core process — the dashboard shows what that specific process has seen, same
+  limitation as everything else in this repo.
 
 ## Testing rules
 

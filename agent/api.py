@@ -5,9 +5,11 @@ Wiring to the real platform is TODO (docs/connectors.md). State is in memory per
 """
 from __future__ import annotations
 
+import json
 import os
 import uuid
 from datetime import date
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, HTTPException
@@ -18,7 +20,7 @@ from agent.state.store import Store
 from agent.tools.toolset import state_view
 from connectors.gnani.extract import extract_intake
 from connectors.registry import build_connectors
-from logging_.decision_log import DecisionLog
+from logging_.decision_log import DecisionLog, read_log
 
 
 class FieldIn(BaseModel):
@@ -99,6 +101,55 @@ def create_core(mock_url: str | None = None, log_dir: str = "logs", client: http
         clientReferenceId; today we only run the deterministic extractor over the posted text."""
         ex = extract_intake(body.transcript, today=date.today(), catalogue=catalogue)
         return {"language": ex.language, "candidates": [c.__dict__ for c in ex.candidates]}
+
+    @app.get("/declarations")
+    def list_declarations():
+        """Summary of every declaration in this process, newest-known-state first. Dashboard use."""
+        return [
+            {"declaration_id": d.declaration_id, **state_view(d), "booking_ref": d.booking_ref}
+            for d in eng.store.declarations.values()
+        ]
+
+    @app.get("/declarations/{did}/full")
+    def show_full(did: str):
+        """Full internal state, including connector-issued ids. Dashboard use, not for the LLM."""
+        return json.loads(get(did).model_dump_json())
+
+    @app.get("/log")
+    def decision_log(declaration_id: str | None = None):
+        """In-memory decision records for this process, optionally filtered to one declaration."""
+        records = eng.log.records
+        if declaration_id:
+            records = [r for r in records if r.get("declaration_id") == declaration_id]
+        return records
+
+    @app.get("/evals/runs")
+    def list_eval_runs(runs_dir: str = "evals/runs"):
+        """Persisted eval run artifacts (scripts/run_eval.sh outputs), newest first."""
+        root = Path(runs_dir)
+        if not root.is_dir():
+            return []
+        out = []
+        for d in sorted(root.iterdir(), reverse=True):
+            verdict_path = d / "verdict.json"
+            if verdict_path.is_file():
+                out.append({"run_id": d.name, "verdict": json.loads(verdict_path.read_text())})
+        return out
+
+    @app.get("/evals/runs/{run_id}")
+    def show_eval_run(run_id: str, runs_dir: str = "evals/runs"):
+        d = Path(runs_dir) / run_id
+        verdict_path = d / "verdict.json"
+        log_path = d / "log.jsonl"
+        transcript_path = d / "transcript.md"
+        if not verdict_path.is_file():
+            raise HTTPException(404, "unknown eval run")
+        return {
+            "run_id": run_id,
+            "verdict": json.loads(verdict_path.read_text()),
+            "log": read_log(log_path) if log_path.is_file() else [],
+            "transcript": transcript_path.read_text() if transcript_path.is_file() else "",
+        }
 
     return app
 
