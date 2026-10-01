@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
+import { FcGoogle } from 'react-icons/fc';
 
 import { signIn } from '@/auth';
 import { Button } from '@/components/ui/button';
@@ -31,7 +32,8 @@ export default async function LoginPage({
           }}
           className="w-full"
         >
-          <Button type="submit" className="w-full">
+          <Button type="submit" variant="outline" className="w-full">
+            <FcGoogle className="size-4" />
             Continue with Google
           </Button>
         </form>
