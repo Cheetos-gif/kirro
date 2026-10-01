@@ -335,3 +335,43 @@ agent ACL (the `agenticorg` SDK / A2A-MCP path on `/dashboard/integrations`) —
 
 Tenant left clean: 11 connectors (7 pre-existing + `mcp_venue_kirro`, `mcp_pinelabs_kirro`, `mcp_allocator_kirro`,
 `mcp_delhivery_kirro`), all probes deleted.
+
+### The runtime gate: connector health, and a likely reframe
+
+`GET /api/v1/connectors/{id}/health` is the health endpoint (the UI's `Health Check` button calls it). Current:
+
+| Connector            | health                                    |
+| -------------------- | ----------------------------------------- |
+| `mcp_venue_kirro`    | `healthy: true`, `tool_count: 9`          |
+| `mcp_pinelabs_kirro` | `healthy: true`, `tool_count: 5`          |
+| `whatsapp_kirro`     | **`error`, `healthy: false`** — see below |
+
+`whatsapp_kirro` reports:
+
+```
+"Connector has no encrypted credentials. Re-register the connector via POST/PUT /connectors so
+credentials land in the encrypted vault (connector_configs.credentials_encrypted). Plaintext
+auth_config is no longer accepted …"
+```
+
+and chatting with the agent (via `Chat with Agent` on the agent page) returns, instead of a reply:
+
+> "This agent cannot run because a required connector is not authenticated, healthy, and refreshable.
+> Go to Dashboard -> Connectors, reconnect the connector, run its health check, then retry the agent."
+
+**This likely reframes the scoping problem above.** The agent-level "scopes" refresh validates *all* linked
+connectors, so an unhealthy linked connector (whatsapp) can make the whole refresh fail — which is exactly the
+`503 "Unable to refresh agent authorization scopes"`, and plausibly the `422 Invalid authorized_tools` that I
+attributed to venue. It is a chicken-and-egg: unlinking whatsapp needs a successful refresh, which needs whatsapp to
+be healthy. So the earlier "venue is unscopable" conclusion may be a **symptom**, not a per-connector defect — worth
+re-testing once a healthy whatsapp is linked (or once the agent has only healthy connectors).
+
+Unresolved and important: **how `whatsapp_kirro` lost its credentials.** It was archived once by accident (a stray
+`window.confirm` accepted by automation) and restored with `PUT {"status":"active"}`; the soft-delete may well have
+dropped `credentials_encrypted` and the restore did not put it back. The audit log does not record connector
+changes (50 entries, none mention whatsapp), so this cannot be confirmed from the platform. Fixing it needs Meta
+Business credentials, which we do not have — flagged to the user. Note the connector page's own `Edit` form cannot
+supply them either (its auth-type list has no `meta_business`).
+
+`PATCH /api/v1/agents/{id} {"connector_ids":[…]}` currently returns 503 for every variant tried, including dropping
+whatsapp, so the agent's linked set cannot be changed while this is broken.
