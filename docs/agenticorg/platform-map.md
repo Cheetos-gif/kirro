@@ -562,3 +562,27 @@ floor around 0.5** rather than trying to edit them.
 Worth noting for the submission: a floor of 0.88 is unusable for a conversational agent — ordinary, correct turns
 score 0.60–0.85 and would all need a human click. Also visible on the agent page: the platform is shadow-evaluating
 the agent (`Shadow Samples: 12`, `Shadow Accuracy: 66.3%`).
+
+### Correction: the escalation is driven by `hitl_condition`, not `confidence_floor`
+
+`confidence_floor` **is** accepted at creation (`POST /api/v1/agents` with `confidence_floor: 0.5` produced an agent
+whose floor is `0.5`) — but it does not change the rule that fires. Both agents were re-created with
+`confidence_floor: 0.5` (Declare `21a46186-9e13-410e-a973-2ded067e54a5`, Allocator
+`5591e57a-79f9-4b30-a95e-0b910a467ce3`, one aggregate connector each, tools granted), and the tool call was **still
+held** with the same message. The new agent reports `confidence_floor: 0.5` but
+`hitl_condition: "confidence < 0.88"`, and the approval rows now read
+`HITL: declared_interest_booking — condition matched: confidence < 0.88`.
+
+So the escalation is evaluated against the **`hitl_condition` expression string** (a free-text predicate, default
+`confidence < 0.88` and seen pre-filled with the example `confidence < 0.88 OR amount > 500000`), and
+`confidence_floor` is only the number shown on the page. `hitl_condition` is **not settable through the API** —
+neither in the create payload (it defaults) nor in `PATCH` (200, unchanged) — so it can only be set in the create
+wizard's **Behavior** step, which exposes both a `Confidence Floor` control and an editable `HITL Condition` field.
+
+**The one remaining action is therefore:** create the two agents through the wizard (`Create Agent` → `Skip to manual setup`) with Behavior → `HITL Condition` set to something like `confidence < 0.5` (and the floor alongside it), link
+`mcp_kirro_all`, grant the tools, and re-run the declaration. Everything else is in place: the mock, the aggregate
+connector, the tool ACL, the prompt, and both agent roles.
+
+Evidence that this is the last blocker: the mock receives nothing, `Tool Calls (24h)` stays 0, `enforce-audit` stays
+empty (an escalation is not a denial), and every turn — including a perfect read-back at 85% — produces an approval
+row instead of a tool call.
