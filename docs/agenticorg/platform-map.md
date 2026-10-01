@@ -439,3 +439,27 @@ deleted.)
 which is exactly L01's expected behaviour — ceiling unresolved, one question, and neither 8000 nor 10000 echoed —
 at 65% confidence, correctly flagged `HITL` below the 88% floor. So `Chat with Agent` is a working eval channel and
 the agent is runnable.
+
+## 9. Workflow steps target agents, not connector tools
+
+`/dashboard/workflows/new` → **Use Template** reveals `Workflow Configuration` (Name, Version, Domain, `Trigger Type`
+∈ {manual, schedule, webhook, api_event, email_received, mongodb_schedule}, `Enable adaptive replanning`) and the
+steps editor. The `Collaboration` step type opens an **agent picker whose options are agent *types*** —
+`declared_interest_booking | Kirro`, `vendor_manager | Vendor Manager`, `support_triage`, `compliance_guard`,
+`it_operations`, `contract_intelligence` — with an aggregation strategy (merge / vote / first_complete) and a timeout.
+
+So a step is `{agent_type, action, inputs, …}` and **orchestrates an agent**; connector tools are reached through that
+agent, not named directly in the step. That is why `workflow-spec.md` cannot be transcribed literally: its steps call
+`allocator.draw`, `create_hold`, `execute`, `confirm_booking` and `release` directly, but the Declare Agent is
+deliberately not authorised for any of those.
+
+**Consequence for Phase 3:** build a second agent — e.g. `Kirro Allocator` (`agent_type` `kirro_allocator`, domain
+`ops`) — linked to the same single aggregate connector `mcp_kirro_all`, authorised for `draw`, `create_hold`,
+`get_hold`, `release_hold`, `confirm_booking`, `execute`, `release`, `refund` (all 18 tools are in that connector, and
+one custom connector per agent is exactly what we can scope). The Window Allocation Workflow then has steps with
+`agent_type: "kirro_allocator"` plus `notify` steps for the WhatsApp leg, and a `condition` step for the
+winner/loser branch. That keeps the ADR-011 two-object design (Declare Agent + Workflow) while respecting the
+platform's step model.
+
+Note the agent picker lists agent types, so a new agent type must be created for the allocator role the same way
+`declared_interest_booking` was (wizard step 2, `Create custom agent type`).
