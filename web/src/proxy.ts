@@ -4,7 +4,7 @@ import { auth } from '@/auth';
 
 export default auth(req => {
   if (!req.auth) {
-    const signInUrl = new URL('/api/auth/signin', req.nextUrl.origin);
+    const signInUrl = new URL('/login', req.nextUrl.origin);
     signInUrl.searchParams.set('callbackUrl', req.nextUrl.pathname);
     return NextResponse.redirect(signInUrl);
   }

@@ -11,4 +11,5 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [Google({ clientId: env.AUTH_GOOGLE_ID, clientSecret: env.AUTH_GOOGLE_SECRET })],
   secret: env.AUTH_SECRET,
   session: { strategy: 'jwt' },
+  pages: { signIn: '/login' },
 });
