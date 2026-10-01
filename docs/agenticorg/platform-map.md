@@ -613,3 +613,33 @@ the page reports no validation error. The wizard has no draft persistence, so le
 alternative is to find how the wizard stores it (its network payload on save) and replay that through
 `POST /api/v1/agents`, since `POST` *does* honour `confidence_floor` and the tools/connectors can then be fixed with
 `PATCH` as proven above. Everything else is ready: mock, `mcp_kirro_all`, the ACL, the prompt, and both agent roles.
+
+### Definitive: `hitl_condition` is not part of the agent API at all
+
+Probed with deliberately wrong types, which is the cleanest test of whether a field exists in the model:
+
+| create payload sent                                                  | result                                                          |
+| -------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `hitl_condition: 12345` (an int where a string belongs)              | **201** — no type error, so the field is ignored, not validated |
+| `hitl_condition: "confidence < 0.5"` alone                           | 201, stored `confidence < 0.88`                                 |
+| `confidence_floor: 0.5` **and** `hitl_condition: "confidence < 0.5"` | 201, stored `floor=0.5` but `hitl=confidence < 0.88`            |
+
+So `confidence_floor` is honoured on create, `hitl_condition` is **silently discarded**, and the stored default does
+**not** track the floor (a 0.5 floor still yields a `confidence < 0.88` condition). There is also no agent-types
+endpoint (`/api/v1/agent-types` → 401 catch-all), so the type template cannot be edited either, and the session
+expires — a 401 `Missing or invalid Authorization header` means re-login at `/login` (email + password form) before
+any further API call.
+
+The wizard remains the only surface that writes `hitl_condition`, and its `Next` was disabled on the Behavior step
+even with floor 0.5 and a consistent condition. Untried options for the next session, cheapest first:
+
+1. **`Create Agent` → "Describe in English" → Generate.** The generator builds a whole configuration, and its
+   Behavior defaults may include a workable condition — one action instead of the five-step wizard.
+1. **Capture the wizard's save payload** (hook `POST /api/v1/agents` in the page while the wizard submits) and
+   replay it with `hitl_condition` set; that reveals the true field name/shape if the API does accept it under
+   another name.
+1. Ask the platform whether a custom agent can lower its HITL condition at all — a floor whose minimum is 0.5 while
+   ordinary correct turns score 0.60–0.85 makes the feature, as configured, unusable for a conversational agent.
+
+Tenant left coherent: `Kirro` (Declare, floor 0.5, one aggregate connector, 4 tools), `Kirro Allocator` (floor 0.5,
+10 tools), the 5 untouched shadow agents, and 13 connectors. All probe agents and connectors deleted.
