@@ -29,6 +29,31 @@ class Store:
         self.ledger: dict[str, ConnectorResult] = {}
         if self.dir:
             self.dir.mkdir(parents=True, exist_ok=True)
+            self._load()
+
+    def _load(self) -> None:
+        """Restore what a previous process wrote. One unreadable file is skipped, never fatal —
+        a corrupt declaration must not stop the process (and every other declaration) from booting."""
+        for path in sorted(self.dir.glob("*.json")):
+            if path.name == "ledger.json":
+                continue
+            try:
+                d = Declaration.model_validate_json(path.read_text())
+            except Exception:
+                continue
+            self.declarations[d.declaration_id] = d
+        ledger_path = self.dir / "ledger.json"
+        if not ledger_path.is_file():
+            return
+        try:
+            raw = json.loads(ledger_path.read_text())
+        except Exception:
+            return
+        for key, value in raw.items():
+            try:
+                self.ledger[key] = ConnectorResult.model_validate(value)
+            except Exception:
+                continue
 
     def put(self, d: Declaration) -> None:
         self.declarations[d.declaration_id] = d

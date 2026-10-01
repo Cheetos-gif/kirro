@@ -87,4 +87,6 @@ primary declaration channel, and `scripts/chat.py` remains the primary local dev
 - Waitlist promotion after a cancellation, group split-pay links, and Delhivery Maps reachability constraints are
   not built. "Any day" or flexible dates are treated as not understood.
 - Questions are English-only in the stub and in code-generated messages; the live model mirrors Hinglish by prompt.
-- State is in memory per process; there is no persistence across restarts beyond optional JSON files.
+- State is in memory per process unless `KIRRO_DATA_DIR` is set; with it, declarations, the idempotency ledger and
+  the decision log persist as JSON/JSONL under that directory and reload on startup (the Kubernetes deployment
+  mounts a PVC for this). Still one process only — the store is not shared across replicas.

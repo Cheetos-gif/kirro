@@ -14,8 +14,10 @@ class DecisionLog:
         self.run_id = run_id
         self.path = Path(directory) / (filename or f"{run_id}.jsonl")
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.records: list[dict[str, Any]] = []
-        self._seq = 0
+        # Resume an existing file: a restart must continue the same audit trail with monotonic `seq`,
+        # not restart at 1 inside a file that already holds 1..N.
+        self.records: list[dict[str, Any]] = read_log(self.path) if self.path.is_file() else []
+        self._seq = max((int(r.get("seq") or 0) for r in self.records), default=0)
 
     def record(self, **fields: Any) -> dict[str, Any]:
         self._seq += 1

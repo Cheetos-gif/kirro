@@ -59,6 +59,11 @@ spec:
       labels:
         app: kirro-core
     spec:
+      # The image runs as uid 10001; a freshly provisioned local-path volume is root-owned, so
+      # without this the container cannot write /app/data and crashes at startup with
+      # PermissionError. fsGroup makes the kubelet chown the volume to the pod's group.
+      securityContext:
+        fsGroup: 10001
       priorityClassName: low-priority
       affinity:
         nodeAffinity:
@@ -95,9 +100,18 @@ spec:
           env:
             - name: MOCK_SERVER_URL
               value: http://kirro-mock:8081
+            - name: KIRRO_DATA_DIR
+              value: /app/data
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
           readinessProbe:
             httpGet: { path: /health, port: 8080 }
             initialDelaySeconds: 3
           resources:
             requests: { cpu: 50m, memory: 96Mi }
             limits: { cpu: 200m, memory: 256Mi }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: kirro-data

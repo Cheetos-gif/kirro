@@ -44,12 +44,13 @@ class GnaniPostCall(BaseModel):
     clientReferenceId: str | None = None
 
 
-def create_core(mock_url: str | None = None, log_dir: str = "logs", client: httpx.Client | None = None) -> FastAPI:
+def create_core(mock_url: str | None = None, log_dir: str = "logs", client: httpx.Client | None = None,
+                store_dir: str | None = None, log_file: str | None = None) -> FastAPI:
     app = FastAPI(title="KIRRO Core", version="0.1.0")
     run_id = f"core-{uuid.uuid4().hex[:8]}"
     client = client or httpx.Client(base_url=mock_url or os.environ.get("MOCK_SERVER_URL", "http://localhost:8081"))
     catalogue = client.get("/venue/catalogue").json()["events"] if client else []
-    eng = Engine(build_connectors(client, run_id), Store(), DecisionLog(run_id, log_dir), catalogue)
+    eng = Engine(build_connectors(client, run_id), Store(store_dir), DecisionLog(run_id, log_dir, log_file), catalogue)
 
     def get(did: str):
         try:
@@ -117,7 +118,8 @@ def create_core(mock_url: str | None = None, log_dir: str = "logs", client: http
 
     @app.get("/log")
     def decision_log(declaration_id: str | None = None):
-        """In-memory decision records for this process, optionally filtered to one declaration."""
+        """Decision records, optionally filtered to one declaration. Includes prior runs when
+        KIRRO_DATA_DIR is set (DecisionLog resumes the file on startup)."""
         records = eng.log.records
         if declaration_id:
             records = [r for r in records if r.get("declaration_id") == declaration_id]
@@ -155,4 +157,9 @@ def create_core(mock_url: str | None = None, log_dir: str = "logs", client: http
 
 
 def app_factory() -> FastAPI:  # uvicorn --factory agent.api:app_factory
-    return create_core()
+    # A directory makes declarations, the idempotency ledger and the decision log survive a
+    # restart. One stable log filename per deployment keeps `seq` monotonic across restarts.
+    data_dir = os.environ.get("KIRRO_DATA_DIR")
+    if not data_dir:
+        return create_core()
+    return create_core(log_dir=f"{data_dir}/logs", store_dir=f"{data_dir}/state", log_file="core.jsonl")
