@@ -118,6 +118,15 @@ was down, told the user *"There was an issue with canceling the reservation hold
 the money-safety property the rule exists for, even when the call cannot land. A full L07 pass (`released_mandates: 1`)
 needs the window; the re-run is unchanged.
 
+**Re-run, 2026-10-02 05:49, confirms the fix is stable.** Same script: mandate (120,000 paise) created, pass-through
+down for `declare_interest` (null args, agent offers retry/cancel honestly rather than claiming success), then
+*"actually I want to cancel now, please"*. Log shows **`mcp.release` called twice** (05:49:24, 05:49:27, both
+`authorization_id: null` — pass-through still down for this tool too) and the agent told the user *"I am currently
+unable to cancel the reservation due to a technical issue"* — calls it, and does not claim it worked when it
+didn't. `released_mandates` stays 0 only because the call never lands, not because the agent skipped it. A full
+pass (`released_mandates: 1`) needs the pass-through up during the release call; the behavioural fix is verified
+twice now.
+
 **Change these failures trigger.** The allocator's prompt already carries the rule — *"For every WAITLISTED or
 UNALLOCATED bid (a loser): release its mandate immediately, in this same run"* — and the model skips it as soon as
 `create_hold` returns 409, reporting a release it never made. That is a money-safety defect: the user's reservation
