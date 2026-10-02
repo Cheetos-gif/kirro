@@ -251,6 +251,42 @@ TTS spoke the reply back through the room. The caller's first words are clipped 
 takes a couple of seconds to dispatch into a newly created room — in the portal the caller waits for the UI to
 say "Listening" before speaking, so the real flow does not lose them.
 
+**Against production (2026-10-02).** Same check, but dialling the deployed channel rather than a local room
+server: `wss://voice-kirro.upayan.dev` (Cloudflare → Traefik → `kirro-livekit`), the WebRTC media ports opened on
+the Hetzner firewall, the room server's key pair from the cluster's `kirro-voice` Secret, and the agent worker
+running in namespace `kirro`.
+
+```
+caller speech: 3.9s; dialling wss://voice-kirro.upayan.dev
+joined room kirro-smoke-test
+  subscribed to agent-AJ_7rvLBtyC2kam's audio
+  [smoke-test] tennis court this saturday morning for two people 400 per person maximum
+  [agent-AJ_7rvLBtyC2kam] What is the date you want for the tennis court booking?
+agent audio: 1370 frames, 163 with speech
+PASS: production voice loop
+```
+
+**The portal's own token path, end to end.** Signed in to `https://kirro.upayan.dev`, `POST /api/voice/token` returned `200` with a 396-character JWT for room `kirro-upayanm3-gmail-com`. Using that exact
+token — not a hand-minted one — to join `wss://voice-kirro.upayan.dev`:
+
+```
+joined as 'upayanm3@gmail.com' — the identity the portal minted
+  participant joined: agent-AJ_QvuQxRzLDQSi
+  subscribed to agent-AJ_QvuQxRzLDQSi's audio
+PASS: portal-issued token reaches the agent
+```
+
+So the Vercel route signs with the same key pair the room server holds, the ingress carries the signalling
+WebSocket, and the worker is dispatched into the room the browser would be in.
+
+**Not yet exercised:** the browser's microphone capture itself. Everything downstream of it is verified above,
+and the capture is `livekit-client`'s own component rather than this repo's code, but a real spoken call through
+the page has not been made — it needs a person at a browser to approve the microphone prompt.
+
+**Known tuning gap:** the room server logs `UDP receive buffer is too small for a production set-up {"current": 425984, "suggested": 5000000}`. That is `net.core.rmem_max` on the node, not a code issue — worth a
+sysctl in the cluster repo's ansible roles before this carries real traffic, since a small buffer drops media
+packets under load.
+
 ## Failure cases to test by hand once credentials exist
 
 Outbound call blocked by handset spam filter; Gnani silence/interruption timeouts; real Hinglish transcription of
