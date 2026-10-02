@@ -823,19 +823,24 @@ refuses with a useful message when it cannot.
 *consistently* empty for the venue tools while never failing for the mandate tool. Every one of these was tried
 against the live platform, each with a deploy and a live conversation:
 
-| tried                                                         | result                                                       |
-| ------------------------------------------------------------- | ------------------------------------------------------------ |
-| typed parameters → untyped (`Any = None`)                     | values arrived for a while (the two good bids), then stopped |
-| aliases (`releaseId`, `event`, `on_date`, …)                  | no change — an empty call has nothing for an alias to match  |
-| a five-parameter signature (back from seven)                  | no change                                                    |
-| a one-sentence description on the model of `create_mandate`'s | no change                                                    |
-| a brand-new agent, created, linked and promoted fresh         | no change — so it is not accumulated agent state             |
-| a fresh, short conversation (five turns)                      | no change                                                    |
+| tried                                                                                                       | result                                                                  |
+| ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| typed parameters → untyped (`Any = None`)                                                                   | values arrived for a while (the two good bids), then stopped            |
+| aliases (`releaseId`, `event`, `on_date`, …)                                                                | no change — an empty call has nothing for an alias to match             |
+| a five-parameter signature (back from seven)                                                                | no change                                                               |
+| a one-sentence description on the model of `create_mandate`'s                                               | no change                                                               |
+| a brand-new agent, created, linked and promoted fresh                                                       | no change — so it is not accumulated agent state                        |
+| a fresh, short conversation (five turns)                                                                    | no change                                                               |
+| self-contained descriptions (no cross-references to other tools, each argument given with an example value) | no change                                                               |
+| the connectors' stored `tool_schemas` on the platform                                                       | match what the mock serves exactly — so re-registration is not a remedy |
 
 `create_mandate` has arrived populated through every one of those schema changes, on every conversation — eight
 parameters, untyped, one-sentence description — so the difference is per-tool on the platform side, and the platform
-records each of these calls as `status: success`. A fresh agent reproduces it, so what to ask the platform is narrow:
-why does one tool's arguments survive while another's arrive null, in the same conversation, from the same model?
+records each of these calls as `status: success`. It is not even that the mandate tool succeeds where others fail:
+the log shows it receiving an empty call too (`mcp.create_mandate -> {}`) and then succeeding on the retry with
+`{"amount_value": 120000}`, in the same turn where `declare_interest` retried empty three times. So the model *does*
+recover for that tool and does not for the others, and what to ask the platform is narrow: why does one tool's
+arguments survive while another's arrive null, in the same conversation, from the same model?
 
 It also does not always *try*: on one turn it told the user "You are now entered into the pool" with no
 `declare_interest` call in the log at all, which `agent-spec.md` §3 step 10 forbids. The mock's guards make that
