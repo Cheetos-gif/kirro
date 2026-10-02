@@ -20,6 +20,13 @@ de-duplicates by payload or whether the Workflow itself must check "have I alrea
 proceeding — verify live; if not de-duplicated, the Workflow's first step must check a `release_already_drawn`
 flag (can live on the venue-inventory mock, since it already tracks per-release state).
 
+> **Verified 2026-10-02 — this route is not available from the `developer` role.** The tool exists
+> (`GET /api/v1/tools` lists `agent_scheduler__schedule_agent_task`), but granting it to an agent returns **422**
+> *"Invalid authorized_tools"* — the agent ACL only accepts tools from connectors the agent has linked, and no
+> connector in this tenant exposes the scheduler. Its invocation endpoints are behind the OAuth gate (401). The
+> deployed Workflow therefore carries a **cron** trigger instead (`platform-map.md` §12), and the per-release
+> schedule is a post-admin item. The de-duplication question above still stands for whoever wires it.
+
 ## 2. Steps
 
 1. **Fetch the pool.** `venue_inventory.list_pool_entries {release_id}` — the mock's

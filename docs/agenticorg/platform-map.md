@@ -1001,6 +1001,16 @@ workflow can be converted by recreating it (a probe workflow, `0e9f8b59`, confir
 Verified in the builder UI, which now reads **`Trigger | schedule`**, Active, 7 steps. The existing workflow's run
 history is not carried over by a recreate, which cost nothing here — it never had a successful run.
 
+**The Agent Scheduler route is closed from this account.** `workflow-spec.md` §1 wants the declare agent to call
+`agent_scheduler__schedule_agent_task` when it learns a release's `opens_at`, so the run fires per release rather than
+on a fixed cron. That tool does exist — `GET /api/v1/tools` lists 559 platform tools including
+`agent_scheduler__schedule_agent_task`, `cancel_agent_task` and `list_my_schedules` — but it cannot be granted:
+`PATCH /api/v1/agents/{id}` with it in `authorized_tools` returns **422** *"Invalid authorized_tools … Use
+GET /connectors/registry or GET /tools to discover valid tool names"*, and no connector in the tenant exposes it, so
+the agent cannot link it either. The scheduler is not reachable by an agent here, let alone callable directly (every
+`/api/v1/tools/…` invocation endpoint returns 401 with the OAuth gate). The cron on the recreated workflow is
+therefore the only trigger available, and `workflow-spec.md` §1 records it.
+
 ### Per-release idempotency is proven at the mock, which is what the Workflow needs
 
 Verified live 2026-10-02 against `https://api-kirro.upayan.dev` (runs `dryrun_a`, `dryrun_c`):
