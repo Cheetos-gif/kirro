@@ -96,85 +96,33 @@ async def _call(
 
 def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 
-    @mcp.tool(
-        description=(
-            "List the booking releases, optionally filtered by event and/or date. Call this FIRST to find the "
-            "release id you must bid against: release ids and slot ids only ever come from these tools."
-        )
-    )
-    async def list_releases(
-        event_id: Any = None,
-        eventId: Any = None,
-        event: Any = None,
-        date: Any = None,
-        on_date: Any = None,
-        run_id: str = DEFAULT_RUN,
-    ) -> dict:
-        _record(
-            "list_releases",
-            run_id,
-            {
-                key: value
-                for key, value in {
-                    "event_id": event_id,
-                    "eventId": eventId,
-                    "event": event,
-                    "date": date,
-                    "on_date": on_date,
-                }.items()
-                if value is not None
-            },
-        )
-        return await _releases(client, run_id, _first_str(event_id, eventId, event), _first_str(date, on_date))
+    @mcp.tool(description="List the booking releases. Filter by event (e.g. badminton) and/or date (YYYY-MM-DD).")
+    async def list_releases(event: str = "", date: str = "", run_id: str = DEFAULT_RUN) -> dict:
+        _record("list_releases", run_id, {"event": event, "date": date})
+        return await _releases(client, run_id, event or None, date or None)
 
     @mcp.tool(
         description=(
-            "Fetch one release with its slots, remaining capacity and opens_at. Pass the release id from "
-            "list_releases, or an event plus date to resolve it."
+            "Fetch one release with its slots. `release_id` is required: pass the id list_releases returned, or an "
+            "event name such as badminton."
         )
     )
-    async def get_release(
-        release_id: Any = None,
-        releaseId: Any = None,
-        release: Any = None,
-        event: Any = None,
-        event_id: Any = None,
-        eventId: Any = None,
-        date: Any = None,
-        run_id: str = DEFAULT_RUN,
-    ) -> dict:
-        _record(
-            "get_release",
-            run_id,
-            {
-                key: value
-                for key, value in {
-                    "release_id": release_id,
-                    "releaseId": releaseId,
-                    "event": event,
-                    "eventId": eventId,
-                    "date": date,
-                }.items()
-                if value is not None
-            },
-        )
-        resolved = _first_str(release_id, releaseId, release)
-        if resolved is None:
-            listing = await _releases(client, run_id, _first_str(event, event_id, eventId), _first_str(date))
-            found = listing["body"].get("releases", [])
-            if len(found) != 1:
-                return {
-                    "status_code": 404,
-                    "body": {
-                        "error": {
-                            "code": "NOT_FOUND",
-                            "message": "no single release matched; call list_releases and pass its release_id",
-                        },
-                        "releases": found,
+    async def get_release(release_id: str, run_id: str = DEFAULT_RUN) -> dict:
+        _record("get_release", run_id, {"release_id": release_id})
+        listing = await _releases(client, run_id, release_id, None)
+        found = listing["body"].get("releases", [])
+        if len(found) != 1:
+            return {
+                "status_code": 404,
+                "body": {
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": "no single release matched; call list_releases and pass its release_id",
                     },
-                }
-            resolved = found[0]["release_id"]
-        return await _call(client, "GET", f"/venue/releases/{resolved}", run_id=run_id)
+                    "releases": found,
+                },
+            }
+        return await _call(client, "GET", f"/venue/releases/{found[0]['release_id']}", run_id=run_id)
 
     @mcp.tool(description="Place a time-boxed hold on a slot.")
     async def create_hold(
@@ -220,34 +168,20 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 
     @mcp.tool(
         description=(
-            "Enter the user's bid into a release's declared-interest pool. Pass the release id and the slot ids "
-            "that list_releases and get_release returned — never invent either. You must call this to pool a bid: "
-            "never tell the user they are in the pool unless this call has returned success."
+            "Enter the user's bid into a release's declared-interest pool. "
+            "release_id is required (the id from list_releases, or an event name such as badminton). "
+            "group_size, min_group_size and max_price_paise are required; max_price_paise is the per-person "
+            "ceiling in paise, so Rs 300 per person is 30000. acceptable_slot_ids is optional: leave it empty to "
+            "bid for every slot in the release. You must call this to pool a bid: never tell the user they are in "
+            "the pool unless this call has returned success."
         )
     )
     async def declare_interest(
-        release_id: Any = None,
-        releaseId: Any = None,
-        release: Any = None,
-        event: Any = None,
-        event_id: Any = None,
-        eventId: Any = None,
-        date: Any = None,
-        declaration_id: Any = None,
-        declarationId: Any = None,
-        acceptable_slot_ids: Any = None,
-        slot_ids: Any = None,
-        slotIds: Any = None,
-        slots: Any = None,
-        group_size: Any = None,
-        groupSize: Any = None,
-        min_group_size: Any = None,
-        minGroupSize: Any = None,
-        max_price_paise: Any = None,
-        maxPricePaise: Any = None,
-        max_price: Any = None,
-        user_contact: Any = None,
-        mandate_id: Any = None,
+        release_id: str,
+        group_size: int,
+        min_group_size: int,
+        max_price_paise: int,
+        acceptable_slot_ids: str = "",
         run_id: str = DEFAULT_RUN,
         idempotency_key: str | None = None,
     ) -> dict:
@@ -255,36 +189,22 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
             "declare_interest",
             run_id,
             {
-                key: value
-                for key, value in {
-                    "release_id": release_id,
-                    "releaseId": releaseId,
-                    "release": release,
-                    "event": event,
-                    "eventId": eventId,
-                    "date": date,
-                    "declaration_id": declaration_id,
-                    "acceptable_slot_ids": acceptable_slot_ids,
-                    "slots": slots,
-                    "group_size": group_size,
-                    "min_group_size": min_group_size,
-                    "max_price_paise": max_price_paise,
-                    "maxPricePaise": maxPricePaise,
-                }.items()
-                if value is not None
+                "release_id": release_id,
+                "group_size": group_size,
+                "min_group_size": min_group_size,
+                "max_price_paise": max_price_paise,
+                "acceptable_slot_ids": acceptable_slot_ids,
             },
         )
-        resolved = _first_str(release_id, releaseId, release)
-        if resolved is None:
-            listing = await _releases(client, run_id, _first_str(event, event_id, eventId), _first_str(date))
-            found = listing["body"].get("releases", [])
-            if len(found) != 1:
-                return _bad_request(
-                    "release_id is required; call list_releases and pass the release_id it returns "
-                    f"(candidates: {found})"
-                )
-            resolved = found[0]["release_id"]
-        slots_for_bid = _slot_ids(acceptable_slot_ids, slot_ids, slotIds, slots)
+        listing = await _releases(client, run_id, _first_str(release_id), None)
+        found = listing["body"].get("releases", [])
+        if len(found) != 1:
+            return _bad_request(
+                "release_id is required; call list_releases and pass the release_id it returns "
+                f"(candidates: {found})"
+            )
+        resolved = found[0]["release_id"]
+        slots_for_bid = _slot_ids(acceptable_slot_ids)
         if slots_for_bid is None:
             # Mock convenience: with no slot ids given, bid for the release's own slots, which is what declaring
             # interest in that release means. A model that never read the slot ids therefore cannot drop the bid.
@@ -292,11 +212,9 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
             if detail["status_code"] != 200:
                 return detail
             slots_for_bid = [slot["slot_id"] for slot in detail["body"].get("slots", [])]
-        if not slots_for_bid:
-            return _bad_request("acceptable_slot_ids is required; call get_release for the release's slot ids")
-        group = _first_int(group_size, groupSize)
-        minimum = _first_int(min_group_size, minGroupSize)
-        ceiling = _first_int(max_price_paise, maxPricePaise, max_price)
+        group = _first_int(group_size)
+        minimum = _first_int(min_group_size)
+        ceiling = _first_int(max_price_paise)
         if group is None or minimum is None or ceiling is None:
             return _bad_request(
                 "group_size, min_group_size and max_price_paise (paise) are required; received "
@@ -310,13 +228,13 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
             idem=idempotency_key,
             json={
                 # A stable fallback keeps a retry of the same bid from becoming a second pool entry.
-                "declaration_id": _first_str(declaration_id, declarationId) or f"decl_{run_id}_{resolved}",
+                "declaration_id": f"decl_{run_id}_{resolved}",
                 "acceptable_slot_ids": slots_for_bid,
                 "group_size": group,
                 "min_group_size": minimum,
                 "max_price_paise": ceiling,
-                "user_contact": _first_str(user_contact),
-                "mandate_id": _first_str(mandate_id),
+                "user_contact": None,
+                "mandate_id": None,
             },
         )
 

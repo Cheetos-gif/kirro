@@ -114,8 +114,7 @@ def test_declare_via_mcp_is_visible_to_rest(mcp_base):
                     "declare_interest",
                     {
                         "release_id": "rel_tennis_sat",
-                        "declaration_id": "d_mcp",
-                        "acceptable_slot_ids": ["tn_0900"],
+                        "acceptable_slot_ids": "tn_0900",
                         "group_size": 4,
                         "min_group_size": 4,
                         "max_price_paise": 60000,
@@ -126,10 +125,14 @@ def test_declare_via_mcp_is_visible_to_rest(mcp_base):
 
     body = asyncio.run(go())
     assert body["status_code"] == 200
-    assert body["body"] == {"declaration_id": "d_mcp", "release_id": "rel_tennis_sat", "status": "DECLARED"}
+    assert body["body"] == {
+        "declaration_id": "decl_mcp_rel_tennis_sat",
+        "release_id": "rel_tennis_sat",
+        "status": "DECLARED",
+    }
 
     listed = httpx.get(f"{mcp_base}/venue/releases/rel_tennis_sat/declarations", headers=H, timeout=10).json()
-    assert [d["declaration_id"] for d in listed["declarations"]] == ["d_mcp"]
+    assert [d["declaration_id"] for d in listed["declarations"]] == ["decl_mcp_rel_tennis_sat"]
 
     # ...and the pool feeds the draw endpoint the Workflow will call.
     drawn = httpx.post(
@@ -250,14 +253,14 @@ def test_lookup_and_bid_tools_accept_model_shaped_arguments(mcp_base):
     async def go():
         async with session(f"{mcp_base}/venue/mcp") as s:
             listed = payload(await s.call_tool("list_releases", {"event": "badminton"}))
-            fetched = payload(await s.call_tool("get_release", {"event": "badminton", "date": "2026-10-03"}))
+            fetched = payload(await s.call_tool("get_release", {"release_id": "badminton"}))
             bid = payload(
                 await s.call_tool(
                     "declare_interest",
                     {
-                        "release": "rel_badminton_sat",
-                        "slots": "bd_0700",
-                        "group_size": "4",
+                        "release_id": "rel_badminton_sat",
+                        "acceptable_slot_ids": "bd_0700",
+                        "group_size": 4,
                         "min_group_size": 2,
                         "max_price_paise": 30000,
                     },
@@ -280,13 +283,12 @@ def test_lookup_survives_a_misresolved_date_and_a_bid_without_slots(mcp_base):
     async def go():
         async with session(f"{mcp_base}/venue/mcp") as s:
             listed = payload(await s.call_tool("list_releases", {"event": "badminton", "date": "2026-10-07"}))
-            fetched = payload(await s.call_tool("get_release", {"event": "badminton", "date": "2026-10-07"}))
+            fetched = payload(await s.call_tool("get_release", {"release_id": "badminton"}))
             bid = payload(
                 await s.call_tool(
                     "declare_interest",
                     {
-                        "event": "badminton",
-                        "date": "2026-10-07",
+                        "release_id": "badminton",
                         "group_size": 4,
                         "min_group_size": 2,
                         "max_price_paise": 30000,
@@ -309,11 +311,15 @@ def test_every_tool_invocation_is_logged_with_the_arguments_received(mcp_server)
     async def go():
         async with session(f"{base}/venue/mcp") as s:
             await s.call_tool("list_releases", {"event": "badminton"})
-            await s.call_tool("declare_interest", {"group_size": 4})
+            await s.call_tool(
+                "declare_interest",
+                {"release_id": "no-such-release", "group_size": 4, "min_group_size": 2, "max_price_paise": 30000},
+            )
 
     asyncio.run(go())
     lines = [json.loads(line) for line in (log_dir / "default.jsonl").read_text().splitlines()]
     tools = {line["target"]: line["request"] for line in lines if line["target"].startswith("mcp.")}
-    assert tools["mcp.list_releases"] == {"event": "badminton"}
-    # The guard answered, but the argument it was missing is recorded as absent rather than silently dropped.
-    assert tools["mcp.declare_interest"] == {"group_size": 4}
+    assert tools["mcp.list_releases"] == {"event": "badminton", "date": ""}
+    # The guard rejected the bid, but what it did receive is recorded rather than silently dropped.
+    assert tools["mcp.declare_interest"]["release_id"] == "no-such-release"
+    assert tools["mcp.declare_interest"]["max_price_paise"] == 30000
