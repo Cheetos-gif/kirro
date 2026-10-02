@@ -871,11 +871,14 @@ way that correlates:
 | 02:40 – 03:51       | every call arrives all-null, across both agents, every schema variant, and several fresh conversations                         | arrives, flapping (one empty call, then the value) |
 | 03:59 – 04:12       | arguments arrive — the whole chain and the declined path ran on them (§12)                                                     | arrives                                            |
 | 04:20 →             | all-null again, on both agents and in fresh conversations; a 2.5-minute quiet period did not restore it                        | arrives                                            |
+| 04:33 / 04:35       | up for one run (L12 passed, §12) and down again two minutes later, same agent, same conversation shape                         | arrives                                            |
 
-A fourth row, and it kills the last correlation worth testing: the pass-through does **not** track load on our side. It
-went down twice — once while this session was registering connectors, once while it was doing nothing but waiting —
-and came back once, and a deliberate quiet period before a retry changed nothing. It is simply intermittent, at the
-platform's end, and `create_mandate` keeps working through all of it.
+Two of those rows kill the last correlations worth testing. The pass-through does **not** track load on our side — it
+went down once while this session was registering connectors and once while it was doing nothing but waiting, and a
+deliberate quiet period before a retry changed nothing. And the windows are **minutes**, not hours: it served a full
+allocation at 04:33:44 and returned nulls by 04:35:48, same agent, same conversation shape. That is the signature of
+**per-request variance at the platform's end** — plausibly a subset of backends behind a load balancer dropping tool
+arguments — rather than any state we can set. `create_mandate` works throughout.
 
 So the schema-side remedies above were all tested inside the broken window, and the "untyped parameters" fix that
 appeared to work at 02:05 was tested inside the first good one. That is why the table's remedies cannot be read as
