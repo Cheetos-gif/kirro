@@ -190,15 +190,19 @@ def test_delhivery_shapes(mock_client):
     assert t["ShipmentData"][0]["Shipment"]["Status"]["Status"] == "Manifested"
 
 
-def test_request_response_scenario_logged(tmp_path):
+def test_request_response_scenario_logged(tmp_path, capsys):
     from fastapi.testclient import TestClient
 
     c = TestClient(create_app(str(tmp_path)))
     c.post("/__admin/scenario", json={"run_id": "lg", "target": "venue.release", "scenario": "upstream_500"})
+    capsys.readouterr()
     c.get("/venue/releases/rel_badminton_sat", headers=H("lg"))
     rec = json.loads((tmp_path / "lg.jsonl").read_text().splitlines()[0])
     assert {"ts", "request_id", "path", "scenario", "request", "response", "status", "latency_ms"} <= set(rec)
     assert rec["scenario"] == "upstream_500" and rec["request_id"] == "req-1" and rec["status"] == 500
+    # The same record is teed to stdout, the only channel the cluster's log agent ships.
+    out = [json.loads(ln) for ln in capsys.readouterr().out.splitlines() if ln.startswith("{")]
+    assert out == [rec]
 
 
 @pytest.fixture

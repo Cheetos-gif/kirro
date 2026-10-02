@@ -452,6 +452,76 @@ only reads `/var/log/containers`. Reading it still needs `kubectl exec`.
 Tests: `test_conversation_log_writes_one_file_per_call`,
 `test_call_logger_merges_its_fields_with_the_call_sites`, `test_agent_chat_tags_every_turn_with_the_call_id`.
 
+**Unanswered utterances made visible, and the cause narrowed (2026-10-03).** Reported from a real call
+(`call_29fbe992aa8d`): the caller spoke six times, AgenticOrg was called eleven times, and the turn numbers jumped
+4 → 7 → 10, so turns 5, 6, 8 and 9 never happened. The portal transcript showed those user lines ("nahi",
+"thanks", "no"); there were zero `agent turn failed` lines, so the adapter was never reached — the utterances died
+between speech recognition and the LLM stage.
+
+Four more session events are now logged per call, beside `error` and `close` in `entrypoint()`
+(`voice_bridge/agent.py`): `user_input_transcribed` (transcript plus `is_final`),
+`agent_false_interruption` (plus whether the agent resumed), `user_state_changed`, and `overlapping_speech`. A
+final transcript with no `agenticorg turn` after it in the same call file is now the visible proof of a swallowed
+utterance, instead of something only a live repro could find.
+
+**What that call's own logs say.** The PVC copy (`call_29fbe992aa8d.jsonl`) holds the four drops and no
+`agent turn failed`; the pod's stdout for the same window (Loki) holds the framework's own diagnosis at the gap:
+
+```
+19:46:26.7  agenticorg turn   turn 4   "600"
+19:46:37.6  WARNING  livekit.agents  transcript arrives after turn has been committed. consider raising
+            `min_delay` in the endpointing options to accommodate a slow stt. subsequent occurrences will
+            log at debug level.
+19:46:45.7  agenticorg turn   turn 7   "five"
+```
+
+So the turn was committed before Gnani's final transcript arrived: the committed turn carried no new user text
+(nothing was sent to the agent, which is also why there is no `agent turn failed`), and the late transcript was
+then dropped. Gnani's plugin emits only `FINAL_TRANSCRIPT` events — no interims — so LiveKit's fallback of using
+an interim when the final is late has nothing to fall back on. That is the observed symptom exactly.
+
+**It is not a false interruption.** The working hypothesis was `agent_false_interruption`, a short barge-in
+discarded before it became a turn. Three live calls against the production room server — synthesized speech
+published as the microphone, a genuine sub-second barge-in ("no", "nahi", "thanks") over the agent's own voice —
+logged no `agent false interruption` at all, and every barge-in committed a real turn. Repeating it with a
+deliberately delayed STT final made an utterance vanish, but through an artifact of the test harness, so it is not
+sound evidence for a fix and the harness was thrown away.
+
+**No tuning change, on purpose.** The cause is narrowed but not reproduced, so any
+`turn_handling=TurnHandlingOptions(...)` value would be a guess — too low and the transcript still arrives late,
+too high and every reply is slow. The production session runs the framework defaults, measured with
+`build_session`: `endpointing.min_delay` 0.3s, `max_delay` 2.5s, `turn_detection` the bundled `TurnDetector()`.
+The two candidate knobs are `endpointing.min_delay` (the one LiveKit's warning names) and
+`turn_detection="stt"` (commit only on the STT's own end-of-speech, so a turn can never be committed before a
+transcript exists — a larger change to how the conversation flows). Reproduce first: with the logging above, a
+final transcript with no following `agenticorg turn` in one call file is the proof, and a fix's effect shows up
+the same way.
+
+Tests: `test_user_input_transcribed_is_logged_with_finality_and_call_id`,
+`test_agent_false_interruption_is_logged_with_call_id`, `test_user_state_changed_is_logged_with_call_id`,
+`test_overlapping_speech_is_logged_with_call_id`.
+
+**A Gnani TTS outage told to the caller's screen (2026-10-03).** A Gnani TTS 500 that exhausts its retries is
+unrecoverable, and the caller hears silence while the answer sits in the transcript (the "We are facing technical
+difficulties" case above; `call_29fbe992aa8d` is one: three recoverable `tts_error`s, then one unrecoverable at
+19:48:07). The worker cannot speak the reply, so it now tells the portal, on the same text-stream mechanism as the
+call id:
+
+- `kirro.voice_error`, `{call_id, stage, label, message}`, published by the pipeline-error handler on an
+  unrecoverable `tts_error` — and only then. Recoverable errors publish nothing: those are retries that usually
+  succeed, and a banner on every retry would be worse than no banner.
+- `kirro.voice_ok`, `{call_id}`, published when a later `tts_metrics` event shows a synthesis that produced
+  characters — a completed one, `cancelled` or not, because audio was produced either way.
+
+Both publishes are best-effort: a failure is a warning line, never a broken call. Note the framework's own
+side effect: subscribing to `metrics_collected` logs one deprecation warning per session
+("use session_usage_updated"), which is the price of the only event carrying TTS `characters_count`.
+
+Tests: `test_unrecoverable_tts_error_publishes_the_voice_error_banner`,
+`test_recoverable_tts_error_and_other_stages_publish_nothing`,
+`test_completed_tts_synthesis_publishes_voice_ok`,
+`test_other_metrics_and_empty_synthesis_publish_nothing`.
+
 ## Failure cases to test by hand once credentials exist
 
 Outbound call blocked by handset spam filter; Gnani silence/interruption timeouts; real Hinglish transcription of

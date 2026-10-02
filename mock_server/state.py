@@ -407,13 +407,19 @@ class MockState:
         return r.delay.get(target, r.delay.get("*", DEFAULT_DELAY.get(scenario, 0.0)))
 
     def log(self, run_id: str, entry: dict) -> None:
-        """Append to the request log. A logging failure must never fail the mocked call itself:
-        the mock's job is to answer like a vendor API, so this degrades to a one-time warning."""
+        """Append to the request log and echo the same line to stdout, the only channel the cluster's log
+        agent ships. A logging failure must never fail the mocked call itself: the mock's job is to answer
+        like a vendor API, so a file-write failure degrades to a one-time warning."""
+        line = json.dumps(entry, ensure_ascii=False)
         try:
             self.log_dir.mkdir(parents=True, exist_ok=True)
             with open(self.log_dir / f"{run_id}.jsonl", "a", encoding="utf-8") as fh:
-                fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                fh.write(line + "\n")
         except OSError as exc:
             if not self._log_warned:
                 self._log_warned = True
                 print(f"[mock] request logging disabled ({self.log_dir}): {exc}", file=sys.stderr)
+        try:
+            print(line, flush=True)
+        except (OSError, ValueError):  # closed or broken stdout must not fail the call either
+            pass

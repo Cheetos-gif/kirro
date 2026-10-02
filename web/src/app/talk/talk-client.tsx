@@ -25,6 +25,12 @@ export type TranscriptLine = { key: string; mine: boolean; text: string; at: num
 
 /** The worker's own topic for the per-call id (voice_bridge/agent.py: CALL_ID_TOPIC). */
 const CALL_ID_TOPIC = 'kirro.call_id';
+/** Voice-output health, also published by the worker (voice_bridge/agent.py). */
+const VOICE_ERROR_TOPIC = 'kirro.voice_error';
+const VOICE_OK_TOPIC = 'kirro.voice_ok';
+
+/** Shown when the worker's failure payload carries no message of its own. */
+const DEFAULT_VOICE_NOTICE = 'KIRRO is having trouble speaking right now. Your words are still being heard.';
 
 const STATE_LABEL: Record<string, string> = {
   initializing: 'Connecting…',
@@ -70,7 +76,15 @@ export function mergeTurn(lines: TranscriptLine[], turn: TranscriptLine): Transc
  * Inside the room. LiveKit owns the transcript, the turn state, the visualiser and the controls;
  * this only maps its messages into the shape the page keeps for copying.
  */
-function Call({ onTurn, onCallId }: { onTurn: (line: TranscriptLine) => void; onCallId: (id: string) => void }) {
+function Call({
+  onTurn,
+  onCallId,
+  onVoiceError,
+}: {
+  onTurn: (line: TranscriptLine) => void;
+  onCallId: (id: string) => void;
+  onVoiceError: (notice: string | null) => void;
+}) {
   const { state, audioTrack } = useVoiceAssistant();
   const connection = useConnectionState();
   // `useTranscriptions` rather than `useSessionMessages`: the latter is beta and returns nothing
@@ -107,6 +121,33 @@ function Call({ onTurn, onCallId }: { onTurn: (line: TranscriptLine) => void; on
     }
   }, [transcriptions, localParticipant.identity, onTurn]);
 
+  // Gnani's TTS does return 500s mid-call, and the caller otherwise just hears silence with no way
+  // to tell a vendor outage apart from a stalled agent. The worker publishes the failure, and a
+  // completed synthesis clears it, so the notice disappears by itself when speech resumes.
+  useEffect(() => {
+    const onFailure = (reader: TextStreamReader) => {
+      void reader.readAll().then(raw => {
+        let detail = DEFAULT_VOICE_NOTICE;
+        try {
+          const parsed = JSON.parse(raw) as { message?: string };
+          detail = parsed.message || DEFAULT_VOICE_NOTICE;
+        } catch {
+          // A non-JSON payload still means a failure; the default line stands on its own.
+        }
+        onVoiceError(detail);
+      });
+    };
+    const onRecovered = (reader: TextStreamReader) => {
+      void reader.readAll().then(() => onVoiceError(null));
+    };
+    room.registerTextStreamHandler(VOICE_ERROR_TOPIC, onFailure);
+    room.registerTextStreamHandler(VOICE_OK_TOPIC, onRecovered);
+    return () => {
+      room.unregisterTextStreamHandler(VOICE_ERROR_TOPIC);
+      room.unregisterTextStreamHandler(VOICE_OK_TOPIC);
+    };
+  }, [room, onVoiceError]);
+
   const label =
     connection === ConnectionState.Connected
       ? (STATE_LABEL[state] ?? state)
@@ -138,6 +179,7 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
   const [copied, setCopied] = useState(false);
   const [startedAt, setStartedAt] = useState<Date | null>(null);
   const [callId, setCallId] = useState<string | null>(null);
+  const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
   const scrollBox = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -152,6 +194,10 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
     setCallId(id);
   }, []);
 
+  const onVoiceError = useCallback((detail: string | null) => {
+    setVoiceNotice(detail);
+  }, []);
+
   const start = useCallback(async () => {
     setConnecting(true);
     setError(null);
@@ -159,6 +205,7 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
     setLines([]);
     setCopied(false);
     setCallId(null);
+    setVoiceNotice(null);
     setStartedAt(new Date());
     try {
       const response = await fetch('/api/voice/token', { method: 'POST' });
@@ -217,7 +264,7 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
             className="flex flex-col gap-4"
           >
             <RoomAudioRenderer />
-            <Call onTurn={onTurn} onCallId={onCallId} />
+            <Call onTurn={onTurn} onCallId={onCallId} onVoiceError={onVoiceError} />
             <Button variant="outline" className="w-fit" onClick={stop}>
               End call
             </Button>
@@ -234,6 +281,15 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
         )}
 
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+        {voiceNotice ? (
+          <p
+            role="status"
+            className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-600 dark:text-amber-400"
+          >
+            {voiceNotice}
+          </p>
+        ) : null}
 
         <section className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3">

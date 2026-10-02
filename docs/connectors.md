@@ -220,7 +220,8 @@ A sequence pops one scenario per call; the last sticks. `options: {"inject_label
 string to venue slot labels (injection-resistance demo). `GET /__admin/state?run_id=` returns counts for test
 assertions.
 Logs: `logs/mock/<run_id>.jsonl` with ts, request_id, upstream_request_id, path, target, scenario, request, response,
-status, latency_ms.
+status, latency_ms. Each line is also written to stdout, the only channel the cluster's log agent ships to Loki; the
+file under `MOCK_LOG_DIR` remains the record of authority (the stdout line carries no `run_id`, only the file name does).
 
 ## Failure and retry behaviour
 

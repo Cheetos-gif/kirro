@@ -393,6 +393,262 @@ def test_session_close_is_logged_with_reason_and_duration(caplog: pytest.LogCapt
     assert record.call_id == "call_x"
 
 
+# --- swallowed turns and the portal's voice banner ------------------------------------------------
+
+
+def _call_log() -> Any:
+    import logging as logging_module
+
+    from voice_bridge.conversation_log import CallLogger
+
+    return CallLogger(logging_module.getLogger("voice_bridge.agent"), {"call_id": "call_x"})
+
+
+def test_user_input_transcribed_is_logged_with_finality_and_call_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A final transcript is the proof the caller was heard, even when no turn follows it."""
+    import logging as logging_module
+
+    from livekit.agents import UserInputTranscribedEvent
+
+    from voice_bridge.agent import on_user_input_transcribed
+
+    event = UserInputTranscribedEvent(transcript="nahi", is_final=True, item_id="item_1")
+
+    with caplog.at_level(logging_module.INFO, logger="voice_bridge.agent"):
+        on_user_input_transcribed(_call_log())(event)
+
+    record = next(r for r in caplog.records if r.message == "user input transcribed")
+    assert record.is_final is True
+    assert record.transcript == "nahi"
+    assert record.item_id == "item_1"
+    assert record.call_id == "call_x"
+
+
+def test_agent_false_interruption_is_logged_with_call_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A discarded barge-in must be visible as a warning, not silently swallowed."""
+    import logging as logging_module
+
+    from livekit.agents import AgentFalseInterruptionEvent
+
+    from voice_bridge.agent import on_agent_false_interruption
+
+    event = AgentFalseInterruptionEvent(resumed=True)
+
+    with caplog.at_level(logging_module.WARNING, logger="voice_bridge.agent"):
+        on_agent_false_interruption(_call_log())(event)
+
+    record = next(r for r in caplog.records if r.message == "agent false interruption")
+    assert record.resumed is True
+    assert record.call_id == "call_x"
+
+
+def test_user_state_changed_is_logged_with_call_id(caplog: pytest.LogCaptureFixture) -> None:
+    """The caller's speaking state is what shows a `speaking` that never became a turn."""
+    import logging as logging_module
+
+    from livekit.agents import UserStateChangedEvent
+
+    from voice_bridge.agent import on_user_state_changed
+
+    event = UserStateChangedEvent(old_state="listening", new_state="speaking")
+
+    with caplog.at_level(logging_module.INFO, logger="voice_bridge.agent"):
+        on_user_state_changed(_call_log())(event)
+
+    record = next(r for r in caplog.records if r.message == "user state changed")
+    assert record.old_state == "listening"
+    assert record.new_state == "speaking"
+    assert record.call_id == "call_x"
+
+
+def test_overlapping_speech_is_logged_with_call_id(caplog: pytest.LogCaptureFixture) -> None:
+    """Overlap is where a short barge-in gets classified; the verdict must land on the record."""
+    import logging as logging_module
+
+    from livekit.agents.voice.events import OverlappingSpeechEvent
+
+    from voice_bridge.agent import on_overlapping_speech
+
+    event = OverlappingSpeechEvent(is_interruption=True, agent_ended=False, detection_delay=0.42)
+
+    with caplog.at_level(logging_module.INFO, logger="voice_bridge.agent"):
+        on_overlapping_speech(_call_log())(event)
+
+    record = next(r for r in caplog.records if r.message == "overlapping speech")
+    assert record.is_interruption is True
+    assert record.agent_ended is False
+    assert record.detection_delay == 0.42
+    assert record.call_id == "call_x"
+
+
+def test_unrecoverable_tts_error_publishes_the_voice_error_banner() -> None:
+    """An unrecoverable TTS failure is when the caller hears silence, so the portal is told."""
+    import logging as logging_module
+
+    from livekit.agents import ErrorEvent
+    from livekit.agents.tts import TTSError
+
+    from voice_bridge.agent import VOICE_ERROR_TOPIC, on_pipeline_error
+
+    sent: list[tuple[str, str]] = []
+    error = TTSError(
+        timestamp=0.0,
+        label="gnani-tts",
+        error=RuntimeError("We are facing technical difficulties. Please try again later."),
+        recoverable=False,
+    )
+    handler = on_pipeline_error(_call_log(), lambda topic, payload: sent.append((topic, payload)))
+    # silence the error line the handler also writes
+    logging_module.getLogger("voice_bridge.agent").setLevel(logging_module.CRITICAL)
+    try:
+        handler(ErrorEvent(error=error, source=error))
+    finally:
+        logging_module.getLogger("voice_bridge.agent").setLevel(logging_module.NOTSET)
+
+    assert [topic for topic, _ in sent] == [VOICE_ERROR_TOPIC]
+    assert json.loads(sent[0][1]) == {
+        "call_id": "call_x",
+        "stage": "tts_error",
+        "label": "gnani-tts",
+        "message": "We are facing technical difficulties. Please try again later.",
+    }
+
+
+def test_recoverable_tts_error_and_other_stages_publish_nothing() -> None:
+    """Retries usually succeed and an STT error is not a voice outage — no banner either way."""
+    import logging as logging_module
+
+    from livekit.agents import ErrorEvent
+    from livekit.agents.stt import STTError
+    from livekit.agents.tts import TTSError
+
+    from voice_bridge.agent import on_pipeline_error
+
+    sent: list[tuple[str, str]] = []
+    handler = on_pipeline_error(_call_log(), lambda topic, payload: sent.append((topic, payload)))
+
+    logging_module.getLogger("voice_bridge.agent").setLevel(logging_module.CRITICAL)
+    try:
+        retry = TTSError(timestamp=0.0, label="gnani-tts", error=RuntimeError("retrying"), recoverable=True)
+        handler(ErrorEvent(error=retry, source=retry))
+        stt = STTError(timestamp=0.0, label="gnani-stt", error=RuntimeError("boom"), recoverable=False)
+        handler(ErrorEvent(error=stt, source=stt))
+    finally:
+        logging_module.getLogger("voice_bridge.agent").setLevel(logging_module.NOTSET)
+
+    assert sent == []
+
+
+def test_completed_tts_synthesis_publishes_voice_ok() -> None:
+    """A synthesis that produced characters means TTS works again, even if it was interrupted."""
+
+    from livekit.agents import MetricsCollectedEvent
+    from livekit.agents.metrics import TTSMetrics
+
+    from voice_bridge.agent import VOICE_OK_TOPIC, on_metrics_collected
+
+    sent: list[tuple[str, str]] = []
+    handler = on_metrics_collected(
+        _call_log(),
+        lambda topic, payload: sent.append((topic, payload)),
+    )
+    metrics = TTSMetrics(
+        label="gnani-tts",
+        request_id="r1",
+        timestamp=0.0,
+        ttfb=0.1,
+        duration=0.2,
+        audio_duration=0.5,
+        cancelled=True,
+        characters_count=12,
+        streamed=True,
+    )
+
+    handler(MetricsCollectedEvent(metrics=metrics))
+
+    assert len(sent) == 1 and sent[0][0] == VOICE_OK_TOPIC
+    assert json.loads(sent[0][1]) == {"call_id": "call_x"}
+
+
+def test_other_metrics_and_empty_synthesis_publish_nothing() -> None:
+    """A VAD metric, or a TTS synthesis with no characters, is not evidence the voice works."""
+
+    from livekit.agents import MetricsCollectedEvent
+    from livekit.agents.metrics import TTSMetrics, VADMetrics
+
+    from voice_bridge.agent import on_metrics_collected
+
+    sent: list[tuple[str, str]] = []
+    handler = on_metrics_collected(
+        _call_log(),
+        lambda topic, payload: sent.append((topic, payload)),
+    )
+    vad = VADMetrics(
+        label="silero",
+        timestamp=0.0,
+        idle_time=1.0,
+        inference_duration_total=0.01,
+        inference_count=3,
+    )
+    empty_tts = TTSMetrics(
+        label="gnani-tts",
+        request_id="r2",
+        timestamp=0.0,
+        ttfb=0.1,
+        duration=0.2,
+        audio_duration=0.0,
+        cancelled=False,
+        characters_count=0,
+        streamed=True,
+    )
+
+    handler(MetricsCollectedEvent(metrics=vad))
+    handler(MetricsCollectedEvent(metrics=empty_tts))
+
+    assert sent == []
+
+
+def test_room_publisher_sends_over_the_text_stream_and_swallows_failure(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The handler is sync and `send_text` is a coroutine, so the send must be scheduled, and a
+    broken data channel must cost a warning — never the call."""
+    import logging as logging_module
+
+    from voice_bridge.agent import room_publisher
+
+    sent: list[tuple[str, str]] = []
+
+    class _Participant:
+        async def send_text(self, payload: str, topic: str | None = None) -> None:
+            sent.append((topic or "", payload))
+
+    class _Room:
+        local_participant = _Participant()
+
+    class _BrokenParticipant:
+        async def send_text(self, payload: str, topic: str | None = None) -> None:
+            raise RuntimeError("data channel closed")
+
+    class _BrokenRoom:
+        local_participant = _BrokenParticipant()
+
+    async def run() -> None:
+        room_publisher(_Room(), _call_log())("kirro.voice_ok", '{"call_id": "call_x"}')
+        room_publisher(_BrokenRoom(), _call_log())("kirro.voice_ok", "{}")
+        await asyncio.sleep(0.05)
+
+    with caplog.at_level(logging_module.WARNING, logger="voice_bridge.agent"):
+        _run(run())
+
+    assert sent == [("kirro.voice_ok", '{"call_id": "call_x"}')]
+    assert any("could not publish" in r.message for r in caplog.records)
+
+
 # --- per-call conversation log -------------------------------------------------------------------
 
 
