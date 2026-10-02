@@ -144,6 +144,11 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         run_id: str = DEFAULT_RUN,
         idempotency_key: str | None = None,
     ) -> dict:
+        _record(
+            "create_hold",
+            run_id,
+            {"release_id": release_id, "slot_id": slot_id, "quantity": quantity, "ttl_s": ttl_s},
+        )
         release = _first_str(release_id)
         slot = _first_str(slot_id)
         seats = _first_int(quantity)
@@ -156,25 +161,24 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         ttl = _first_int(ttl_s)
         if ttl is not None:
             body["ttl_s"] = ttl
-        _record("create_hold", run_id, body)
         return await _call(
             client, "POST", f"/venue/releases/{release}/holds", run_id=run_id, idem=idempotency_key, json=body
         )
 
     @mcp.tool(description="Check a hold's status (active | released | expired).")
     async def get_hold(hold_id: Any = None, run_id: str = DEFAULT_RUN) -> dict:
+        _record("get_hold", run_id, {"hold_id": hold_id})
         hold = _first_str(hold_id)
         if hold is None:
             return _bad_request("hold_id is required; take it from the create_hold result")
-        _record("get_hold", run_id, {"hold_id": hold})
         return await _call(client, "GET", f"/venue/holds/{hold}", run_id=run_id)
 
     @mcp.tool(description="Release a hold back to inventory.")
     async def release_hold(hold_id: Any = None, run_id: str = DEFAULT_RUN, idempotency_key: str | None = None) -> dict:
+        _record("release_hold", run_id, {"hold_id": hold_id})
         hold = _first_str(hold_id)
         if hold is None:
             return _bad_request("hold_id is required; take it from the create_hold result")
-        _record("release_hold", run_id, {"hold_id": hold})
         return await _call(client, "DELETE", f"/venue/holds/{hold}", run_id=run_id, idem=idempotency_key)
 
     @mcp.tool(
@@ -189,13 +193,13 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         run_id: str = DEFAULT_RUN,
         idempotency_key: str | None = None,
     ) -> dict:
+        _record("confirm_booking", run_id, {"hold_id": hold_id, "payment_id": payment_id})
         hold = _first_str(hold_id)
         payment = _first_str(payment_id)
         if hold is None or payment is None:
             return _bad_request(
                 f"hold_id and payment_id are required; received hold_id={hold_id!r}, payment_id={payment_id!r}"
             )
-        _record("confirm_booking", run_id, {"hold_id": hold, "payment_id": payment})
         return await _call(
             client,
             "POST",
@@ -290,10 +294,15 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         )
     )
     async def list_pool_entries(release_id: Any = None, run_id: str = DEFAULT_RUN) -> dict:
+        _record("list_pool_entries", run_id, {"release_id": release_id})
         release = _first_str(release_id)
         if release is None:
-            return _bad_request("release_id is required; call list_releases first")
-        _record("list_pool_entries", run_id, {"release_id": release})
+            listing = await _releases(client, run_id, None, None)
+            candidates = listing["body"].get("releases", [])
+            return _bad_request(
+                "release_id is required; call list_releases and pass the release_id it returns "
+                f"(candidates: {candidates})"
+            )
         return await _call(client, "GET", f"/venue/releases/{release}/declarations", run_id=run_id)
 
     @mcp.tool(
@@ -308,6 +317,7 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         run_id: str = DEFAULT_RUN,
         idempotency_key: str | None = None,
     ) -> dict:
+        _record("cancel_declaration", run_id, {"release_id": release_id, "declaration_id": declaration_id})
         release = _first_str(release_id)
         declaration = _first_str(declaration_id)
         if release is None or declaration is None:
@@ -315,7 +325,6 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
                 f"release_id and declaration_id are required; received release_id={release_id!r}, "
                 f"declaration_id={declaration_id!r}"
             )
-        _record("cancel_declaration", run_id, {"release_id": release, "declaration_id": declaration})
         return await _call(
             client,
             "DELETE",
@@ -529,6 +538,7 @@ def _pinelabs(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         authorizationId: Any = None,
         run_id: str = DEFAULT_RUN,
     ) -> dict:
+        _record("get_mandate_balance", run_id, {"authorization_id": authorization_id})
         mandate = _first_str(authorization_id, authorizationId)
         if mandate is None:
             return _bad_request("authorization_id is required; take it from the create_mandate response")
@@ -551,6 +561,11 @@ def _pinelabs(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         run_id: str = DEFAULT_RUN,
         idempotency_key: str | None = None,
     ) -> dict:
+        _record(
+            "execute",
+            run_id,
+            {"authorization_id": authorization_id, "amount_value": amount_value, "amount": amount},
+        )
         mandate = _first_str(authorization_id, authorizationId)
         if mandate is None:
             return _bad_request("authorization_id is required; take it from the create_mandate response")
@@ -575,10 +590,10 @@ def _pinelabs(mcp: MCPServer, client: httpx.AsyncClient) -> None:
     async def release(
         authorization_id: Any = None, run_id: str = DEFAULT_RUN, idempotency_key: str | None = None
     ) -> dict:
+        _record("release", run_id, {"authorization_id": authorization_id})
         mandate = _first_str(authorization_id)
         if mandate is None:
             return _bad_request("authorization_id is required; take it from the create_mandate result")
-        _record("release", run_id, {"authorization_id": mandate})
         return await _call(
             client,
             "POST",
@@ -595,10 +610,10 @@ def _pinelabs(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         )
     )
     async def refund(payment_id: Any = None, run_id: str = DEFAULT_RUN, idempotency_key: str | None = None) -> dict:
+        _record("refund", run_id, {"payment_id": payment_id})
         payment = _first_str(payment_id)
         if payment is None:
             return _bad_request("payment_id is required; take it from the execute result")
-        _record("refund", run_id, {"payment_id": payment})
         return await _call(
             client,
             "POST",
@@ -625,6 +640,11 @@ def _allocator(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         run_id: str = DEFAULT_RUN,
         idempotency_key: str | None = None,
     ) -> dict:
+        _record(
+            "draw",
+            run_id,
+            {"release_id": release_id, "bids": bids, "window_open_iso": window_open_iso},
+        )
         release = _first_str(release_id)
         entries = _bids(bids)
         if release is None or entries is None:
@@ -636,7 +656,6 @@ def _allocator(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         window = _first_str(window_open_iso)
         if window is not None:
             payload["window_open_iso"] = window
-        _record("draw", run_id, {"release_id": release, "bids": entries, "window_open_iso": window})
         return await _call(client, "POST", "/allocator/draw", run_id=run_id, idem=idempotency_key, json=payload)
 
 
@@ -644,6 +663,7 @@ def _delhivery(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 
     @mcp.tool(description="Pincode serviceability lookup (empty list means non-serviceable).")
     async def pincode_serviceability(filter_codes: Any = None, run_id: str = DEFAULT_RUN) -> dict:
+        _record("pincode_serviceability", run_id, {"filter_codes": filter_codes})
         codes = _first_str(filter_codes)
         if codes is None:
             return _bad_request("filter_codes is required (a comma-separated list of pincodes)")
@@ -654,10 +674,10 @@ def _delhivery(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 
     @mcp.tool(description="Create a shipment from a Delhivery-shaped create payload.")
     async def create_shipment(data: Any = None, run_id: str = DEFAULT_RUN, idempotency_key: str | None = None) -> dict:
+        _record("create_shipment", run_id, {"data": data})
         payload = _first_str(data)
         if payload is None:
             return _bad_request("data is required (the Delhivery create payload as a JSON string)")
-        _record("create_shipment", run_id, {"data": payload})
         return await _call(
             client,
             "POST",
@@ -669,10 +689,10 @@ def _delhivery(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 
     @mcp.tool(description="Track a shipment by waybill.")
     async def track(waybill: Any = None, run_id: str = DEFAULT_RUN) -> dict:
+        _record("track", run_id, {"waybill": waybill})
         number = _first_str(waybill)
         if number is None:
             return _bad_request("waybill is required; take it from the create_shipment result")
-        _record("track", run_id, {"waybill": number})
         return await _call(client, "GET", "/delhivery/api/v1/packages/json/", run_id=run_id, params={"waybill": number})
 
 

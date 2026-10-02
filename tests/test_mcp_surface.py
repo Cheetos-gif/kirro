@@ -366,12 +366,16 @@ def test_every_tool_invocation_is_logged_with_the_arguments_received(mcp_server)
     base, log_dir = mcp_server
 
     async def go():
-        async with session(f"{base}/venue/mcp") as s:
+        async with session(f"{base}/all/mcp") as s:
             await s.call_tool("list_releases", {"event": "badminton"})
             await s.call_tool(
                 "declare_interest",
                 {"release_id": "no-such-release", "group_size": 4, "min_group_size": 2, "max_price_paise": 30000},
             )
+            # Every one of these is refused by its own guard; each must still leave a trace, or a refusal is
+            # indistinguishable from a call the platform never made.
+            for tool in ("create_hold", "list_pool_entries", "draw", "execute", "confirm_booking", "track"):
+                await s.call_tool(tool, {})
 
     asyncio.run(go())
     lines = [json.loads(line) for line in (log_dir / "default.jsonl").read_text().splitlines()]
@@ -380,6 +384,8 @@ def test_every_tool_invocation_is_logged_with_the_arguments_received(mcp_server)
     # The guard rejected the bid, but what it did receive is recorded rather than silently dropped.
     assert tools["mcp.declare_interest"]["release_id"] == "no-such-release"
     assert tools["mcp.declare_interest"]["max_price_paise"] == 30000
+    for tool in ("create_hold", "list_pool_entries", "draw", "execute", "confirm_booking", "track"):
+        assert f"mcp.{tool}" in tools, f"{tool} refused without logging"
 
 
 def test_an_empty_release_lookup_returns_the_candidates(mcp_base):
