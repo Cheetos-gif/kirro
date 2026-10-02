@@ -837,6 +837,22 @@ What was found and fixed:
 `GET /workflow-runs/{id}` and `GET /workflows/{id}/runs` both require OAuth (401), so the run's own error is not
 readable from this account.
 
+### What has been ruled out for the Workflow's silence
+
+Creation accepts an arbitrary definition from this account, so the step shape itself could be varied and tested
+(each probe: create → `POST …/run` → watch the mock's log for a request; all probes were deleted afterwards):
+
+| hypothesis                                              | probe                                                                  | result                                   |
+| ------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------- |
+| The `agent_type` binding never resolves to the instance | same 1-step definition with `agent_id: 5591e57a-…` instead             | **no call** — ruled out                  |
+| The bare `action` name never resolves to a granted tool | `action: "mcp_kirro_all_v10__list_pool_entries"` (fully qualified)     | **no call** — ruled out                  |
+| The allocator's `shadow` maturity blocked its steps     | promoted it to `active` (acc 0.85) first, then ran the 7-step workflow | **no call** — ruled out                  |
+| A stale connector binding blocked the steps             | re-linked to `mcp_kirro_all_v10` and health-checked it (18 tools)      | **no call** — ruled out                  |
+| The run needed a payload the steps could use            | `POST …/run` with `{release_id: "rel_badminton_sat"}`                  | accepted (`status: running`) then Failed |
+
+So the engine accepts a run and then reaches neither the agent nor its tools, whatever the definition says. What
+remains is not reachable from this account: the run detail (401) and the engine's own logs.
+
 ### The trigger is create-time only — and it works from this account
 
 `PATCH`/`PUT` and `POST …/schedule` on an **existing** workflow all return 401, and `/dashboard/report-schedules`

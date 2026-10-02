@@ -97,9 +97,9 @@ async def _call(
 def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 
     @mcp.tool(description="List the booking releases. Filter by event (e.g. badminton) and/or date (YYYY-MM-DD).")
-    async def list_releases(event: str = "", date: str = "", run_id: str = DEFAULT_RUN) -> dict:
+    async def list_releases(event: Any = None, date: Any = None, run_id: str = DEFAULT_RUN) -> dict:
         _record("list_releases", run_id, {"event": event, "date": date})
-        return await _releases(client, run_id, event or None, date or None)
+        return await _releases(client, run_id, _first_str(event), _first_str(date))
 
     @mcp.tool(
         description=(
@@ -107,11 +107,11 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
             "such as badminton. Called with no release_id it returns the released list, so you can pick from it."
         )
     )
-    async def get_release(release_id: str = "", run_id: str = DEFAULT_RUN) -> dict:
+    async def get_release(release_id: Any = None, run_id: str = DEFAULT_RUN) -> dict:
         _record("get_release", run_id, {"release_id": release_id})
-        listing = await _releases(client, run_id, release_id or None, None)
+        listing = await _releases(client, run_id, _first_str(release_id), None)
         found = listing["body"].get("releases", [])
-        if not release_id:
+        if not _first_str(release_id):
             # Live, the model calls this with no argument at all. The platform rejects a missing *required*
             # parameter before the call reaches us, so an empty lookup answers with the candidates instead —
             # the ids still reach the model, which a platform-side rejection cannot achieve.
@@ -182,11 +182,11 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         )
     )
     async def declare_interest(
-        release_id: str = "",
-        group_size: int = 0,
-        min_group_size: int = 0,
-        max_price_paise: int = 0,
-        acceptable_slot_ids: str = "",
+        release_id: Any = None,
+        group_size: Any = None,
+        min_group_size: Any = None,
+        max_price_paise: Any = None,
+        acceptable_slot_ids: Any = None,
         run_id: str = DEFAULT_RUN,
         idempotency_key: str | None = None,
     ) -> dict:

@@ -319,7 +319,7 @@ def test_every_tool_invocation_is_logged_with_the_arguments_received(mcp_server)
     asyncio.run(go())
     lines = [json.loads(line) for line in (log_dir / "default.jsonl").read_text().splitlines()]
     tools = {line["target"]: line["request"] for line in lines if line["target"].startswith("mcp.")}
-    assert tools["mcp.list_releases"] == {"event": "badminton", "date": ""}
+    assert tools["mcp.list_releases"] == {"event": "badminton", "date": None}
     # The guard rejected the bid, but what it did receive is recorded rather than silently dropped.
     assert tools["mcp.declare_interest"]["release_id"] == "no-such-release"
     assert tools["mcp.declare_interest"]["max_price_paise"] == 30000
