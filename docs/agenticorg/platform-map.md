@@ -448,7 +448,7 @@ Registered as `twilio_kirro`, `PUT auth_config` with real credentials, confirmed
 test token, Twilio API keys don't expire on a short cycle, so this should stay healthy without the WhatsApp-style
 manual refresh.
 
-### Vachana — re-registered, and the live call channel itself is platform-unavailable, 2026-10-02
+### Vachana re-registered; the voice platform exists but its phone parts are admin-only, 2026-10-02
 
 `mcp_vachana_kirro` had disappeared from the tenant (9 connectors present, not the expected 10) — most likely
 collateral damage from the earlier cleanup that deleted "5 orphaned pre-aggregate connectors" (§ the consolidation
@@ -465,24 +465,42 @@ its credential is. This matches the `platform-map.md` §"non-MCP connector" find
 now reproduced on the real connector rather than a disposable probe: `tool_functions: []`, and there is no reachable
 path (confirmed 401 OAuth-gated) to declare operations for it by hand.
 
-**The actual blocker for a live call is upstream of Vachana, and it is not an access problem.** The Agent detail
-page has a **Voice** tab (`Overview | Workspace | Config | Workflow Config | Prompt | Shadow | Cost | Scopes | Learning | Voice`) whose entire content, verbatim, is: *"Voice is governed at organisation level. Agent-specific
-voice assignment, call history, and operational controls will appear here when the voice use-case builder is
-available."* No such builder exists anywhere else reachable in the `developer`-role nav (checked `/dashboard` and
-every sidebar group for a voice/organization/settings link; none exists), and every guessed org-level voice API path
-(`/api/v1/voice`, `/api/v1/org/voice`, `/api/v1/voice-use-cases`, …) returns the platform's generic unknown-route
-401, identical to a deliberately made-up path — i.e. this isn't a permissions wall, the feature itself is not shipped
-in this tenant yet. Twilio (healthy, `make_call`/`send_sms`/`send_whatsapp` tool functions already populated from
-its native registry entry, no discovery needed) and Vachana (healthy credential, inert connector) are both the
-correct pieces per `agent-spec.md`'s channel-level design, but nothing in the product currently binds a phone number
-to this agent or threads Vachana's STT/TTS into that call — that plumbing is the unbuilt "voice use-case builder"
-itself, not something a connector registration or an agent ACL change can substitute for.
+**The voice platform (corrected the same day: an earlier version of this section called it unshipped).** The Agent
+detail page's **Voice** tab only says *"Voice is governed at organisation level. Agent-specific voice assignment,
+call history, and operational controls will appear here when the voice use-case builder is available."* The
+builder is the org-level `/dashboard/voice` route (found in the SPA bundle, chunk `VoicePlatform-*.js`). Opening
+it from this account redirects to `/dashboard/access-denied`: *"REQUIRED ROLE admin"*. Its API is
+`/api/v1/voice-platform/*`; the results from a `developer` session:
 
-**Net effect:** no user can currently call "Kirro Declare" and have a real conversation. Every live eval so far
-(L01-L08, L10, L12-L16) used the text "Chat with Agent" UI, never a phone session. This needs either the platform
-shipping its voice builder, or a deliberate scope decision to build a call-handling bridge outside AgenticOrg
-(a new always-on service receiving Twilio's call webhook, calling Vachana STT/TTS, and driving the agent through its
-chat API) — which is new top-level infrastructure this repo's own rules (`AGENTS.md`) say not to add without an ADR.
+| path                                                   | result                                |
+| ------------------------------------------------------ | ------------------------------------- |
+| `capabilities`                                         | `200` (below)                         |
+| `profiles`, `deployments`                              | `200 {"items":[],"total":0}`          |
+| `endpoints`, `release-approvals`                       | `403 Missing scope: agenticorg:admin` |
+| `integrations`, `integration-capabilities`, `bindings` | `500 INTERNAL_ERROR`                  |
+| `studio/sessions` (GET)                                | generic 401                           |
+
+`capabilities` (`schema_version: voice-platform.v2`): providers `openai`, `gemini`; channels `browser_webrtc`,
+`telephony_websocket`, `application_websocket`; `live_adapter_keys` `generic_json_audio_v1`, `ttbs_smartflo_v1`;
+`caller_verification` `registered_number`, `claimed_identifier`; `tool_risks` up to `medium_write`,
+`high_risk_tools_available: false`; `developer_browser_testing_available: true`;
+`release_promotion_required: true`. The platform's own voice therefore uses OpenAI or Gemini speech, not Gnani.
+It has no Twilio adapter, and a phone endpoint plus release approval both need admin. Whether a developer can create
+a profile, deployment and browser studio session has not been tried.
+
+**A generic 401 does not prove a route is missing.** `/api/v1/api-keys` and a made-up path both return the same
+generic 401, yet `/api/v1/org/api-keys` returns `403 Missing scope: agenticorg:admin`. API keys (needed by the
+`agenticorg` SDK, `Authorization: Bearer <key>`) are admin-only, and `/dashboard/settings` is admin-only.
+
+**How the chat panel drives the agent** (captured live): `POST /api/v1/chat/query {"query": "...", "agent_id": "<uuid>"}` with the session cookie, then `GET /api/v1/chat/history?agent_id=<uuid>`. The history is one flat
+thread per (user, agent) with no conversation id (326 messages on `Kirro Declare v4`), so each new message continues
+every earlier conversation. A 65%-confidence reply was delivered without an approval hold. The SDK's alternative is
+`POST /api/v1/agents/{id}/run {"action", "inputs", "context"}`, which is stateless; it has not been tried for
+multi-turn chat.
+
+**Net effect:** no user can currently call "Kirro Declare". A Gnani-powered phone call without admin needs a bridge
+outside AgenticOrg (Twilio media stream → Vachana STT → `chat/query` or `agents/{id}/run` → Vachana TTS). That is new
+infrastructure and needs an ADR (`AGENTS.md`).
 
 ### Resolved: **one untrusted custom connector per agent** — and the fix
 

@@ -42,37 +42,39 @@ tenant, or a platform engineer with run-trace visibility.
 **Blocks.** L17–L22 (every eval that specifically exercises the Workflow, not just a chat-driven agent) and the
 daily unattended run this Virtual Employee is meant to perform.
 
-## Bug 3 — no live call channel exists for an agent; the "Voice" feature is unshipped, not access-gated
+## Bug 3 — no phone channel for the agent: the voice platform's telephony parts are admin-only, and it has no Gnani option
 
-**Symptom.** The user must be able to call "Kirro Declare" and talk to it (Twilio for the call leg, Gnani/Vachana
-for STT/TTS, per `agent-spec.md`). The Agent detail page's own **Voice** tab states: *"Voice is governed at
-organisation level. Agent-specific voice assignment, call history, and operational controls will appear here when
-the voice use-case builder is available."* No phone number is bound to any agent in this tenant, and there is no
-other reachable UI (checked the full `developer`-role nav) or API (every guessed org/voice endpoint returns the
-platform's generic unknown-route 401, the same one a deliberately made-up path returns) to configure it. Every live
-eval so far (L01-L08, L10, L12-L16) used the text "Chat with Agent" UI, never a real call. Evidence: `platform-map.md`
-§"Vachana — re-registered...".
+**Symptom.** The user must be able to call "Kirro Declare" and talk to it, with Gnani/Vachana doing STT/TTS. No
+phone number is bound to any agent in this tenant; every live eval so far (L01-L08, L10, L12-L16) used the text
+"Chat with Agent" UI.
 
-**Separately, even a correctly credentialed non-MCP custom connector cannot pass this platform's own health check.**
-Re-registered `mcp_vachana_kirro` with a real, verified-working Gnani API key; `POST /connectors/{id}/health` reports
-`{"status": "not_configured", "reason": "No tools discovered for this MCP server"}` regardless — the health checker
-always probes for MCP tool discovery, even for a connector registered with the MCP checkbox off. This reconfirms
-ADR-011 Risk 2 on a real (not throwaway) connector: a plain-REST custom connector can never show healthy or expose
-tools here, whatever its credential.
+**What exists (corrected 2026-10-02; an earlier version of this entry wrongly said the feature was unshipped).**
+AgenticOrg has a full voice platform at `/dashboard/voice` (API `/api/v1/voice-platform/*`: profiles, bindings,
+deployments, endpoints, release approvals, a browser "studio"). The `/dashboard/voice` page itself returns
+*"Your current role can't view /dashboard/voice. REQUIRED ROLE admin"*. From a `developer` session,
+`GET /voice-platform/capabilities`, `/profiles` and `/deployments` answer `200`; `/endpoints` and
+`/release-approvals` answer `403 Missing scope: agenticorg:admin`; `/integrations` and `/bindings` answer `500`.
+`capabilities` reports:
 
-**Repo-side remedies tried and disproved:** re-registering Vachana with the MCP checkbox on (Vachana's API does not
-itself speak MCP, so this just produces 0 tools the same way); looking for an org-settings/voice link anywhere in the
-nav (none exists); probing plausible voice API paths directly (all return the same generic 401 as a nonexistent
-path, proving it is unbuilt rather than merely unauthorized for this role).
+- speech providers `openai`, `gemini` only — **no Gnani/Vachana**;
+- channels `browser_webrtc`, `telephony_websocket`, `application_websocket`; telephony adapters
+  `generic_json_audio_v1`, `ttbs_smartflo_v1` (no Twilio adapter);
+- `developer_browser_testing_available: true`, `release_promotion_required: true`,
+  `high_risk_tools_available: false`.
 
-**What's needed.** Either AgenticOrg ships the voice use-case builder referenced in its own UI, or `agenticorg:admin`
-confirms there is a reachable configuration path this account cannot see. Building a replacement call-handling
-bridge ourselves (receive Twilio's call webhook, call Vachana STT/TTS, drive the agent via its chat API) is new
-top-level infrastructure outside this repo's stated scope (`AGENTS.md`) and would need an explicit ADR and
-a deliberate scope decision, not a connector fix.
+So a developer can probably build and browser-test a voice deployment, though that is untested here. Publishing it
+to a phone endpoint needs admin, and the platform's voice runs on OpenAI or Gemini speech, not Gnani. The generic
+unknown-route 401 is no evidence that an endpoint is missing: `/api/v1/api-keys` returns that same 401 while
+`/api/v1/org/api-keys` returns `403 Missing scope`.
 
-**Blocks.** L11 (the phone-channel eval — there is no live channel to test blocking on), the demo's stated
-requirement that a user can call and talk to the agent.
+**Separately, a non-MCP custom connector cannot pass this platform's health check.** `mcp_vachana_kirro`,
+re-registered with a working Gnani key, reports `{"status": "not_configured", "reason": "No tools discovered for this MCP server"}`. The checker probes for MCP tool discovery even when the MCP checkbox is off (ADR-011 Risk 2).
+
+**What's needed.** For a Gnani-powered phone call without admin: a call bridge outside AgenticOrg (Twilio media
+stream → Vachana STT → the agent's chat API → Vachana TTS). That is new infrastructure and needs an ADR. For the
+platform-native route: `agenticorg:admin` for endpoints and release approval, and accepting OpenAI/Gemini speech.
+
+**Blocks.** L11 and the requirement that a user can call and talk to the agent.
 
 ## What was checked before concluding these need admin/platform help
 

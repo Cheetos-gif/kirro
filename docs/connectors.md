@@ -188,9 +188,8 @@ sides *different* run ids, or they will not see each other's pool. Single writer
   limitation, not a sign the credential is wrong.
 - Call leg is **Twilio** (native AgenticOrg connector, `make_call`/`send_sms`/`send_whatsapp`/`get_recordings`/
   `get_message_status`), not Gnani/Vachana — Vachana only turns the call audio into text and back. **Neither is
-  wired into an actual live call yet**: the Agent's "Voice" feature is unshipped on this platform
-  (`docs/agenticorg/platform-bugs.md` Bug 3), so no phone number is bound to any agent and no user can currently
-  call in.
+  wired into a live call yet**: AgenticOrg's own voice platform is admin-gated for phone endpoints and offers only
+  OpenAI/Gemini speech (`docs/agenticorg/platform-bugs.md` Bug 3), so no phone number is bound to any agent.
 - The old Inya client and the deterministic field extractor (`connectors/gnani/*`) were removed with the AgenticOrg
   migration — see ADR-011. Field parsing on the live path is the agent's own reasoning constrained by the Prompt
   (`docs/agenticorg/agent-spec.md`), not code in this repo (ADR-011 Risk 1).
