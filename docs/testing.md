@@ -57,6 +57,20 @@ Each case run in a fresh conversation. Verdicts are against `docs/agenticorg/eva
 Every reply so far lands around 55–65% confidence and is flagged `HITL`, i.e. under the configured 88% floor. Worth
 deciding whether that floor is right for a conversational agent, since it flags ordinary, correct turns.
 
+## Live failures and the changes they triggered (2026-10-02, agent `455907ea-d9eb-4fc2-aecd-e19369febdf8`)
+
+Deeper platform behaviour behind each of these is in `docs/agenticorg/platform-map.md` §10.
+
+| case                      | symptom                                                                                   | cause found                                                                           | change made                                                                                                                          |
+| ------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| L04 (tool call never ran) | every chat turn escalated `Trigger: chat_policy`, approving did not release the held call | the agent was still in **shadow** maturity; `chat_policy` was a symptom, not a policy | promoted the agent (needs ≥ 20 shadow samples **and** computed accuracy ≥ 0.800, both immutable via API)                             |
+| L04 (still failed after)  | *"The amount value is missing"*                                                           | our tool signature required `amount_value`, which the model does not reliably emit    | `create_mandate`/`execute` accept `amount_value` / `amount_paise` / `amount` and an int, numeric string or `{"value": N}`            |
+| L04 (mandate too small)   | mandate created with `value: 1200` for an agreed **Rs 1,200** (i.e. Rs 12)                | the model passed rupees where the contract is paise                                   | tool descriptions now state the multiplication rule with a worked example; verified `{"value": 120000}`                              |
+| L05 (false success)       | agent said *"you are now in the pool"* without calling `declare_interest`                 | prompt-following: the approval record lists only `create_mandate` for that turn       | `agent-spec.md` §3 steps 9–10 rewritten; **not yet live** — prompts are locked on active agents and cloning needs `agenticorg:admin` |
+
+Connector schema changes do not propagate on redeploy: the registered connector caches the discovered tools, so each
+change needs a new connector record plus a relink and a health check, or the agent refuses to run.
+
 ## Failure cases to test by hand once credentials exist
 
 Outbound call blocked by handset spam filter; Gnani silence/interruption timeouts; real Hinglish transcription of
