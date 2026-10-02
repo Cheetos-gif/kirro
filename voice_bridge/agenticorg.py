@@ -48,6 +48,20 @@ class AgentChat:
         # interleave two callers' declarations into one conversation.
         self._lock = asyncio.Lock()
         self._logged_in = False
+        # The conversation. `chat/query` starts a brand-new thread when this is absent, and a new
+        # thread means the agent has no idea what was just said — the platform's own chat panel
+        # sends it back on every turn (`assets/ChatPanel-*.js`: `...R ? {thread_id: R} : {}`) and
+        # stores `r.data.thread_id` from each reply. The first response hands one out.
+        self._thread_id: str | None = None
+
+    @property
+    def thread_id(self) -> str | None:
+        return self._thread_id
+
+    def start_new_thread(self) -> None:
+        """Forget the conversation. One call is one thread; a new call must not inherit the last
+        caller's declaration."""
+        self._thread_id = None
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -74,31 +88,35 @@ class AgentChat:
         log.info("agenticorg session established for %s", self._email)
 
     async def ask(self, text: str) -> str:
-        """Send one user turn, return the agent's reply text."""
+        """Send one user turn, return the agent's reply text.
+
+        The turn continues whatever conversation this client is in; the first reply creates it.
+        """
         async with self._lock:
             if not self._logged_in:
                 await self.login()
-            reply, status = await self._post(text)
+            reply, status, thread = await self._post(text)
             if status in (401, 403):
                 log.info("agenticorg session expired; re-authenticating")
                 await self.login()
-                reply, status = await self._post(text)
+                reply, status, thread = await self._post(text)
             if status != 200:
                 raise AgentChatError(f"chat/query failed: {status} {reply[:200]}")
+            if thread:
+                self._thread_id = thread
             return reply
 
-    async def _post(self, text: str) -> tuple[str, int]:
+    async def _post(self, text: str) -> tuple[str, int, str | None]:
         headers, extra = self._csrf_fields()
-        response = await self._client.post(
-            "/api/v1/chat/query",
-            json={"query": text, "agent_id": self._agent_id, **extra},
-            headers=headers,
-        )
+        body: dict[str, object] = {"query": text, "agent_id": self._agent_id, **extra}
+        if self._thread_id:
+            body["thread_id"] = self._thread_id
+        response = await self._client.post("/api/v1/chat/query", json=body, headers=headers)
         if response.status_code != 200:
-            return response.text, response.status_code
+            return response.text, response.status_code, None
         try:
             data = response.json()
         except ValueError:
             raise AgentChatError("chat/query returned a non-JSON body") from None
         answer = data.get("answer") or data.get("text") or ""
-        return str(answer).strip(), response.status_code
+        return str(answer).strip(), response.status_code, data.get("thread_id")

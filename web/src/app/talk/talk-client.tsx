@@ -11,10 +11,12 @@ import {
 } from '@livekit/components-react';
 import '@livekit/components-styles';
 import { ConnectionState } from 'livekit-client';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
+export type TranscriptLine = { mine: boolean; text: string };
 
 const STATE_LABEL: Record<string, string> = {
   initializing: 'Connecting…',
@@ -24,15 +26,33 @@ const STATE_LABEL: Record<string, string> = {
   speaking: 'Speaking',
 };
 
+/** Plain text for the clipboard and the download — one line per turn, speaker-prefixed. */
+export function transcriptAsText(lines: TranscriptLine[], startedAt: Date | null): string {
+  const header = startedAt ? `KIRRO voice transcript — ${startedAt.toLocaleString()}\n\n` : '';
+  return header + lines.map(line => `${line.mine ? 'You' : 'KIRRO'}: ${line.text}`).join('\n\n') + '\n';
+}
+
 /**
- * The live call: LiveKit carries the audio, the agent worker on the other side runs Gnani speech and
- * the AgenticOrg agent (ADR-017). This component owns nothing but the connection and the captions.
+ * Inside the room: publishes the microphone, renders the visualiser, and reports each finished turn
+ * up to the parent so the transcript outlives the call.
  */
-function Call() {
+function Call({ onTurn }: { onTurn: (line: TranscriptLine) => void }) {
   const { state, audioTrack } = useVoiceAssistant();
   const connection = useConnectionState();
   const transcriptions = useTranscriptions();
   const { localParticipant } = useLocalParticipant();
+  // LiveKit re-emits the same segment as it is revised; this keys what has already been forwarded.
+  const forwarded = useRef(new Set<string>());
+
+  useEffect(() => {
+    for (const line of transcriptions) {
+      const mine = line.participantInfo.identity === localParticipant.identity;
+      const key = `${mine ? 'me' : 'them'}|${line.text}`;
+      if (forwarded.current.has(key)) continue;
+      forwarded.current.add(key);
+      onTurn({ mine, text: line.text });
+    }
+  }, [transcriptions, localParticipant.identity, onTurn]);
 
   const label =
     connection === ConnectionState.Connected
@@ -42,42 +62,17 @@ function Call() {
         : 'Not connected';
 
   return (
-    <div className="flex flex-col gap-4">
+    <>
       <span className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
         {label}
       </span>
-
-      {/* LiveKit's own visualiser, driven by the agent's audio track. */}
       <BarVisualizer
         state={state}
         trackRef={audioTrack}
         barCount={44}
         className="h-24 w-full rounded-2xl border border-border bg-muted/20 px-4 [--lk-fg:var(--primary)]"
       />
-
-      <div className="max-h-80 min-h-24 overflow-y-auto rounded-2xl border border-border p-4">
-        {transcriptions.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Nothing yet. Say what you want to book — the event, the date, your group size, and the
-            most you will pay per person.
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-3">
-            {transcriptions.map((line, index) => {
-              const mine = line.participantInfo.identity === localParticipant.identity;
-              return (
-                <li key={index} className="text-sm">
-                  <span className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
-                    {mine ? 'You' : 'KIRRO'}
-                  </span>
-                  <p className={mine ? 'text-muted-foreground' : 'text-foreground'}>{line.text}</p>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-    </div>
+    </>
   );
 }
 
@@ -85,10 +80,30 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const [lines, setLines] = useState<TranscriptLine[]>([]);
+  const [copied, setCopied] = useState(false);
+  const [startedAt, setStartedAt] = useState<Date | null>(null);
+  const scrollBox = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    scrollBox.current?.scrollTo({ top: scrollBox.current.scrollHeight });
+  }, [lines]);
+
+  const onTurn = useCallback((line: TranscriptLine) => {
+    setLines(previous =>
+      previous.length && previous[previous.length - 1].text === line.text && previous[previous.length - 1].mine === line.mine
+        ? previous
+        : [...previous, line],
+    );
+  }, []);
 
   const start = useCallback(async () => {
     setConnecting(true);
     setError(null);
+    // A new call is a new conversation, so the log starts empty too.
+    setLines([]);
+    setCopied(false);
+    setStartedAt(new Date());
     try {
       const response = await fetch('/api/voice/token', { method: 'POST' });
       const body = (await response.json()) as { token?: string; error?: string };
@@ -106,6 +121,26 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
     setError(null);
   }, []);
 
+  const copy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(transcriptAsText(lines, startedAt));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError('The browser blocked clipboard access. Select the text and copy it by hand.');
+    }
+  }, [lines, startedAt]);
+
+  const download = useCallback(() => {
+    const blob = new Blob([transcriptAsText(lines, startedAt)], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `kirro-transcript-${(startedAt ?? new Date()).toISOString().slice(0, 19).replace(/[:T]/g, '-')}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }, [lines, startedAt]);
+
   return (
     <Card>
       <CardHeader>
@@ -121,13 +156,12 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
             serverUrl={serverUrl}
             token={token}
             connect
-            // Publishes the microphone and plays the agent through the room.
             audio
             onDisconnected={stop}
             className="flex flex-col gap-4"
           >
             <RoomAudioRenderer />
-            <Call />
+            <Call onTurn={onTurn} />
             <Button variant="outline" className="w-fit" onClick={stop}>
               End call
             </Button>
@@ -135,7 +169,7 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
         ) : (
           <div className="flex items-center gap-3">
             <Button onClick={start} disabled={connecting}>
-              {connecting ? 'Connecting…' : 'Start call'}
+              {connecting ? 'Connecting…' : lines.length ? 'Start again' : 'Start call'}
             </Button>
             <span className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
               Not connected
@@ -144,6 +178,49 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
         )}
 
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+        <section className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
+              Transcript{lines.length ? ` · ${lines.length} turns` : ''}
+            </h2>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="xs" onClick={copy} disabled={!lines.length}>
+                {copied ? 'Copied' : 'Copy'}
+              </Button>
+              <Button variant="ghost" size="xs" onClick={download} disabled={!lines.length}>
+                Download
+              </Button>
+            </div>
+          </div>
+
+          {/* selectable on purpose: if the clipboard API is blocked, the text is still there to grab */}
+          <div
+            ref={scrollBox}
+            aria-live="polite"
+            className="max-h-80 min-h-24 overflow-y-auto rounded-2xl border border-border p-4"
+          >
+            {lines.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Nothing yet. Say what you want to book — the event, the date, your group size, and
+                the most you will pay per person.
+              </p>
+            ) : (
+              <ul className="flex flex-col gap-3">
+                {lines.map((line, index) => (
+                  <li key={index} className="text-sm">
+                    <span className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
+                      {line.mine ? 'You' : 'KIRRO'}
+                    </span>
+                    <p className={line.mine ? 'text-muted-foreground' : 'text-foreground'}>
+                      {line.text}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
 
         <p className="text-xs text-muted-foreground">
           Your browser will ask for the microphone. One call at a time — the agent keeps a single

@@ -57,6 +57,9 @@ class _Platform:
         self.fail_query = fail_query
         self.logins = 0
         self.queries: list[dict] = []
+        # Each chat/query without a thread_id starts a new one, which is the platform's actual
+        # behaviour and the reason a client that forgets to echo it loses all context.
+        self.threads_created = 0
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
@@ -68,15 +71,21 @@ class _Platform:
                 headers={"set-cookie": f"agenticorg_csrf={CSRF}; Path=/"},
             )
         if path == "/api/v1/chat/query":
+            body = json.loads(request.content)
+            thread = body.get("thread_id")
+            if not thread:
+                self.threads_created += 1
+                thread = f"chat:{self.threads_created:04d}"
             self.queries.append(
                 {
-                    "body": json.loads(request.content),
+                    "body": body,
+                    "thread": thread,
                     "csrf_header": request.headers.get("x-csrf-token"),
                 }
             )
             if self.fail_query:
                 return httpx.Response(500, text="upstream boom")
-            return httpx.Response(200, json={"answer": self.answer, "confidence": 0.8})
+            return httpx.Response(200, json={"answer": self.answer, "confidence": 0.8, "thread_id": thread})
         return httpx.Response(404)
 
     def chat(self) -> AgentChat:
@@ -161,6 +170,38 @@ def test_the_agent_client_reports_a_failed_turn() -> None:
     chat = _Platform(fail_query=True).chat()
     with pytest.raises(AgentChatError):
         _run(chat.ask("anything"))
+    _run(chat.aclose())
+
+
+def test_a_turn_continues_the_same_conversation() -> None:
+    """Without this the agent forgets the previous sentence — every turn is a new thread."""
+    platform = _Platform(answer="Which event or venue are you interested in?")
+    chat = platform.chat()
+
+    _run(chat.ask("I want a tennis court on Saturday"))
+    _run(chat.ask("for four people"))
+
+    first, second = platform.queries
+    # The first turn opens the thread; the second must carry the thread the reply handed back.
+    assert "thread_id" not in first["body"]
+    assert second["body"]["thread_id"] == first["thread"]
+    assert platform.threads_created == 1, "the second turn must not start a new conversation"
+    assert chat.thread_id == first["thread"]
+    _run(chat.aclose())
+
+
+def test_a_new_call_starts_a_fresh_conversation() -> None:
+    """One call is one thread: a new caller must not inherit the previous caller's declaration."""
+    platform = _Platform()
+    chat = platform.chat()
+
+    _run(chat.ask("first caller"))
+    chat.start_new_thread()
+    assert chat.thread_id is None
+    _run(chat.ask("second caller"))
+
+    assert platform.threads_created == 2
+    assert "thread_id" not in platform.queries[1]["body"]
     _run(chat.aclose())
 
 

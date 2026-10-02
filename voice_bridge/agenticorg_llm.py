@@ -6,9 +6,12 @@ This adapter makes that agent *look* like an LLM to the pipeline: it takes the n
 the LiveKit chat context, posts it to AgenticOrg's chat API, and streams the agent's answer back as
 a single chunk.
 
-What it deliberately does not do: keep its own copy of the conversation. AgenticOrg owns the
-dialogue state, so only the newest user utterance is ever sent. The local transcript LiveKit keeps is
-for captions, not a second source of truth.
+What it deliberately does not do: keep its own copy of the conversation. AgenticOrg owns the dialogue
+state, and it does that by *thread* — so this adapter sends the newest user turn plus the `thread_id`
+the agent's last reply returned. A turn sent without that id starts a brand-new conversation, which is
+what it looked like when the agent asked for the same field over and over: it had genuinely never
+heard the previous sentence. The local transcript LiveKit keeps is for captions, not a second source
+of truth.
 """
 
 from __future__ import annotations

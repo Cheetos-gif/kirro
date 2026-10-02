@@ -69,6 +69,8 @@ def build_session(config: VoiceConfig) -> AgentSession:
 async def entrypoint(ctx: JobContext) -> None:
     config = VoiceConfig.from_env()
     await ctx.connect()
+    # Built per job, so each call gets its own AgenticOrg conversation. Sharing one would leak the
+    # previous caller's declaration into the next one.
     session = build_session(config)
     await session.start(
         agent=Agent(instructions=INSTRUCTIONS),
