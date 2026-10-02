@@ -855,7 +855,12 @@ So the six schema-side remedies above were all tested inside the failing window,
 that appeared to work at 02:05 was tested inside the good one. That is why the table's remedies cannot be read as
 causal: **the pass-through changed on the platform's side at around 02:40**, and nothing in this repo changed with it.
 That is the observation to correlate with the platform's own deploys, and it is the first thing to re-test before
-concluding anything from a new remedy.
+concluding anything from a new remedy. (Re-tested at 03:34: still null.)
+
+**The platform's own copy of the schema is correct**, which rules out staleness and makes re-registration pointless as
+a remedy. `GET /api/v1/connectors/{id}` returns `tool_schemas`, and for the current connector the venue tools match
+what the mock serves exactly — `list_pool_entries` with an untyped `release_id` defaulting to null, `create_mandate`
+with its five amount aliases. So the platform knows the parameter, knows its name, and sends null anyway.
 
 Two candidate mechanisms were tested and disproved along the way, and are worth recording so they are not re-tried:
 
