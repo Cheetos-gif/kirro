@@ -80,10 +80,16 @@ Each event carries an `organiser_id` and a `status` (`draft`|`published`); each 
   `quantity x price_per_person_paise` against the `mandate_id` in the body, confirms the booking. Returns
   `{release_id, slot_id, quantity, hold_id, payment_id, booking_ref, status: "CONFIRMED", amount_paise}`. A
   `fair_draw` release is refused **server-side** with 409 `FAIR_DRAW_REQUIRED` — the only way to take one is the
-  declared-interest chain (declare → draw → hold → capture → confirm), so no caller can bypass the draw. Unknown
-  release/mandate → 404, bad slot/quantity or missing `mandate_id` → 400, sold out / over capacity → 409, underfunded
-  mandate → 402 `INSUFFICIENT_BALANCE`, a failed capture → 402 `PAYMENT_FAILED` (the hold is released in every
-  refusal path, so a refused buy leaves no capacity held and no charge).
+  declared-interest chain (declare → draw → hold → capture → confirm), so no caller can bypass the draw. An optional
+  `user_contact` is stamped on the hold, booking and payment so the portal dashboard can attribute the purchase.
+  Unknown release/mandate → 404, bad slot/quantity or missing `mandate_id` → 400, sold out / over capacity → 409,
+  underfunded mandate → 402 `INSUFFICIENT_BALANCE`, a failed capture → 402 `PAYMENT_FAILED` (the hold is released in
+  every refusal path, so a refused buy leaves no capacity held and no charge).
+
+`GET /__admin/state?run_id=&user_contact=` adds a `user` block for that contact — their declarations (scanned: pool
+entries carry `user_contact` from the declare body), instant-buy bookings and payments, and nothing else. Without
+`user_contact` the response is the plain run-wide snapshot. This is the portal dashboard's data source, kept on the
+harness endpoint on purpose rather than adding a per-user business route.
 
 These are portal-facing writes, not agent-facing: they are deliberately **not** mirrored on the MCP surface
 (`mock_server/mcp_surface.py`), which exists only for the AgenticOrg agent — exposing create/approve/buy tools there
