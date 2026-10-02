@@ -211,12 +211,10 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 
     @mcp.tool(
         description=(
-            "Enter the user's bid into a release's declared-interest pool. "
-            "release_id is required (the id from list_releases, or an event name such as badminton). "
-            "group_size, min_group_size and max_price_paise are required; max_price_paise is the per-person "
-            "ceiling in paise, so Rs 300 per person is 30000. acceptable_slot_ids is optional: leave it empty to "
-            "bid for every slot in the release. You must call this to pool a bid: never tell the user they are in "
-            "the pool unless this call has returned success."
+            "Enter the user's bid into a release's declared-interest pool. Pass release_id (the id from "
+            "list_releases, e.g. rel_badminton_sat), group_size, min_group_size and max_price_paise — the "
+            "per-person ceiling in PAISE, so Rs 300 per person is 30000. Acceptable_slot_ids is optional; empty "
+            "means every slot in the release. Never tell the user they are in the pool unless this returns success."
         )
     )
     async def declare_interest(
