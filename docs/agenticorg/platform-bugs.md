@@ -1,8 +1,8 @@
 # AgenticOrg platform bugs — confirmed, not fixable from a `developer`-role account
 
-Two reproducible bugs on `agenticorg.hackathon.pinelabs.com` itself, not in this repo's code. Full evidence trail is
-in `platform-map.md`; this file is the short, stable index — what's broken, what was tried, what's needed to fix it.
-Also tracked in [issue #10](https://github.com/Cheetos-gif/kirro/issues/10).
+Three reproducible issues on `agenticorg.hackathon.pinelabs.com` itself, not in this repo's code. Full evidence trail
+is in `platform-map.md`; this file is the short, stable index — what's broken, what was tried, what's needed to fix
+it. Also tracked in [issue #10](https://github.com/Cheetos-gif/kirro/issues/10).
 
 ## Bug 1 — tool-call arguments arrive corrupted or null, intermittently, per tool
 
@@ -41,6 +41,38 @@ tenant, or a platform engineer with run-trace visibility.
 
 **Blocks.** L17–L22 (every eval that specifically exercises the Workflow, not just a chat-driven agent) and the
 daily unattended run this Virtual Employee is meant to perform.
+
+## Bug 3 — no live call channel exists for an agent; the "Voice" feature is unshipped, not access-gated
+
+**Symptom.** The user must be able to call "Kirro Declare" and talk to it (Twilio for the call leg, Gnani/Vachana
+for STT/TTS, per `agent-spec.md`). The Agent detail page's own **Voice** tab states: *"Voice is governed at
+organisation level. Agent-specific voice assignment, call history, and operational controls will appear here when
+the voice use-case builder is available."* No phone number is bound to any agent in this tenant, and there is no
+other reachable UI (checked the full `developer`-role nav) or API (every guessed org/voice endpoint returns the
+platform's generic unknown-route 401, the same one a deliberately made-up path returns) to configure it. Every live
+eval so far (L01-L08, L10, L12-L16) used the text "Chat with Agent" UI, never a real call. Evidence: `platform-map.md`
+§"Vachana — re-registered...".
+
+**Separately, even a correctly credentialed non-MCP custom connector cannot pass this platform's own health check.**
+Re-registered `mcp_vachana_kirro` with a real, verified-working Gnani API key; `POST /connectors/{id}/health` reports
+`{"status": "not_configured", "reason": "No tools discovered for this MCP server"}` regardless — the health checker
+always probes for MCP tool discovery, even for a connector registered with the MCP checkbox off. This reconfirms
+ADR-011 Risk 2 on a real (not throwaway) connector: a plain-REST custom connector can never show healthy or expose
+tools here, whatever its credential.
+
+**Repo-side remedies tried and disproved:** re-registering Vachana with the MCP checkbox on (Vachana's API does not
+itself speak MCP, so this just produces 0 tools the same way); looking for an org-settings/voice link anywhere in the
+nav (none exists); probing plausible voice API paths directly (all return the same generic 401 as a nonexistent
+path, proving it is unbuilt rather than merely unauthorized for this role).
+
+**What's needed.** Either AgenticOrg ships the voice use-case builder referenced in its own UI, or `agenticorg:admin`
+confirms there is a reachable configuration path this account cannot see. Building a replacement call-handling
+bridge ourselves (receive Twilio's call webhook, call Vachana STT/TTS, drive the agent via its chat API) is new
+top-level infrastructure outside this repo's stated scope (`AGENTS.md`) and would need an explicit ADR and
+a deliberate scope decision, not a connector fix.
+
+**Blocks.** L11 (the phone-channel eval — there is no live channel to test blocking on), the demo's stated
+requirement that a user can call and talk to the agent.
 
 ## What was checked before concluding these need admin/platform help
 

@@ -448,6 +448,42 @@ Registered as `twilio_kirro`, `PUT auth_config` with real credentials, confirmed
 test token, Twilio API keys don't expire on a short cycle, so this should stay healthy without the WhatsApp-style
 manual refresh.
 
+### Vachana — re-registered, and the live call channel itself is platform-unavailable, 2026-10-02
+
+`mcp_vachana_kirro` had disappeared from the tenant (9 connectors present, not the expected 10) — most likely
+collateral damage from the earlier cleanup that deleted "5 orphaned pre-aggregate connectors" (§ the consolidation
+note on `mcp_kirro_all_v22`), which evidently caught Vachana along with the venue/pinelabs/allocator/delhivery
+singles it was meant to retire. Re-registered exactly per `docs/connectors.md`'s Vachana section: `Custom / Generic Connector`, name `mcp_vachana_kirro` (the `mcp_` prefix is required by the registry-name rule even with the MCP
+checkbox off — see above), category `comms`, `https://api.vachana.ai`, `api_key` auth, rate limit 20/min, the real
+`VACHANA_API_KEY_ID` key, extra config documenting the TTS/STT/WS paths. `POST /api/v1/connectors` returned `201`,
+`has_credentials: true`.
+
+**The platform's own health check cannot verify it, and this reconfirms Risk 2 with a real (not throwaway) connector.**
+`POST /connectors/{id}/health` returns `{"status": "not_configured", "healthy": false, "reason": "No tools discovered for this MCP server"}` — the health checker treats every *custom* connector as an MCP server to probe regardless of
+the `is-mcp` checkbox, so a plain-REST custom connector can never show healthy on this platform no matter how valid
+its credential is. This matches the `platform-map.md` §"non-MCP connector" finding from earlier in this file,
+now reproduced on the real connector rather than a disposable probe: `tool_functions: []`, and there is no reachable
+path (confirmed 401 OAuth-gated) to declare operations for it by hand.
+
+**The actual blocker for a live call is upstream of Vachana, and it is not an access problem.** The Agent detail
+page has a **Voice** tab (`Overview | Workspace | Config | Workflow Config | Prompt | Shadow | Cost | Scopes | Learning | Voice`) whose entire content, verbatim, is: *"Voice is governed at organisation level. Agent-specific
+voice assignment, call history, and operational controls will appear here when the voice use-case builder is
+available."* No such builder exists anywhere else reachable in the `developer`-role nav (checked `/dashboard` and
+every sidebar group for a voice/organization/settings link; none exists), and every guessed org-level voice API path
+(`/api/v1/voice`, `/api/v1/org/voice`, `/api/v1/voice-use-cases`, …) returns the platform's generic unknown-route
+401, identical to a deliberately made-up path — i.e. this isn't a permissions wall, the feature itself is not shipped
+in this tenant yet. Twilio (healthy, `make_call`/`send_sms`/`send_whatsapp` tool functions already populated from
+its native registry entry, no discovery needed) and Vachana (healthy credential, inert connector) are both the
+correct pieces per `agent-spec.md`'s channel-level design, but nothing in the product currently binds a phone number
+to this agent or threads Vachana's STT/TTS into that call — that plumbing is the unbuilt "voice use-case builder"
+itself, not something a connector registration or an agent ACL change can substitute for.
+
+**Net effect:** no user can currently call "Kirro Declare" and have a real conversation. Every live eval so far
+(L01-L08, L10, L12-L16) used the text "Chat with Agent" UI, never a phone session. This needs either the platform
+shipping its voice builder, or a deliberate scope decision to build a call-handling bridge outside AgenticOrg
+(a new always-on service receiving Twilio's call webhook, calling Vachana STT/TTS, and driving the agent through its
+chat API) — which is new top-level infrastructure this repo's own rules (`AGENTS.md`) say not to add without an ADR.
+
 ### Resolved: **one untrusted custom connector per agent** — and the fix
 
 Tested on a fresh agent (created with only `mcp_pinelabs_kirro` + `mcp_venue_kirro`, no whatsapp, so no unhealthy

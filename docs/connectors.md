@@ -179,11 +179,18 @@ sides *different* run ids, or they will not see each other's pool. Single writer
   registered connector — must send a normal User-Agent or it looks like an auth failure.
 - Rate limiting is real: `429 {"error_code":"RATE_LIMITED", …}` was hit during verification, so do not assume the
   default 100 RPM allowance.
-- Register on AgenticOrg via `Connectors > Register Connector > Custom/Generic Connector`: Base URL
-  `https://api.vachana.ai`, Auth Type `Api Key`, header `X-API-Key-ID`, MCP checkbox **off** (plain REST/WS, not an
-  MCP server). The key is entered in that form only — never in this repo (runbook §8).
+- Registered on AgenticOrg via `Connectors > Register Connector > Custom/Generic Connector` as **`mcp_vachana_kirro`**
+  (the `mcp_` prefix is required — see `setup-runbook.md` §2's naming rule): Base URL `https://api.vachana.ai`, Auth
+  Type `Api Key`, header `X-API-Key-ID`, MCP checkbox **off** (plain REST/WS, not an MCP server). The key is entered
+  in that form only — never in this repo. **The platform's own health check cannot verify a non-MCP custom
+  connector** — it always probes for MCP tool discovery regardless of the checkbox, so this connector reports
+  `not_configured` even with a valid credential (`docs/agenticorg/platform-bugs.md` Bug 3); that is a platform
+  limitation, not a sign the credential is wrong.
 - Call leg is **Twilio** (native AgenticOrg connector, `make_call`/`send_sms`/`send_whatsapp`/`get_recordings`/
-  `get_message_status`), not Gnani/Vachana — Vachana only turns the call audio into text and back.
+  `get_message_status`), not Gnani/Vachana — Vachana only turns the call audio into text and back. **Neither is
+  wired into an actual live call yet**: the Agent's "Voice" feature is unshipped on this platform
+  (`docs/agenticorg/platform-bugs.md` Bug 3), so no phone number is bound to any agent and no user can currently
+  call in.
 - The old Inya client and the deterministic field extractor (`connectors/gnani/*`) were removed with the AgenticOrg
   migration — see ADR-011. Field parsing on the live path is the agent's own reasoning constrained by the Prompt
   (`docs/agenticorg/agent-spec.md`), not code in this repo (ADR-011 Risk 1).
