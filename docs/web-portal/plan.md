@@ -1,7 +1,8 @@
 # Web portal — implementation plan
 
 Companion to `docs/decisions/ADR-015-web-portal-for-organisers-users-and-stats.md`. That ADR is the what/why; this
-is the how. Planning only — nothing here is built yet.
+is the how. **Implemented** — `mock_server` (§1–§2) and `web/` (§0, §3–§4) are built; see the ADR's status note for
+the two amendments made beyond this plan (per-user `/__admin/state` view, `GET /venue/organisers`).
 
 ## 0. Starting point
 

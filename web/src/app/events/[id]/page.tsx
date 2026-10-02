@@ -1,0 +1,147 @@
+import { notFound } from 'next/navigation';
+
+import { SignInButton } from '@/components/auth-buttons';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import type { Viewer } from '@/lib/auth/roles';
+import { currentViewer } from '@/lib/auth/roles';
+import * as api from '@/lib/kirro/api';
+import { formatDateTime, formatPaise } from '@/lib/kirro/format';
+import type { Slot } from '@/lib/kirro/schemas';
+
+import { BuyForm } from './buy-form';
+import { DeclareForm } from './declare-form';
+
+async function ActionPanel({
+  releaseId,
+  mode,
+  slots,
+  viewer,
+}: {
+  releaseId: string;
+  mode: 'fair_draw' | 'instant_buy';
+  slots: Slot[];
+  viewer: Viewer | null;
+}) {
+  if (!viewer) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Sign in to take part</CardTitle>
+          <CardDescription>
+            {mode === 'fair_draw'
+              ? 'Declaring interest needs an account so the draw can reach you.'
+              : 'Buying needs an account so the booking is yours.'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SignInButton />
+        </CardContent>
+      </Card>
+    );
+  }
+  return mode === 'instant_buy' ? (
+    <BuyForm releaseId={releaseId} slots={slots} />
+  ) : (
+    <DeclareForm releaseId={releaseId} slots={slots} />
+  );
+}
+
+export default async function EventPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const viewer = await currentViewer();
+
+  let event;
+  let releases;
+  try {
+    const events = await api.listEvents();
+    event = events.find(candidate => candidate.event_id === id);
+    if (!event) notFound();
+    const summaries = await api.listReleases({ event_id: id });
+    releases = await Promise.all(summaries.map(summary => api.getRelease(summary.release_id)));
+  } catch (error) {
+    return (
+      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-16">
+        <Alert variant="destructive">
+          <AlertTitle>Could not load this event</AlertTitle>
+          <AlertDescription>
+            {error instanceof Error ? error.message : 'Mock server unreachable.'}
+          </AlertDescription>
+        </Alert>
+      </main>
+    );
+  }
+
+  return (
+    <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-10">
+      <header className="mb-6">
+        <h1 className="font-heading text-2xl font-semibold tracking-tight">{event.name}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {event.fulfilment === 'physical' ? 'Physical fulfilment' : 'Digital fulfilment'} · status{' '}
+          {event.status}
+        </p>
+      </header>
+
+      <div className="flex flex-col gap-6">
+        {releases.map(release => (
+          <Card key={release.release_id}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <span>{release.release_id}</span>
+                <Badge variant={release.allocation_mode === 'fair_draw' ? 'default' : 'secondary'}>
+                  {release.allocation_mode === 'fair_draw' ? 'Fair draw' : 'Instant buy'}
+                </Badge>
+              </CardTitle>
+              <CardDescription>Opens {formatDateTime(release.opens_at)}</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <ul className="flex flex-col gap-2 text-sm">
+                {release.slots.map(slot => (
+                  <li
+                    key={slot.slot_id}
+                    className="flex items-baseline justify-between gap-4 border-b pb-2"
+                  >
+                    <span>
+                      {slot.label}
+                      <span className="block text-xs text-muted-foreground">
+                        {formatDateTime(slot.starts_at)} · {slot.slot_id}
+                      </span>
+                    </span>
+                    <span className="text-right whitespace-nowrap">
+                      {formatPaise(slot.price_per_person_paise)}
+                      <span className="block text-xs text-muted-foreground">
+                        {slot.capacity} left
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {release.allocation_mode === 'fair_draw' ? (
+                <Alert>
+                  <AlertTitle>Scarce inventory — allocated by draw</AlertTitle>
+                  <AlertDescription>
+                    Declaring interest is not a booking. Everyone in the pool gets the same fair,
+                    seeded draw; seats are confirmed afterwards.
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+              <ActionPanel
+                releaseId={release.release_id}
+                mode={release.allocation_mode}
+                slots={release.slots}
+                viewer={viewer}
+              />
+            </CardContent>
+          </Card>
+        ))}
+        {releases.length === 0 ? (
+          <Alert>
+            <AlertTitle>No releases yet</AlertTitle>
+            <AlertDescription>This event has no bookable release at the moment.</AlertDescription>
+          </Alert>
+        ) : null}
+      </div>
+    </main>
+  );
+}

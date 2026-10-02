@@ -1,8 +1,16 @@
-# ADR-015: A web portal for organisers, users, and stats — planning only
+# ADR-015: A web portal for organisers, users, and stats
 
-Status: accepted (2026-10-02) — **planning only, not yet implemented.** Code changes described here are future
-work; this ADR and `docs/web-portal/*` are the implementation spec for that work, mirroring how ADR-011 and
-`docs/agenticorg/*` work together.
+Status: accepted and implemented (2026-10-02). `mock_server`'s events/releases moved into the store and gained the
+portal routes (`docs/connectors.md` §"Organisers, events and releases"), and `web/` exists at the repo root. This
+ADR and `docs/web-portal/plan.md` remain the spec; deviations made during implementation are listed at the end.
+
+Two amendments were needed beyond the plan:
+
+- The dashboard's per-user view (declarations, bookings, payments) lives on the harness endpoint
+  `GET /__admin/state?user_contact=` rather than a per-user business route. Instant buy stamps an optional
+  `user_contact` on the hold/booking/payment so the view has something to attribute.
+- `GET /venue/organisers` (a read companion to the create/approve routes) was added — the admin approvals page
+  cannot list pending requests without it.
 
 ## Context
 
@@ -50,10 +58,10 @@ decision log and eval-run artifacts that no longer exist). None of that backend 
   (`dashboard/eval-runs.tsx`, `check-name.tsx`, the `/declare` free-text flow) do not carry forward — they're
   artifacts of the pre-ADR-011 architecture.
 
-## Open questions
+## Open questions (resolved at implementation)
 
-- Whether admin-side organiser approval is a real workflow (queue, notify) or, for the demo, just a flag an admin
-  flips directly — leaning toward the latter given the scale this needs to work at, not yet decided.
-- Whether `instant_buy` events need their own scenario-table coverage in `mock_server` (timeout/malformed/etc., like
-  the `fair_draw` chain has) or whether reusing the existing scenario machinery on the new route is sufficient —
-  likely the latter, not yet verified.
+- Admin approval is the flag the admin flips directly (`POST /venue/organisers/{id}/approve` from `/admin`), not a
+  queue/notify workflow. Right call at this scale; revisit only if organisers are onboarded at volume.
+- `instant_buy` needs no scenario-table additions: the existing scenarios apply to `/venue/releases/{id}/buy`
+  unchanged (the hold path and the shared capture path), verified by `tests/test_mock_server.py` covering
+  `no_inventory` and `payment_failure` on that route.

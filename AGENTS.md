@@ -21,6 +21,9 @@ What is here:
 - `tests/` — mock-server scenarios and allocator properties.
 - `docs/` — the spec: `docs/agenticorg/` (agent, workflow, runbook, evals), `docs/decisions/` (ADRs), plus
   architecture, connector, testing and submission notes.
+- `web/` — the Next.js web portal (ADR-015): public listings, declared-interest and instant-buy flows, user
+  dashboard, organiser surface, admin surface with scenario controls. A second caller of the mock, never a
+  decision-maker; server-side only. Deployed to Vercel, not this cluster.
 - `Dockerfile`, `k8s/`, `scripts/dev.sh` — how the mock server is built and run.
 
 The decision to move the brain out of this repo is ADR-011. It is planning-level: nothing in `docs/agenticorg/` has
@@ -59,6 +62,8 @@ tests/                 test_mock_server.py (scenarios, incl. a real uvicorn thre
                        test_mcp_surface.py (MCP tool catalogs + REST/MCP state parity)
 k8s/                   Deployment, Service, Ingress, NetworkPolicy (single service: kirro-mock)
 scripts/dev.sh         starts the mock server on :8081 in the foreground
+web/                   Next.js portal (ADR-015): listings, declare/instant-buy, dashboard, organiser, admin.
+                       Server-side only, talks to mock_server over HTTP; deployed to Vercel from the fork.
 docs/                  agenticorg/ (spec + platform-map.md, the AgenticOrg site/API reference), decisions/ (ADRs),
                        architecture.md, connectors.md, ...
 ```
@@ -104,6 +109,19 @@ Package names use underscores (`mock_server`) because Python cannot import hyphe
 1. Add tests in `tests/test_mock_server.py` covering the success path and at least one failure scenario.
 1. Keep the handler deterministic for a given `(run_id, scenario, request)`.
 
+## Web portal (`web/`)
+
+- Server-side only: pages and server actions call `mock_server` from the Next server; nothing about the mock is
+  exposed to the browser (server env `MOCK_API_URL`, never `NEXT_PUBLIC_*`).
+- Never bypass the fair-draw chain from the UI. `mock_server` enforces it (409 on `/buy` for a `fair_draw`
+  release); the UI renders the declare form for that mode, but correctness must not depend on that.
+- Reuse the vendored shadcn/Base UI components in `src/components/ui/` rather than hand-rolling markup.
+- Roles: user (default), organiser (an approved request), admin (`ADMIN_EMAILS` allowlist in env). Role is resolved
+  per request from mock state plus the allowlist, never stored in the mock.
+- Commits land in this repo and are mirrored to the fork for Vercel deploy.
+- Portal-facing writes (organisers/events/releases/buy) are deliberately **not** on the MCP surface — that exists
+  for the AgenticOrg agent.
+
 ## Testing rules
 
 - `uv run pytest` must pass offline: no keys, no network, no real credentials, no uvicorn bind to a public interface.
@@ -134,6 +152,14 @@ uv run pre-commit install           # one-time: wires the markdown-formatter com
 uv run pre-commit run --all-files
 uv run uvicorn mock_server.app:app --port 8081      # or:
 bash scripts/dev.sh                 # mock server on :8081 (GET /health)
+```
+
+The portal (optional; needs the mock running on :8081):
+
+```
+cd web && pnpm install && cp example.env .env.local   # fill in env once
+cd web && pnpm dev                  # portal on :3000
+cd web && pnpm type-check && pnpm lint && pnpm build
 ```
 
 Fish shell is the user default; scripts are bash (`bash scripts/dev.sh`).
