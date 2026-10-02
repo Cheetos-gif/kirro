@@ -33,6 +33,7 @@ from livekit.agents.types import NOT_GIVEN, NotGivenOr
 from livekit.agents.utils import shortuuid
 
 from voice_bridge.agenticorg import AgentChat, AgentChatError
+from voice_bridge.conversation_log import CallLogger
 
 log = logging.getLogger("voice_bridge.llm")
 
@@ -68,7 +69,9 @@ class AgenticOrgStream(LLMStream):
         try:
             answer = await chat.ask(text)
         except AgentChatError as exc:
-            log.warning("agent turn failed: %s", exc)
+            # The call's own logger, so a failed turn lands in that call's file too: this is the
+            # line that says "the caller heard the fallback", and it has to sit beside the turns.
+            chat.call_log.warning("agent turn failed: %s", exc)
             answer = "Sorry, I could not reach the booking agent just now. Please try again."
         if not answer:
             answer = "Sorry, I did not catch that. Could you say that again?"
@@ -83,9 +86,10 @@ class AgenticOrgStream(LLMStream):
 class AgenticOrgChat(LLM):
     """An `llm.LLM` whose completions come from the AgenticOrg agent."""
 
-    def __init__(self, *, client: AgentChat) -> None:
+    def __init__(self, *, client: AgentChat, call_id: str | None = None) -> None:
         super().__init__()
         self._client = client
+        self.call_log = CallLogger(log, {"call_id": call_id} if call_id else {})
 
     @property
     def model(self) -> str:
@@ -128,6 +132,7 @@ def build_llm(
 ) -> AgenticOrgChat:
     """Wire an `AgenticOrgChat` to a fresh HTTP client."""
     return AgenticOrgChat(
+        call_id=call_id,
         client=AgentChat(
             base_url=base_url,
             email=email,
@@ -135,7 +140,7 @@ def build_llm(
             agent_id=agent_id,
             timeout_s=timeout_s,
             call_id=call_id,
-        )
+        ),
     )
 
 

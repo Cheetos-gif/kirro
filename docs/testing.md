@@ -429,6 +429,26 @@ Reading a past call: `kubectl exec deploy/kirro-voice -n kirro -- cat /app/data/
 user's own speech is transcribed by Gnani and arrives as the `query` field of each turn — there is no separate
 audio recording.
 
+**Reading a past call without a cluster login (2026-10-03).** The same lines reach Loki — promtail ships every
+pod's stdout — so the same call is queryable from Grafana at `https://grafana.upayan.dev`, on the
+`KIRRO (voice channel + agent)` dashboard: paste the id into the `call_id` box (the `Recent calls` panel lists
+ids to copy). From there, one panel shows the call end to end — the greeting, each turn's `thread_id`,
+`latency_ms` and redacted query/answer, every `pipeline error`, and the close reason — beside calls
+started/ended, pipeline errors by stage, Gnani TTS/STT error counts, AgenticOrg turn latency p50/p95, and the
+`kirro` pods' CPU/memory/restarts.
+
+The dashboard's log queries filter on the `filename` label
+(`{filename=~"/var/log/containers/.+_kirro_.+"}`) because promtail's `namespace`/`pod`/`container` extraction is
+broken cluster-wide: its `regex` stage reads only the extracted map and its `template` stage has no `.Labels`, so
+the config's `{{ index .Labels "filename" }}` can never resolve. Every dashboard in the cluster works around
+this the same way; fixing promtail is a separate change (it touches ingestion for all namespaces and has to keep
+`filename` for the dashboards that rely on it).
+
+**Why `filename`, and a caveat.** Loki holds the last 168h (`loki-configmap.yaml`), so a call older than a week
+is not in Grafana any more — the PVC file is the long-term copy. And the mock's own request log
+(`/app/data/logs/mock/<run_id>.jsonl`) is *not* in Loki: it is written to the PVC, not to stdout, and promtail
+only reads `/var/log/containers`. Reading it still needs `kubectl exec`.
+
 Tests: `test_conversation_log_writes_one_file_per_call`,
 `test_call_logger_merges_its_fields_with_the_call_sites`, `test_agent_chat_tags_every_turn_with_the_call_id`.
 
