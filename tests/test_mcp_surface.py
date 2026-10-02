@@ -323,3 +323,17 @@ def test_every_tool_invocation_is_logged_with_the_arguments_received(mcp_server)
     # The guard rejected the bid, but what it did receive is recorded rather than silently dropped.
     assert tools["mcp.declare_interest"]["release_id"] == "no-such-release"
     assert tools["mcp.declare_interest"]["max_price_paise"] == 30000
+
+
+def test_an_empty_release_lookup_returns_the_candidates(mcp_base):
+    """Live, the model calls get_release with no argument at all, and the platform rejects a missing *required*
+    parameter before the call reaches us — leaving the agent with an error and no ids. The empty lookup must
+    answer with the releases instead."""
+
+    async def go():
+        async with session(f"{mcp_base}/venue/mcp") as s:
+            return payload(await s.call_tool("get_release", {}))
+
+    body = asyncio.run(go())
+    assert body["status_code"] == 200
+    assert {item["release_id"] for item in body["body"]["releases"]} >= {"rel_badminton_sat", "rel_tennis_sat"}

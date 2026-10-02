@@ -103,14 +103,19 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 
     @mcp.tool(
         description=(
-            "Fetch one release with its slots. `release_id` is required: pass the id list_releases returned, or an "
-            "event name such as badminton."
+            "Fetch one release with its slots. Pass the release id that list_releases returned, or an event name "
+            "such as badminton. Called with no release_id it returns the released list, so you can pick from it."
         )
     )
-    async def get_release(release_id: str, run_id: str = DEFAULT_RUN) -> dict:
+    async def get_release(release_id: str = "", run_id: str = DEFAULT_RUN) -> dict:
         _record("get_release", run_id, {"release_id": release_id})
-        listing = await _releases(client, run_id, release_id, None)
+        listing = await _releases(client, run_id, release_id or None, None)
         found = listing["body"].get("releases", [])
+        if not release_id:
+            # Live, the model calls this with no argument at all. The platform rejects a missing *required*
+            # parameter before the call reaches us, so an empty lookup answers with the candidates instead —
+            # the ids still reach the model, which a platform-side rejection cannot achieve.
+            return {"status_code": 200, "body": {"releases": found, "note": "pass release_id to fetch one"}}
         if len(found) != 1:
             return {
                 "status_code": 404,
@@ -177,10 +182,10 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         )
     )
     async def declare_interest(
-        release_id: str,
-        group_size: int,
-        min_group_size: int,
-        max_price_paise: int,
+        release_id: str = "",
+        group_size: int = 0,
+        min_group_size: int = 0,
+        max_price_paise: int = 0,
         acceptable_slot_ids: str = "",
         run_id: str = DEFAULT_RUN,
         idempotency_key: str | None = None,
