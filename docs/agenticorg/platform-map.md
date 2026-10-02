@@ -752,16 +752,21 @@ remaining behaviour — see §11's closing paragraph — from this account.
 tenant also holds four functionally identical declare agents, all `active`: `Kirro` (`455907ea`), `Kirro Declare v2`
 (`29319fb1`), `v3` (`999976b7`) and `v4` (`27ec9d3c`); `v4` is linked to the current connector and is the one to keep.
 
-## 11. RESOLVED: the tool arguments arrive once the parameters are untyped
+## 11. Tool arguments: what arrives, what the mock resolves, and what the platform withholds
 
-**Cause, verified 2026-10-02:** the platform appears to prefill a tool call's arguments from the **JSON-schema
-defaults**, so a parameter declared `release_id: str = ""` / `group_size: int = 0` arrives **empty or zero** no
-matter what the model chose, while a parameter declared `amount_value: Any = None` — no type, no concrete default —
-carries the model's value through. That is exactly the split observed for hours: `create_mandate` was the only tool
-that ever arrived populated, and it was the only one whose parameters were untyped.
+**Status: partially resolved, and the remainder is platform-side.** One schema change did visibly fix the argument
+pass-through — see the timeline below, which is the decisive evidence — and the mock now also resolves every
+ambiguity it can from the state it holds. But the pass-through later stopped for the same tools without this repo
+changing, and six remedies have not restored it. Read this section as: the mechanism we could influence, the
+ambiguities we now absorb, and the observation to take to the platform.
+
+**The mechanism we could influence:** a parameter declared with a concrete type and default (`release_id: str = ""`,
+`group_size: int = 0`) arrives **empty or zero** no matter what the model chose, while an untyped one
+(`amount_value: Any = None`) carries the model's value. Every model-facing parameter on all four surfaces is
+therefore untyped, with a test asserting it stays that way.
 
 Making `list_releases`, `get_release` and `declare_interest` match that shape (lean parameter list, `Any = None`, no
-annotations) fixed it end to end, without touching the agent, whose prompt is locked:
+annotations) was followed by the arguments arriving end to end, without touching the agent, whose prompt is locked:
 
 ```
 02:05:13 mcp.get_release     -> {"release_id": null}                       # still starts empty
@@ -835,6 +840,32 @@ why does one tool's arguments survive while another's arrive null, in the same c
 It also does not always *try*: on one turn it told the user "You are now entered into the pool" with no
 `declare_interest` call in the log at all, which `agent-spec.md` §3 step 10 forbids. The mock's guards make that
 cheap to detect — the log simply has no invocation — but nothing on our side can make the model place the call.
+
+### The timeline says this is platform-side, not schema-side
+
+The same tools, from the same agents, behaved differently across the session without their schemas changing in any
+way that correlates:
+
+| window (2026-10-02) | venue tools                                                                                                                    | mandate tool |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------ |
+| 02:05 – 02:34       | arguments arrive — `declare_interest` with the conversation's values, `get_release` and `draw` with their release ids and bids | arrives      |
+| 02:40 onwards       | every call arrives all-null, across both agents, every schema variant, and three fresh conversations                           | arrives      |
+
+So the six schema-side remedies above were all tested inside the failing window, and the "untyped parameters" fix
+that appeared to work at 02:05 was tested inside the good one. That is why the table's remedies cannot be read as
+causal: **the pass-through changed on the platform's side at around 02:40**, and nothing in this repo changed with it.
+That is the observation to correlate with the platform's own deploys, and it is the first thing to re-test before
+concluding anything from a new remedy.
+
+Two candidate mechanisms were tested and disproved along the way, and are worth recording so they are not re-tried:
+
+- **The model parroting the description's example.** Every mandate had arrived as exactly 120000 — the number in the
+  worked example (4 people × Rs 300). Changing the example to *3 people at Rs 250 = 75000* and running a 4-people
+  × Rs 300 declaration still produced **120000**, so the model computes correctly, including the ×100 to paise. The
+  paise fix is real, not an artefact.
+- **A single obvious argument being the magic.** `list_pool_entries` takes exactly one (`release_id`) and receives
+  null; `create_mandate` takes eight and receives its value. Argument count, description length and alias count were
+  each varied independently without effect.
 
 The agent's `llm_config` (`sliding_16k`, `temperature 0.1`) is immutable through the API, so conversation length
 cannot be traded for reliability from this account either.
