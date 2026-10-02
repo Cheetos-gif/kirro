@@ -8,10 +8,10 @@ import {
   scenarioAction,
   type ActionState,
 } from '@/app/actions';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useActionToast } from '@/hooks/use-action-toast';
 
 const SCENARIOS = [
   'success',
@@ -35,6 +35,7 @@ export function ApproveOrganiserButton({ organiserId }: { organiserId: string })
     approveOrganiserAction,
     null
   );
+  useActionToast(state);
 
   return (
     <form action={action} className="flex items-center gap-2">
@@ -42,15 +43,13 @@ export function ApproveOrganiserButton({ organiserId }: { organiserId: string })
       <Button type="submit" size="sm" disabled={pending}>
         {pending ? 'Approving...' : 'Approve'}
       </Button>
-      {state && !state.ok ? (
-        <span className="text-xs text-destructive">{state.message}</span>
-      ) : null}
     </form>
   );
 }
 
 export function ScenarioForm() {
   const [state, action, pending] = useActionState<ActionState, FormData>(scenarioAction, null);
+  useActionToast(state);
 
   return (
     <form action={action} className="flex flex-col gap-4">
@@ -88,28 +87,19 @@ export function ScenarioForm() {
       <Button type="submit" disabled={pending} className="w-fit">
         {pending ? 'Setting...' : 'Set scenario'}
       </Button>
-      {state ? (
-        <Alert variant={state.ok ? 'default' : 'destructive'}>
-          <AlertDescription>{state.message}</AlertDescription>
-        </Alert>
-      ) : null}
     </form>
   );
 }
 
 export function ResetRunButton() {
   const [state, action, pending] = useActionState<ActionState, FormData>(resetRunAction, null);
+  useActionToast(state);
 
   return (
-    <form action={action} className="flex items-center gap-3">
+    <form action={action}>
       <Button type="submit" variant="destructive" size="sm" disabled={pending}>
         {pending ? 'Clearing...' : 'Clear this run'}
       </Button>
-      {state ? (
-        <span className={state.ok ? 'text-xs text-muted-foreground' : 'text-xs text-destructive'}>
-          {state.message}
-        </span>
-      ) : null}
     </form>
   );
 }

@@ -3,16 +3,17 @@
 import { useActionState } from 'react';
 
 import { buyAction, type ActionState } from '@/app/actions';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useActionToast } from '@/hooks/use-action-toast';
 import { formatPaise } from '@/lib/kirro/format';
 import type { Slot } from '@/lib/kirro/schemas';
 
 export function BuyForm({ releaseId, slots }: { releaseId: string; slots: Slot[] }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(buyAction, null);
+  useActionToast(state);
 
   return (
     <Card>
@@ -61,12 +62,6 @@ export function BuyForm({ releaseId, slots }: { releaseId: string; slots: Slot[]
           <Button type="submit" disabled={pending}>
             {pending ? 'Buying...' : 'Buy'}
           </Button>
-
-          {state ? (
-            <Alert variant={state.ok ? 'default' : 'destructive'}>
-              <AlertDescription>{state.message}</AlertDescription>
-            </Alert>
-          ) : null}
         </form>
       </CardContent>
     </Card>

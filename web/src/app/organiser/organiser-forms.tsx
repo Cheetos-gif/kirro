@@ -8,26 +8,18 @@ import {
   setEventStatusAction,
   type ActionState,
 } from '@/app/actions';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useActionToast } from '@/hooks/use-action-toast';
 import type { KirroEvent } from '@/lib/kirro/schemas';
 
 const SELECT_CLASS =
   'h-9 w-full rounded-3xl border border-transparent bg-input/50 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30';
 
-function Result({ state }: { state: ActionState }) {
-  if (!state) return null;
-  return (
-    <Alert variant={state.ok ? 'default' : 'destructive'}>
-      <AlertDescription>{state.message}</AlertDescription>
-    </Alert>
-  );
-}
-
 export function CreateEventForm() {
   const [state, action, pending] = useActionState<ActionState, FormData>(createEventAction, null);
+  useActionToast(state);
 
   return (
     <form action={action} className="flex flex-col gap-4">
@@ -45,7 +37,6 @@ export function CreateEventForm() {
       <Button type="submit" disabled={pending} className="w-fit">
         {pending ? 'Creating...' : 'Create event'}
       </Button>
-      <Result state={state} />
     </form>
   );
 }
@@ -55,6 +46,7 @@ export function EventStatusForm({ event }: { event: KirroEvent }) {
     setEventStatusAction,
     null
   );
+  useActionToast(state);
   const next = event.status === 'published' ? 'draft' : 'published';
 
   return (
@@ -64,15 +56,13 @@ export function EventStatusForm({ event }: { event: KirroEvent }) {
       <Button type="submit" variant="outline" size="sm" disabled={pending}>
         {pending ? 'Saving...' : next === 'published' ? 'Publish' : 'Unpublish'}
       </Button>
-      {state && !state.ok ? (
-        <span className="text-xs text-destructive">{state.message}</span>
-      ) : null}
     </form>
   );
 }
 
 export function CreateReleaseForm({ events }: { events: KirroEvent[] }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(createReleaseAction, null);
+  useActionToast(state);
 
   if (events.length === 0) {
     return (
@@ -149,7 +139,6 @@ export function CreateReleaseForm({ events }: { events: KirroEvent[] }) {
       <Button type="submit" disabled={pending} className="w-fit">
         {pending ? 'Creating...' : 'Create release'}
       </Button>
-      <Result state={state} />
     </form>
   );
 }

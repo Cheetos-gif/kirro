@@ -3,16 +3,17 @@
 import { useActionState } from 'react';
 
 import { requestOrganiserAction, type ActionState } from '@/app/actions';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useActionToast } from '@/hooks/use-action-toast';
 
 export function RequestOrganiserForm({ defaultName }: { defaultName?: string }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
     requestOrganiserAction,
     null
   );
+  useActionToast(state);
 
   return (
     <form action={action} className="flex flex-col gap-4">
@@ -27,11 +28,6 @@ export function RequestOrganiserForm({ defaultName }: { defaultName?: string }) 
       <Button type="submit" disabled={pending} className="w-fit">
         {pending ? 'Sending...' : 'Send request'}
       </Button>
-      {state ? (
-        <Alert variant={state.ok ? 'default' : 'destructive'}>
-          <AlertDescription>{state.message}</AlertDescription>
-        </Alert>
-      ) : null}
     </form>
   );
 }

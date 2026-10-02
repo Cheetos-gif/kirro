@@ -3,17 +3,18 @@
 import { useActionState } from 'react';
 
 import { declareAction, type ActionState } from '@/app/actions';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useActionToast } from '@/hooks/use-action-toast';
 import { formatPaise } from '@/lib/kirro/format';
 import type { Slot } from '@/lib/kirro/schemas';
 
 export function DeclareForm({ releaseId, slots }: { releaseId: string; slots: Slot[] }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(declareAction, null);
+  useActionToast(state);
 
   return (
     <Card>
@@ -79,12 +80,6 @@ export function DeclareForm({ releaseId, slots }: { releaseId: string; slots: Sl
           <Button type="submit" disabled={pending}>
             {pending ? 'Joining...' : 'Join the draw'}
           </Button>
-
-          {state ? (
-            <Alert variant={state.ok ? 'default' : 'destructive'}>
-              <AlertDescription>{state.message}</AlertDescription>
-            </Alert>
-          ) : null}
         </form>
       </CardContent>
     </Card>
