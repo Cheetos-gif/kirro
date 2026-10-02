@@ -35,8 +35,17 @@ spec:
         - protocol: TCP
           port: 8081
 ---
-# The room server takes the same shape (ADR-017). Only its signalling port needs a policy: with
-# hostNetwork the media ports are the node's, outside what a pod-level NetworkPolicy governs.
+# The room server (ADR-017).
+#
+# Two very different traffic paths meet this pod, so the policy has two rules:
+#
+#   - **Signalling (7880/tcp)** arrives from Traefik, through the Ingress, like any other host here.
+#   - **WebRTC media (7881/tcp, 7882/udp)** arrives from the open internet. ServiceLB publishes those
+#     ports on the node and DNATs them straight to this pod with the *client's* source address
+#     preserved (`externalTrafficPolicy: Local`), which is what ICE needs — so there is no in-cluster
+#     source to match and the only honest rule is an `ipBlock`. Restricting it to Cloudflare's ranges
+#     would be wrong here for the same reason it is right for 80/443: WebRTC does not come from
+#     Cloudflare, it comes from the caller.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -60,6 +69,12 @@ spec:
       ports:
         - protocol: TCP
           port: 7880
+    - from:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+        - ipBlock:
+            cidr: ::/0
+      ports:
         - protocol: TCP
           port: 7881
         - protocol: UDP
