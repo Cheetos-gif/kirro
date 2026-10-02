@@ -1,18 +1,18 @@
-import Link from 'next/link';
-
 import { isApiError } from '@/api';
-import { TalkToKirro } from '@/components/talk-to-kirro';
+import { AllocationFlow } from '@/components/marketing/allocation-flow';
+import { ArchitectureDiagram } from '@/components/marketing/architecture-diagram';
+import { DrawVisualizer } from '@/components/marketing/draw-visualizer';
+import { EvidenceGrid } from '@/components/marketing/evidence-grid';
+import { InventoryList } from '@/components/marketing/inventory-list';
+import { MechanismTimeline } from '@/components/marketing/mechanism-timeline';
+import { SectionLabel } from '@/components/marketing/section-label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { AGENTICORG_URL } from '@/constants';
 import * as api from '@/lib/kirro/api';
-import { formatDate, formatPaise } from '@/lib/kirro/format';
 import type { KirroEvent, Organiser, ReleaseDetail } from '@/lib/kirro/schemas';
 
 export default async function HomePage() {
-  let events: KirroEvent[];
-  let organisers: Organiser[];
   let releases: Array<{
     detail: ReleaseDetail;
     event: KirroEvent;
@@ -20,13 +20,11 @@ export default async function HomePage() {
   }>;
 
   try {
-    const [allEvents, allOrganisers, summaries] = await Promise.all([
+    const [events, organisers, summaries] = await Promise.all([
       api.listEvents({ status: 'published' }),
       api.listOrganisers(),
       api.listReleases(),
     ]);
-    events = allEvents;
-    organisers = allOrganisers;
     const eventById = new Map(events.map(event => [event.event_id, event]));
     const organiserById = new Map(organisers.map(organiser => [organiser.organiser_id, organiser]));
     const details = await Promise.all(
@@ -41,13 +39,18 @@ export default async function HomePage() {
     releases = details.filter((row): row is NonNullable<typeof row> => row !== null);
   } catch (error) {
     return (
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-16">
+      <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-16">
         <Alert variant="destructive">
           <AlertTitle>Cannot reach the booking service</AlertTitle>
           <AlertDescription>
-            {isApiError(error) ? error.message : 'Something went wrong.'} Run{' '}
-            <code>bash scripts/dev.sh</code> from the repo root, or point <code>MOCK_API_URL</code>{' '}
-            at a running server.
+            {isApiError(error) ? error.message : 'Something went wrong.'}
+            {process.env.NODE_ENV === 'development' ? (
+              <>
+                {' '}
+                Run <code>bash scripts/dev.sh</code> from the repo root, or point{' '}
+                <code>MOCK_API_URL</code> at a running server.
+              </>
+            ) : null}
           </AlertDescription>
         </Alert>
       </main>
@@ -55,70 +58,94 @@ export default async function HomePage() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10">
-      <section className="mb-8">
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">What is on sale</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-          Slots that more people want than there are seats go to a draw. The rest you can buy
-          straight away. The badge on each listing says which one it is.
-        </p>
+    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-6">
+      {/* Hero: copy on the left, the mechanism on the right. Asymmetric on purpose. */}
+      <section className="grid grid-cols-1 gap-10 py-16 sm:py-24 lg:grid-cols-12 lg:gap-8">
+        <div className="lg:col-span-7">
+          <p className="font-mono text-xs tracking-wide text-muted-foreground">
+            declare <span className="text-kirro">&rarr;</span> draw{' '}
+            <span className="text-kirro">&rarr;</span> book
+          </p>
+          <h1 className="mt-4 max-w-xl font-heading text-4xl leading-[1.08] font-medium tracking-tight text-foreground sm:text-5xl">
+            Booking scarce slots shouldn&apos;t reward whoever clicks fastest.
+          </h1>
+          <p className="mt-5 max-w-md text-base text-muted-foreground">
+            KIRRO holds your spot, enters a seeded draw when a slot is contested, and books it
+            outright when it isn&apos;t. Arrival time decides nothing.
+          </p>
+        </div>
+        <div className="flex items-center lg:col-span-5">
+          <AllocationFlow />
+        </div>
       </section>
 
-      {releases.length === 0 ? (
-        <Card>
-          <CardContent className="py-8 text-sm text-muted-foreground">
-            Nothing is on sale right now.
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
-          {releases.map(({ detail, event, organiser }) => {
-            const prices = detail.slots.map(slot => slot.price_per_person_paise);
-            const seats = detail.slots.reduce((total, slot) => total + slot.capacity, 0);
-            return (
-              <Card key={detail.release_id}>
-                <CardHeader>
-                  <CardTitle>
-                    <Link href={`/events/${event.event_id}`} className="hover:underline">
-                      {event.name}
-                    </Link>
-                  </CardTitle>
-                  <CardDescription>
-                    {organiser?.name ?? 'Unknown organiser'}, {formatDate(detail.opens_at)}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-3">
-                  <div className="flex items-center gap-2">
-                    <Badge
-                      variant={detail.allocation_mode === 'fair_draw' ? 'default' : 'secondary'}
-                    >
-                      {detail.allocation_mode === 'fair_draw' ? 'Draw' : 'Buy now'}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground">
-                      {detail.slots.length} slot{detail.slots.length === 1 ? '' : 's'}, {seats} seat
-                      {seats === 1 ? '' : 's'}
-                    </span>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    From {formatPaise(Math.min(...prices))} per person
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-fit"
-                    render={<Link href={`/events/${event.event_id}`} />}
-                  >
-                    View and book
-                  </Button>
-                </CardContent>
-              </Card>
-            );
-          })}
+      {/* The draw: the one genuinely interesting mechanism, given the most visual weight. */}
+      <section className="border-t border-border py-14">
+        <SectionLabel>The draw</SectionLabel>
+        <h2 className="mt-2 font-heading text-2xl font-medium tracking-tight text-foreground">
+          One seeded draw, run once the window closes
+        </h2>
+        <div className="mt-8">
+          <DrawVisualizer />
         </div>
-      )}
+      </section>
 
-      <section className="mt-8">
-        <TalkToKirro />
+      {/* How it works */}
+      <section className="border-t border-border py-14">
+        <h2 className="font-heading text-2xl font-medium tracking-tight text-foreground">
+          How it works
+        </h2>
+        <div className="mt-8">
+          <MechanismTimeline />
+        </div>
+      </section>
+
+      {/* Inventory */}
+      <section className="border-t border-border py-14">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="font-heading text-2xl font-medium tracking-tight text-foreground">
+            What&apos;s on sale
+          </h2>
+          <p className="text-sm text-muted-foreground">Organisers pick a draw or first come, first served.</p>
+        </div>
+        <div className="mt-6">
+          <InventoryList releases={releases} />
+        </div>
+      </section>
+
+      {/* Architecture */}
+      <section className="border-t border-border py-14">
+        <SectionLabel>How a request reaches the mock services</SectionLabel>
+        <h2 className="mt-2 font-heading text-2xl font-medium tracking-tight text-foreground">
+          The agent, not the form
+        </h2>
+        <p className="mt-3 max-w-xl text-sm text-muted-foreground">
+          This site is one way to declare interest. KIRRO runs as a Virtual Employee on Pine
+          Labs&apos; AgenticOrg platform &mdash; the agent does the same declare, draw, and book
+          sequence over WhatsApp or chat.
+        </p>
+        <div className="mt-8">
+          <ArchitectureDiagram />
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-6 w-fit"
+          render={<a href={AGENTICORG_URL} target="_blank" rel="noreferrer" />}
+          nativeButton={false}
+        >
+          Open KIRRO on AgenticOrg
+        </Button>
+      </section>
+
+      {/* Evidence */}
+      <section className="border-t border-border pt-14 pb-16">
+        <h2 className="font-heading text-2xl font-medium tracking-tight text-foreground">
+          What&apos;s real
+        </h2>
+        <div className="mt-6">
+          <EvidenceGrid />
+        </div>
       </section>
     </main>
   );

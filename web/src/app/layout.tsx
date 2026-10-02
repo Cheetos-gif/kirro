@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono, Inter } from 'next/font/google';
+import { Geist_Mono, Inter, Space_Grotesk } from 'next/font/google';
 import { NuqsAdapter } from 'nuqs/adapters/next/app';
 
 import './globals.css';
@@ -14,10 +14,7 @@ import { cn } from '@/lib/utils';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
-});
+const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], variable: '--font-display' });
 
 const geistMono = Geist_Mono({
   variable: '--font-geist-mono',
@@ -27,7 +24,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'KIRRO',
   description:
-    'Book courts, seats and passes. Slots that people compete for go to a fair draw; the rest sell straight away.',
+    'KIRRO books scarce slots: courts, screenings, passes. Contested slots go to a seeded fair draw; the rest sell first come, first served.',
 };
 
 export default async function RootLayout({
@@ -44,14 +41,14 @@ export default async function RootLayout({
       className={cn(
         'h-full',
         'antialiased',
-        geistSans.variable,
         geistMono.variable,
+        spaceGrotesk.variable,
         'font-sans',
         inter.variable
       )}
     >
       <body className="flex min-h-full flex-col">
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
           <QueryProvider>
             <NuqsAdapter>
               <MotionProvider>

@@ -29,7 +29,12 @@ export default async function OrganiserRequestPage() {
           </AlertTitle>
           <AlertDescription className="flex flex-col gap-3">
             <span>You can create events and releases from here.</span>
-            <Button size="sm" className="w-fit" render={<Link href="/organiser" />}>
+            <Button
+              size="sm"
+              className="w-fit"
+              render={<Link href="/organiser" />}
+              nativeButton={false}
+            >
               Go to my events
             </Button>
           </AlertDescription>
