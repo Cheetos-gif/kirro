@@ -283,7 +283,10 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
                 "min_group_size": minimum,
                 "max_price_paise": ceiling,
                 "user_contact": _first_str(user_contact),
-                "mandate_id": _first_str(mandate_id),
+                # The model does not carry the authorization id from the mandate result into the bid, and the pool
+                # entry is what the allocation captures against, so a bid without one takes the mandate this run
+                # most recently created — the declare flow reserves immediately before it bids.
+                "mandate_id": _first_str(mandate_id) or _LATEST_MANDATE.get(run_id),
             },
         )
 
@@ -421,6 +424,11 @@ def _bad_request(message: str) -> dict:
 # Set by `build_surfaces` from `app.state.mock`; None when the tools are exercised without an app (tests).
 _TOOL_LOG: Any = None
 
+# Latest mandate created per run. The declare flow reserves the mandate immediately before bidding, and the pool
+# entry is what the allocation captures against, so a bid can carry it even when the model never threads the
+# authorization id from one tool result into the next call's argument.
+_LATEST_MANDATE: dict[str, str] = {}
+
 
 def _record(tool: str, run_id: str, arguments: dict[str, Any]) -> None:
     """Append every MCP tool invocation, with the arguments as received, to the run's request log.
@@ -536,7 +544,7 @@ def _pinelabs(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         value, error = _amount_or_error(amount_value, amountValue, amount, amount_paise, amountPaise)
         if error is not None:
             return error
-        return await _call(
+        result = await _call(
             client,
             "POST",
             "/pinelabs/mandates",
@@ -544,6 +552,9 @@ def _pinelabs(mcp: MCPServer, client: httpx.AsyncClient) -> None:
             idem=idempotency_key,
             json={"amount": {"value": value, "currency": currency}},
         )
+        if result["status_code"] == 200 and result["body"].get("authorizationId"):
+            _LATEST_MANDATE[run_id] = result["body"]["authorizationId"]
+        return result
 
     @mcp.tool(description="Read the remaining authorised balance for a mandate.")
     async def get_mandate_balance(
@@ -741,6 +752,7 @@ def build_surfaces(app: Any) -> tuple[dict[str, MCPServer], MCPServer]:
     client = _client(app)
     global _TOOL_LOG
     _TOOL_LOG = getattr(app.state, "mock", None)
+    _LATEST_MANDATE.clear()
     per_surface: dict[str, MCPServer] = {}
     for name, register in BUILDERS.items():
         mcp = MCPServer(f"kirro_{name}", instructions=SURFACE_INSTRUCTIONS[name])

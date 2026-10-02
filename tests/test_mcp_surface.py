@@ -395,6 +395,27 @@ def test_pool_and_draw_resolve_their_release_from_the_bids(mcp_base):
     assert drawn["body"]["results"][0]["status"] == "ALLOCATED"
 
 
+def test_a_bid_without_a_mandate_id_carries_the_run_s_most_recent_one(mcp_base):
+    """Live, the model reserves the mandate and then bids without ever passing its authorization id, so the pool
+    entry the allocation captures against had no mandate — the allocator drew, held the slot, and then stopped. A
+    bid without a mandate id takes the run's most recently created mandate."""
+
+    async def go():
+        async with session(f"{mcp_base}/pinelabs/mcp") as s:
+            mandate = payload(await s.call_tool("create_mandate", {"amount_value": 100000}))
+        async with session(f"{mcp_base}/venue/mcp") as v:
+            await v.call_tool(
+                "declare_interest",
+                {"release_id": "rel_badminton_sat", "group_size": 4, "min_group_size": 2, "max_price_paise": 30000},
+            )
+            pool = payload(await v.call_tool("list_pool_entries", {"release_id": "rel_badminton_sat"}))
+        return mandate, pool
+
+    mandate, pool = asyncio.run(go())
+    entry = pool["body"]["declarations"][0]
+    assert entry["mandate_id"] == mandate["body"]["authorizationId"]
+
+
 def test_every_tool_invocation_is_logged_with_the_arguments_received(mcp_server):
     """A guard that answers inside the tool used to leave no trace at all, so a call the platform made and we
     rejected was indistinguishable from one it never sent. The arguments as received must land in the run log."""
