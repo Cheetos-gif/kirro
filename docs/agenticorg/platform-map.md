@@ -430,6 +430,24 @@ and documented above — a five-minute fix each time it lapses, not a research p
 The historical 503 (now cleared, see above) was `PATCH /api/v1/agents/{id} {"connector_ids":[…]}` failing for every
 variant tried while whatsapp was unhealthy with no credentials at all.
 
+### Twilio — registered and healthy, 2026-10-02
+
+The native registry entry (`GET /api/v1/connectors/registry`, name `twilio`) declares `auth_type: api_key_secret`,
+base URL `https://api.twilio.com/2010-04-01`, tools `get_message_status`, `get_recordings`, `make_call`,
+`send_sms`, `send_whatsapp`. A two-part credential, unlike WhatsApp's single bearer token — found the right field
+pair the same way: real credentials against disposable throwaway connectors, varying the field names, reading the
+platform's own `/connectors/{id}/health` for a genuine Twilio response rather than guessing.
+
+`account_sid` is used for URL templating regardless of what the second field is named — every candidate pair
+(`{account_sid, password}`, `{..., token}`, `{..., secret}`, `{..., access_token}`, `{..., auth_secret}`) correctly
+put the SID into `.../Accounts/{sid}.json`. Only one paired field name actually reaches the Basic Auth password:
+**`{"auth_config": {"account_sid": "<SID>", "access_token": "<token>"}}`** — every other pairing returned a real
+`401 Unauthorized` from Twilio (authenticated as nobody); `access_token` returned `{"status": "healthy", "account": "kirro"}`.
+
+Registered as `twilio_kirro`, `PUT auth_config` with real credentials, confirmed `healthy: true`. Unlike WhatsApp's
+test token, Twilio API keys don't expire on a short cycle, so this should stay healthy without the WhatsApp-style
+manual refresh.
+
 ### Resolved: **one untrusted custom connector per agent** — and the fix
 
 Tested on a fresh agent (created with only `mcp_pinelabs_kirro` + `mcp_venue_kirro`, no whatsapp, so no unhealthy
