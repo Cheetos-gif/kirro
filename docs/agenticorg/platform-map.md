@@ -370,8 +370,38 @@ Unresolved and important: **how `whatsapp_kirro` lost its credentials.** It was 
 `window.confirm` accepted by automation) and restored with `PUT {"status":"active"}`; the soft-delete may well have
 dropped `credentials_encrypted` and the restore did not put it back. The audit log does not record connector
 changes (50 entries, none mention whatsapp), so this cannot be confirmed from the platform. Fixing it needs Meta
-Business credentials, which we do not have — flagged to the user. Note the connector page's own `Edit` form cannot
-supply them either (its auth-type list has no `meta_business`).
+Business credentials, which we do not have — flagged to the user.
+
+**RESOLVED — the correct field shape, verified 2026-10-02.** The connector page's own `Edit` form cannot supply
+them (its auth-type list has no `meta_business`), but the underlying API accepts credentials at the top level under
+a different shape than the UI exposes: `PUT /api/v1/connectors/{id}` (or `POST` at creation) with
+`{"auth_config": {"api_key": "<token>"}}`. Verified on three disposable throwaway connectors (`whatsapp_probe1-3`,
+created and deleted the same session): plain `{"api_key": ...}` and `{"credentials": {"access_token": ...}}` both
+leave `has_credentials: false` (silently dropped); `{"auth_config": {"api_key": ...}}` sets `has_credentials: true`
+**and** the dummy token genuinely reaches `graph.facebook.com` — the health check returns a real `401 Unauthorized`
+from Meta, not a local serialization error. So the only missing piece is the real credential, not the API shape.
+
+What a WhatsApp Cloud API (Meta Business Platform) setup needs, to get from the user:
+
+1. A Meta Business Account with a WhatsApp Business Platform app (Meta for Developers -> My Apps -> Add Product ->
+   WhatsApp), and a verified phone number registered to it (test numbers work for the Cloud API sandbox).
+1. A **permanent** access token for that app — a temporary 24h token from the app dashboard's Quickstart is not
+   enough for a Virtual Employee that must run unattended; it needs a System User with the `whatsapp_business_messaging`
+   permission in Business Settings, with a token generated for that System User (no expiry).
+1. The phone number id and WABA (WhatsApp Business Account) id shown on the app's API Setup page — needed if the
+   mock/agent ever has to address a specific sending number, though the registered `tool_functions` (`send_text_message`
+   etc.) may take it as a call argument rather than connector config; unverified until a real token is in place.
+
+Once the token exists, applying it is one call from this account: `PUT /api/v1/connectors/0f8e4269-db0e-4993-ab97-8e3fee46248b`
+with `{"auth_config": {"api_key": "<the token>"}, "csrf_token": "<cookie value>"}`, then `GET .../health` to confirm
+`healthy: true`.
+
+**Caution for whoever runs this next:** earlier blind probing this session (testing field names `credentials`,
+`auth_credential`, `api_key`, `credential`, `access_token` directly against the live `whatsapp_kirro` connector,
+before the throwaway-connector test found the real shape) left it with `has_credentials: true` but an **empty**
+stored value — health now reports `"Illegal header value b'Bearer '"` instead of the original, more honest
+`"Connector has no encrypted credentials"`. Functionally identical (still not usable), but cosmetically worse; a
+real `PUT {"auth_config": {"api_key": "<token>"}}` will overwrite it correctly once a token exists.
 
 `PATCH /api/v1/agents/{id} {"connector_ids":[…]}` currently returns 503 for every variant tried, including dropping
 whatsapp, so the agent's linked set cannot be changed while this is broken.
