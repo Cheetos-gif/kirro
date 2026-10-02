@@ -42,11 +42,12 @@ tenant, or a platform engineer with run-trace visibility.
 **Blocks.** L17–L22 (every eval that specifically exercises the Workflow, not just a chat-driven agent) and the
 daily unattended run this Virtual Employee is meant to perform.
 
-## Bug 3 — no phone channel for the agent: the voice platform's telephony parts are admin-only, and it has no Gnani option
+## Bug 3 — no platform-native way to give the agent Gnani-powered voice
 
-**Symptom.** The user must be able to call "Kirro Declare" and talk to it, with Gnani/Vachana doing STT/TTS. No
-phone number is bound to any agent in this tenant; every live eval so far (L01-L08, L10, L12-L16) used the text
-"Chat with Agent" UI.
+**Symptom.** The user must be able to talk to "Kirro Declare", with Gnani/Vachana doing STT/TTS. No phone number or
+browser-voice deployment is bound to any agent in this tenant; every live eval so far (L01-L08, L10, L12-L16) used
+the text "Chat with Agent" UI. A paid phone leg (Twilio) was considered and dropped — it costs money per number and
+per call-minute; see `docs/decisions/ADR-016-voice-bridge-for-browser-calls-to-kirro-declare.md`.
 
 **What exists (corrected 2026-10-02; an earlier version of this entry wrongly said the feature was unshipped).**
 AgenticOrg has a full voice platform at `/dashboard/voice` (API `/api/v1/voice-platform/*`: profiles, bindings,
@@ -70,11 +71,18 @@ unknown-route 401 is no evidence that an endpoint is missing: `/api/v1/api-keys`
 **Separately, a non-MCP custom connector cannot pass this platform's health check.** `mcp_vachana_kirro`,
 re-registered with a working Gnani key, reports `{"status": "not_configured", "reason": "No tools discovered for this MCP server"}`. The checker probes for MCP tool discovery even when the MCP checkbox is off (ADR-011 Risk 2).
 
-**What's needed.** For a Gnani-powered phone call without admin: a call bridge outside AgenticOrg (Twilio media
-stream → Vachana STT → the agent's chat API → Vachana TTS). That is new infrastructure and needs an ADR. For the
-platform-native route: `agenticorg:admin` for endpoints and release approval, and accepting OpenAI/Gemini speech.
+**Resolution, not platform-dependent: a browser voice bridge (ADR-016).** Rather than a phone call, `web/` (the
+portal this repo already deploys) gets a "Talk to Kirro" page: browser mic → a small stateless `voice_bridge/`
+service on the same cluster as `kirro-mock` → Gnani Prisma STT (realtime WebSocket) → `chat/query` on the agent
+(session-cookie auth, same mechanism as item 1) → Gnani Timbre TTS (realtime WebSocket) → back to the browser. Free
+(Gnani's key is already live; no Twilio number, no per-minute telephony cost) and does not need `agenticorg:admin`.
+Known limitation carried into the ADR: `chat/history` is one flat thread per `(user, agent)`, so the bridge
+serializes calls — one at a time — until AgenticOrg exposes a per-conversation endpoint.
 
-**Blocks.** L11 and the requirement that a user can call and talk to the agent.
+**What would still need admin, if the platform-native route is ever preferred instead:** `agenticorg:admin` for
+`voice-platform/endpoints` and `/release-approvals`, and accepting OpenAI/Gemini speech instead of Gnani.
+
+**Blocks.** L11 until the bridge is live.
 
 ## What was checked before concluding these need admin/platform help
 
