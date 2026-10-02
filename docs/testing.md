@@ -147,9 +147,27 @@ the two attempts (up at 04:33:44, down by 04:35:48) and every `draw` arrived wit
 phrasing. Re-run L16 against that agent when the pass-through is up; the check is `released_mandates: 1` plus a
 `pinelabs.release` line in the mock's log.
 
-Note that the workflow and the declare agent still reference the original `Kirro Allocator` (`5591e57a`), whose prompt
-is locked. Until the workflow's step binding is decided (it executes nothing today, §12), having both is harmless, but
-whoever fixes this should end with one allocator agent carrying the release rule.
+**Consolidated since.** `Kirro Allocator v2` was retired and deleted; the original `Kirro Allocator` (`5591e57a`,
+the one the workflow and the declare agent both reference) now carries the loser-release rule directly, landed via
+the pause → `PATCH` → resume cycle documented in §10 — there is exactly one allocator agent again, and it has the
+fix.
+
+**`declare_interest` false-success, fixed 2026-10-02.** The demo dry-run screenshots (page 2 of
+`docs/agenticorg/demo/kirro-demo-dry-run-2026-10-02.pdf`) caught the declare agent claiming *"Your request... has
+been entered into the pool... You are now in the pool"* in a run where `declare_interest` reached the mock with
+every argument null (the pass-through gap, §11) — the same shape as L07's release gap, just on the declare side
+and with no money at stake. Landed the same pause → `PATCH` → resume fix on `Kirro Declare v4`: an explicit rule
+that the agent must not claim a pool entry unless `declare_interest`'s own result confirms it, and must report a
+technical problem plainly otherwise. Not yet re-run against a pass-through up-window to confirm the honest-failure
+wording; the allocator-side precedent (L07, re-run twice) is the evidence this pattern works.
+
+**Confirmed, 2026-10-02 10:15.** Re-ran the same script against the live agent: `create_mandate` succeeded
+(`mandates: 1`), `get_release` was called with a guessed slug (`"badminton_court_tomorrow"`, not the real
+`rel_badminton_sat`) and never resolved, `declare_interest` was never reached, and the agent said *"There was a
+technical issue while trying to place you in the pool for the badminton court. Would you like me to try again or
+cancel the request?"* — no false claim. The specific cause this run (a guessed release slug rather than a null
+argument) differs from the demo screenshot's, but the property the rule protects — never say "you're in the pool"
+without the tool confirming it — held on the first live test.
 
 ## Failure cases to test by hand once credentials exist
 
