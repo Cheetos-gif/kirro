@@ -505,8 +505,8 @@ def _pinelabs(mcp: MCPServer, client: httpx.AsyncClient) -> None:
     @mcp.tool(
         description=(
             "Reserve (authorise) the total amount on the customer's mandate. The amount is in PAISE, not rupees: "
-            "amount_paise = group size x price per person in rupees x 100. Example: 4 people at Rs 300 each is "
-            "Rs 1,200 = 120000 paise. Pass that integer as `amount_value` (aliases `amount_paise`, `amount`)."
+            "amount_paise = group size x price per person in rupees x 100. For instance 3 people at Rs 250 each "
+            "comes to 75000. Pass that integer as `amount_value` (aliases `amount_paise`, `amount`)."
         )
     )
     async def create_mandate(
