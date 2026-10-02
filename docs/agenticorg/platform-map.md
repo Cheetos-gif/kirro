@@ -403,8 +403,32 @@ stored value — health now reports `"Illegal header value b'Bearer '"` instead 
 `"Connector has no encrypted credentials"`. Functionally identical (still not usable), but cosmetically worse; a
 real `PUT {"auth_config": {"api_key": "<token>"}}` will overwrite it correctly once a token exists.
 
-`PATCH /api/v1/agents/{id} {"connector_ids":[…]}` currently returns 503 for every variant tried, including dropping
-whatsapp, so the agent's linked set cannot be changed while this is broken.
+**RESOLVED — a real token is live, 2026-10-02.** Created a Meta for Developers app ("Kirro", id `3204900803041522`)
+under the `Upayan Mazumder` business portfolio, added the WhatsApp product, claimed its free test number
+(`+1 555 155 9269`, Phone Number ID `1344278838768762`, WABA ID `1787986355581686`), added two verified recipients
+(the user's second number, OTP-verified; a friend's number was offered but skipped — no OTP available), and sent a
+real message through the console, confirmed delivered. The console's "Generate token" issues a **24-hour test
+token**, not the permanent one planned below — confirmed by watching the first one expire (`has_credentials: true`
+but health flipped from a real `400 Bad Request` at `graph.facebook.com` to a real `401 Unauthorized` about three
+hours later). Applied via `PUT {"auth_config": {"api_key": "<token>"}}` as documented above; `PATCH` on the Declare
+agent (`{"connector_ids":[...]}`, empty body otherwise) now returns `200 {"updated": true}` instead of 503 — the
+chicken-and-egg scope-refresh block is clear.
+
+**Permanent token — blocked, not by us.** A System User token (Business Settings → Users → System users, assigned
+the WhatsApp asset, no expiry) was the intended fix. Creating a System User on this business portfolio silently
+no-ops: the "Create system user" dialog accepts a name and role, the request appears to succeed, and a reload shows
+"No system users added yet" every time, with no error surfaced. The business portfolio is **unverified**
+(`Upayan Mazumder`, shown as "Unverified business" at connection time) — Meta restricts System User creation on
+unverified business portfolios, which plausibly explains the silent failure. Business verification is a multi-day
+external process (legal entity documents) and is out of scope here.
+
+**Net effect:** the connector is demo-ready right now with a token good for roughly the next day; it will go stale
+again on the same ~3-hour-to-24-hour cycle until either a verified business portfolio allows a System User token, or
+someone repeats the "Generate token" + `PUT auth_config.api_key` cycle. The field shape and the cycle are now proven
+and documented above — a five-minute fix each time it lapses, not a research problem.
+
+The historical 503 (now cleared, see above) was `PATCH /api/v1/agents/{id} {"connector_ids":[…]}` failing for every
+variant tried while whatsapp was unhealthy with no credentials at all.
 
 ### Resolved: **one untrusted custom connector per agent** — and the fix
 
