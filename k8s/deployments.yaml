@@ -113,7 +113,6 @@ spec:
       labels:
         app: kirro-livekit
     spec:
-      priorityClassName: low-priority
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -152,9 +151,12 @@ spec:
           readinessProbe:
             httpGet: { path: /, port: 7880 }
             initialDelaySeconds: 2
+          # No `low-priority`: a live call is interactive, and under memory pressure that class is
+          # evicted first (`value: -1`), which drops the call. The node has room for this pod's
+          # 128Mi.
           resources:
             requests: { cpu: 100m, memory: 128Mi }
-            limits: { cpu: 500m, memory: 512Mi }
+            limits: { cpu: 1000m, memory: 512Mi }
 ---
 # The voice bridge (ADR-017): a LiveKit agent worker that joins the room and runs Gnani
 # speech-to-text and text-to-speech around the AgenticOrg agent.
@@ -183,7 +185,6 @@ spec:
         runAsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
-      priorityClassName: low-priority
       affinity:
         nodeAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -233,5 +234,12 @@ spec:
             httpGet: { path: /, port: 8082 }
             initialDelaySeconds: 5
           resources:
-            requests: { cpu: 100m, memory: 256Mi }
-            limits: { cpu: 500m, memory: 768Mi }
+            # Sized from measurement, not taste. At 500m the worker was throttled in ~18% of
+            # scheduling periods (`/sys/fs/cgroup/cpu.stat`: nr_periods 5855, nr_throttled 1047)
+            # and callers heard the audio break up: a cgroup freeze mid-buffer is audible. The
+            # pipeline runs Gnani STT and TTS, the Silero VAD's ONNX model, and HTTP to the agent —
+            # 300m/512Mi is roughly what it actually uses, with a 2-core ceiling so nothing waits.
+            # No `low-priority` class either: `value: -1` is the first thing evicted under memory
+            # pressure, and dropping a live call to reclaim 586Mi is not a trade worth making.
+            requests: { cpu: 300m, memory: 512Mi }
+            limits: { cpu: 2000m, memory: 1Gi }

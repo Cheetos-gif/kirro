@@ -8,7 +8,12 @@ import { mergeTurn, transcriptAsText, type TranscriptLine } from '@/app/talk/tal
  * known.
  */
 describe('transcriptAsText', () => {
-  const line = (key: string, mine: boolean, text: string): TranscriptLine => ({ key, mine, text });
+  const line = (key: string, mine: boolean, text: string): TranscriptLine => ({
+    key,
+    mine,
+    text,
+    at: 0,
+  });
 
   it('prefixes each turn with its speaker, in order', () => {
     const text = transcriptAsText(
@@ -46,7 +51,12 @@ describe('transcriptAsText', () => {
  * turned one utterance into a column of near-identical lines.
  */
 describe('mergeTurn', () => {
-  const line = (key: string, mine: boolean, text: string): TranscriptLine => ({ key, mine, text });
+  const line = (key: string, mine: boolean, text: string): TranscriptLine => ({
+    key,
+    mine,
+    text,
+    at: 0,
+  });
 
   it('rewrites a growing segment in place instead of appending a line per revision', () => {
     let lines: TranscriptLine[] = [];

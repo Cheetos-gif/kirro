@@ -2,21 +2,24 @@
 
 import {
   BarVisualizer,
+  ChatEntry,
   LiveKitRoom,
   RoomAudioRenderer,
   useConnectionState,
   useLocalParticipant,
-  useTranscriptions,
+  useSessionMessages,
   useVoiceAssistant,
+  VoiceAssistantControlBar,
 } from '@livekit/components-react';
 import '@livekit/components-styles';
+import type { ReceivedChatMessage } from '@livekit/components-react';
 import { ConnectionState } from 'livekit-client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
-export type TranscriptLine = { key: string; mine: boolean; text: string };
+export type TranscriptLine = { key: string; mine: boolean; text: string; at: number };
 
 const STATE_LABEL: Record<string, string> = {
   initializing: 'Connecting…',
@@ -33,12 +36,12 @@ export function transcriptAsText(lines: TranscriptLine[], startedAt: Date | null
 }
 
 /**
- * Fold one incoming segment into the log, in place.
+ * Fold one incoming message into the log, in place.
  *
- * LiveKit does not hand over a finished sentence: it re-emits the same utterance as it grows
- * ("Hello!", "Hello! How", "Hello! How can", …). Appending each revision — the obvious reading —
- * produced a transcript of twelve near-identical lines for one sentence. So a revision **replaces**
- * the line it belongs to, and only a new segment appends.
+ * LiveKit hands over each utterance as a stream of revisions ("Hello!", "Hello! How", "Hello! How
+ * can", …) and the agent's TTS-aligned transcript opens a new stream per revision, so the message
+ * id alone does not group them. Keying on the segment and rewriting the line it belongs to is what
+ * keeps one sentence from becoming twelve lines; only a genuinely new turn appends.
  */
 export function mergeTurn(lines: TranscriptLine[], turn: TranscriptLine): TranscriptLine[] {
   const index = lines.findIndex(line => line.key === turn.key);
@@ -47,8 +50,8 @@ export function mergeTurn(lines: TranscriptLine[], turn: TranscriptLine): Transc
     next[index] = { ...next[index], text: turn.text };
     return next;
   }
-  // Fallback for a stream that carries no segment id (each revision a new id): the previous line
-  // from the same speaker growing by prefix is the same utterance, not a second one.
+  // A prefix growth from the same speaker is the same utterance still being recognised, not a
+  // second one.
   const last = lines[lines.length - 1];
   if (last && last.mine === turn.mine && last.text && turn.text.startsWith(last.text)) {
     const next = [...lines];
@@ -59,24 +62,30 @@ export function mergeTurn(lines: TranscriptLine[], turn: TranscriptLine): Transc
 }
 
 /**
- * Inside the room: publishes the microphone, renders the visualiser, and reports each finished turn
- * up to the parent so the transcript outlives the call.
+ * Inside the room. LiveKit owns the transcript, the turn state, the visualiser and the controls;
+ * this only maps its messages into the shape the page keeps for copying.
  */
 function Call({ onTurn }: { onTurn: (line: TranscriptLine) => void }) {
   const { state, audioTrack } = useVoiceAssistant();
   const connection = useConnectionState();
-  const transcriptions = useTranscriptions();
+  // The session's own message stream: user and agent transcriptions plus any text chat, already
+  // deduplicated by id by LiveKit.
+  const { messages } = useSessionMessages();
   const { localParticipant } = useLocalParticipant();
 
   useEffect(() => {
-    for (const line of transcriptions) {
-      const mine = line.participantInfo.identity === localParticipant.identity;
-      // One utterance keeps one identity across its revisions: the transcription stream carries
-      // `lk.segment_id`, and the stream id is the fallback.
-      const segment = line.streamInfo.attributes?.['lk.segment_id'] ?? line.streamInfo.id;
-      onTurn({ key: `${mine ? 'me' : 'them'}|${segment}`, mine, text: line.text });
+    for (const message of messages) {
+      const mine = message.from?.identity === localParticipant.identity;
+      // `lk.segment_id` groups an utterance across its revisions; the message id is the fallback.
+      const segment = message.attributes?.['lk.segment_id'] ?? message.id;
+      onTurn({
+        key: `${mine ? 'me' : 'them'}|${segment}`,
+        mine,
+        text: message.message ?? '',
+        at: message.timestamp,
+      });
     }
-  }, [transcriptions, localParticipant.identity, onTurn]);
+  }, [messages, localParticipant.identity, onTurn]);
 
   const label =
     connection === ConnectionState.Connected
@@ -96,6 +105,7 @@ function Call({ onTurn }: { onTurn: (line: TranscriptLine) => void }) {
         barCount={44}
         className="h-24 w-full rounded-2xl border border-border bg-muted/20 px-4 [--lk-fg:var(--primary)]"
       />
+      <VoiceAssistantControlBar />
     </>
   );
 }
@@ -227,14 +237,22 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
               </p>
             ) : (
               <ul className="flex flex-col gap-3">
-                {lines.map((line, index) => (
-                  <li key={index} className="text-sm">
+                {lines.map(line => (
+                  <li key={line.key} className="flex flex-col gap-0.5">
                     <span className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
                       {line.mine ? 'You' : 'KIRRO'}
                     </span>
-                    <p className={line.mine ? 'text-muted-foreground' : 'text-foreground'}>
-                      {line.text}
-                    </p>
+                    {/* LiveKit's own entry markup and styling for the message body. */}
+                    <ChatEntry
+                      entry={
+                        {
+                          id: line.key,
+                          timestamp: line.at,
+                          message: line.text,
+                        } as unknown as ReceivedChatMessage
+                      }
+                      hideName
+                    />
                   </li>
                 ))}
               </ul>
