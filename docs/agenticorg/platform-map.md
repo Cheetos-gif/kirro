@@ -881,3 +881,8 @@ Two consecutive live runs, same public mock:
   booking attempt → **402 `PAYMENT_REQUIRED`** (the venue refuses to confirm without a captured payment); after the
   engine's reversal (`release_hold`, `release` mandate) the state reads
   `{active_holds: 0, bookings: 0, payments: 0, released_mandates: 1}` and the hold reports `released`.
+
+One caveat when re-checking those states: `POST /__admin/reset` clears one run when its **body** carries `run_id`, and
+**all** state when it does not (`docs/connectors.md`) — it reads the body, not `X-Run-Id`. A later global reset
+cleared the runs above, so `GET /__admin/state?run_id=dryrun_a` now reads zero; the log lines cited here persist, and
+the observations were taken live at the time.
