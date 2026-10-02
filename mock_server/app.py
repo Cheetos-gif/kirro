@@ -50,7 +50,7 @@ def money(value: int) -> dict:
     return {"value": value, "currency": "INR"}
 
 
-def capture(run: RunState, auth_id: str, amount: Any, sc: str) -> tuple[int, dict]:
+def capture(run: RunState, auth_id: str, amount: Any, sc: str, user_contact: str | None = None) -> tuple[int, dict]:
     """Capture `amount` paise against an active mandate.
 
     Shared by `pinelabs.execute` and the one-shot `venue buy`, so instant_buy takes the exact same
@@ -67,7 +67,12 @@ def capture(run: RunState, auth_id: str, amount: Any, sc: str) -> tuple[int, dic
     if sc == "payment_failure":
         return 200, {"payment_id": pid, "status": "FAILED", "reason": "BANK_DECLINED", "amount": money(amount)}
     mandate["balance"] -= amount
-    run.payments[pid] = {"status": "SUCCESS", "amount": amount, "auth": auth_id, "refunded": False}
+    payment: dict[str, Any] = {"status": "SUCCESS", "amount": amount, "auth": auth_id, "refunded": False}
+    if user_contact:
+        # Portal-initiated captures carry the buyer's contact so /__admin/state can answer "what did this
+        # user pay for" without a per-user business route (ADR-015 dashboard).
+        payment["user_contact"] = user_contact
+    run.payments[pid] = payment
     return 200, {"payment_id": pid, "status": "SUCCESS", "receipt_id": f"rcpt_{pid}", "amount": money(amount)}
 
 
@@ -183,9 +188,9 @@ def create_app(log_dir: str | None = None) -> FastAPI:
         return {"ok": True}
 
     @app.get("/__admin/state")
-    def admin_state(run_id: str):
+    def admin_state(run_id: str, user_contact: str | None = None):
         r = st.run(run_id)
-        return {
+        snapshot = {
             "holds": len(r.holds),
             "active_holds": sum(1 for h in r.holds.values() if not h["released"]),
             "bookings": len(r.bookings),
@@ -206,6 +211,31 @@ def create_app(log_dir: str | None = None) -> FastAPI:
             ),
             "refunded_paise": sum(p["amount"] for p in r.payments.values() if p.get("refunded")),
         }
+        if user_contact:
+            # Per-user view for the portal's dashboard, kept on this harness endpoint rather than a new
+            # business route (ADR-015): declarations carry user_contact from the declare body, and instant
+            # buys stamp it on the hold/booking/payment. No per-user index exists in the store, so this is a
+            # scan — fine for demo scale, and honest about what the mock actually knows.
+            snapshot["user"] = {
+                "user_contact": user_contact,
+                "declarations": [
+                    {"release_id": release_id, **dict(d)}
+                    for release_id, pool in r.declarations.items()
+                    for d in pool.values()
+                    if d.get("user_contact") == user_contact
+                ],
+                "bookings": [
+                    {"booking_ref": ref, **dict(b)}
+                    for ref, b in r.bookings.items()
+                    if b.get("user_contact") == user_contact
+                ],
+                "payments": [
+                    {"payment_id": pid, **dict(p)}
+                    for pid, p in r.payments.items()
+                    if p.get("user_contact") == user_contact
+                ],
+            }
+        return snapshot
 
     # ------------------------------------------------------------------ venue (capability A, MOCK REQUIRED)
     def find_release(run: RunState, rel_id: str) -> dict | None:
@@ -581,6 +611,8 @@ def create_app(log_dir: str | None = None) -> FastAPI:
                 return err(400, "BAD_REQUEST", "unknown slot or invalid quantity")
             if not isinstance(auth, str) or not auth or not run.mandates.get(auth):
                 return err(404, "NOT_FOUND", "active authorization not found")
+            raw_contact = body.get("user_contact")
+            contact = raw_contact.strip() if isinstance(raw_contact, str) and raw_contact.strip() else None
             if sc == "no_inventory":
                 return err(409, "SOLD_OUT", "slot has no remaining inventory")
             avail = slot_view(run, "partial_group" if sc == "partial_group" else "success", slot)["capacity"]
@@ -589,14 +621,17 @@ def create_app(log_dir: str | None = None) -> FastAPI:
             amount = qty * slot["price_per_person_paise"]
             hid = run.next_id("hold")
             run.used_capacity[slot["slot_id"]] += qty
-            run.holds[hid] = {
+            hold: dict[str, Any] = {
                 "slot_id": slot["slot_id"],
                 "quantity": qty,
                 "released": False,
                 "expires": _iso(_now() + timedelta(seconds=1 if sc == "booking_expired" else 600)),
                 "force_expired": sc == "booking_expired",
             }
-            status, pay = capture(run, auth, amount, sc)
+            if contact:
+                hold["user_contact"] = contact
+            run.holds[hid] = hold
+            status, pay = capture(run, auth, amount, sc, contact)
             if status != 200 or pay.get("status") != "SUCCESS":
                 run.holds[hid]["released"] = True
                 run.used_capacity[slot["slot_id"]] -= qty
@@ -608,7 +643,10 @@ def create_app(log_dir: str | None = None) -> FastAPI:
                 run.used_capacity[slot["slot_id"]] -= qty
                 return err(410, "HOLD_EXPIRED", "hold is no longer active")
             ref = run.next_id("BK").replace("_", "-")
-            run.bookings[ref] = {"hold_id": hid, "payment_id": pay["payment_id"]}
+            booking: dict[str, Any] = {"hold_id": hid, "payment_id": pay["payment_id"]}
+            if contact:
+                booking["user_contact"] = contact
+            run.bookings[ref] = booking
             return 200, {
                 "release_id": release_id,
                 "slot_id": slot["slot_id"],

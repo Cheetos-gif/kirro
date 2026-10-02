@@ -543,6 +543,34 @@ def test_buy_failure_scenarios_release_the_hold(mock_client, s, status, code):
     assert slots[0]["capacity"] == 4
 
 
+def test_admin_state_has_a_per_user_view(mock_client):
+    """The dashboard reads its own data from /__admin/state?user_contact= (no per-user business route)."""
+    mock_client.post(
+        "/venue/releases/rel_badminton_sat/declarations",
+        json=declare_body(user_contact="a@b.com"),
+        headers=H(key="d1"),
+    )
+    release = mock_client.post("/venue/releases", json=instant_release_body(), headers=H(key="r1")).json()
+    auth = new_mandate(mock_client, 100000)
+    mock_client.post(
+        f"/venue/releases/{release['release_id']}/buy",
+        json={"slot_id": "ib_a", "quantity": 1, "mandate_id": auth, "user_contact": "a@b.com"},
+        headers=H(key="b1"),
+    )
+
+    view = mock_client.get("/__admin/state", params={"run_id": "r", "user_contact": "a@b.com"}).json()["user"]
+    assert [d["release_id"] for d in view["declarations"]] == ["rel_badminton_sat"]
+    assert view["bookings"][0]["booking_ref"] == "BK-0001"
+    assert view["payments"][0]["amount"] == 20000
+    assert mock_client.get("/__admin/state", params={"run_id": "r", "user_contact": "nobody@x.com"}).json()["user"] == {
+        "user_contact": "nobody@x.com",
+        "declarations": [],
+        "bookings": [],
+        "payments": [],
+    }
+    assert "user" not in mock_client.get("/__admin/state", params={"run_id": "r"}).json()
+
+
 def test_catalogue_filters_by_organiser_and_status(mock_client):
     seeded = mock_client.get("/venue/catalogue", params={"organiser_id": "org_seed"}, headers=H()).json()["events"]
     assert {e["event_id"] for e in seeded} == {"ev_badminton", "ev_tennis", "ev_movie", "ev_f1"}
