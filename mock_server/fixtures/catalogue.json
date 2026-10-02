@@ -27,6 +27,12 @@
      "opens_at": "2026-10-02T06:00:00Z",
      "slots": [
        {"slot_id": "f1_pad", "label": "Paddock Pass, Sunday", "starts_at": "2026-10-04T12:00:00Z", "capacity": 6, "price_per_person_paise": 900000}
+     ]},
+    {"release_id": "rel_movie_fri", "event_id": "ev_movie", "date": "2026-10-03",
+     "opens_at": "2026-10-02T06:00:00Z",
+     "slots": [
+       {"slot_id": "mv_1900", "label": "Screen 2, 19:00 standard", "starts_at": "2026-10-03T19:00:00Z", "capacity": 40, "price_per_person_paise": 25000},
+       {"slot_id": "mv_2130", "label": "Screen 2, 21:30 recliner", "starts_at": "2026-10-03T21:30:00Z", "capacity": 10, "price_per_person_paise": 45000}
      ]}
   ],
   "pincodes": {"560001": {"district": "Bengaluru", "state_code": "KA"}, "110001": {"district": "New Delhi", "state_code": "DL"}}

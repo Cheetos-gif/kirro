@@ -65,6 +65,33 @@ def test_happy_hold_booking_flow_and_idempotency(mock_client):
     assert bk.json()["booking_ref"] == "BK-0001"
 
 
+def test_movie_release_is_bookable(mock_client):
+    """ev_movie has a catalogue entry but previously had no release at all -- NOT_FOUND on every call."""
+    assert mock_client.get("/venue/releases", params={"event_id": "ev_movie"}).json()["releases"] == [
+        {
+            "release_id": "rel_movie_fri",
+            "event_id": "ev_movie",
+            "date": "2026-10-03",
+            "opens_at": "2026-10-02T06:00:00Z",
+        }
+    ]
+    a = mock_client.post(
+        "/venue/releases/rel_movie_fri/holds", json=hold_body(qty=2, slot="mv_1900"), headers=H(key="k1")
+    ).json()
+    assert a["hold_id"] == "hold_0001" and a["price_per_unit_paise"] == 25000
+    m = mock_client.post(
+        "/pinelabs/mandates", json={"amount": {"value": 50000, "currency": "INR"}}, headers=H(key="m")
+    ).json()
+    p = mock_client.post(
+        f"/pinelabs/mandates/{m['authorizationId']}/execute", json={"amount": {"value": 50000}}, headers=H(key="p")
+    ).json()
+    assert p["status"] == "SUCCESS"
+    bk = mock_client.post(
+        "/venue/bookings", json={"hold_id": a["hold_id"], "payment_id": p["payment_id"]}, headers=H(key="b")
+    )
+    assert bk.json()["booking_ref"] == "BK-0001"
+
+
 def test_booking_requires_captured_payment(mock_client):
     a = mock_client.post("/venue/releases/rel_badminton_sat/holds", json=hold_body(), headers=H(key="k")).json()
     r = mock_client.post(
