@@ -235,3 +235,33 @@ def test_mandate_tools_accept_the_amount_alias(mcp_base):
     assert missing["status_code"] == 400 and missing["body"]["error"]["code"] == "BAD_REQUEST"
     assert "amount_value=None" in missing["body"]["error"]["message"]
     assert charged["status_code"] == 200 and charged["body"]["status"] == "SUCCESS"
+
+
+def test_lookup_and_bid_tools_accept_model_shaped_arguments(mcp_base):
+    """Live, the agent's release lookup and pool declare were both rejected before reaching the mock, so it told the
+    user the lookup had failed. A free-text event, a date, a single slot id as a string, numbers as strings, and an
+    omitted declaration id must all work."""
+
+    async def go():
+        async with session(f"{mcp_base}/venue/mcp") as s:
+            listed = payload(await s.call_tool("list_releases", {"event": "badminton"}))
+            fetched = payload(await s.call_tool("get_release", {"event": "badminton", "date": "2026-10-03"}))
+            bid = payload(
+                await s.call_tool(
+                    "declare_interest",
+                    {
+                        "release": "rel_badminton_sat",
+                        "slots": "bd_0700",
+                        "group_size": "4",
+                        "min_group_size": 2,
+                        "max_price_paise": 30000,
+                    },
+                )
+            )
+            return listed, fetched, bid
+
+    listed, fetched, bid = asyncio.run(go())
+    assert [item["release_id"] for item in listed["body"]["releases"]] == ["rel_badminton_sat"]
+    assert fetched["body"]["release_id"] == "rel_badminton_sat" and fetched["body"]["slots"]
+    assert bid["status_code"] == 200 and bid["body"]["status"] == "DECLARED"
+    assert bid["body"]["declaration_id"]
