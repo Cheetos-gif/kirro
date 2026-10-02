@@ -103,12 +103,13 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
     )
     async def list_releases(
         event_id: Any = None,
+        eventId: Any = None,
         event: Any = None,
         date: Any = None,
         on_date: Any = None,
         run_id: str = DEFAULT_RUN,
     ) -> dict:
-        return await _releases(client, run_id, _first_str(event_id, event), _first_str(date, on_date))
+        return await _releases(client, run_id, _first_str(event_id, eventId, event), _first_str(date, on_date))
 
     @mcp.tool(
         description=(
@@ -118,15 +119,17 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
     )
     async def get_release(
         release_id: Any = None,
+        releaseId: Any = None,
         release: Any = None,
         event: Any = None,
         event_id: Any = None,
+        eventId: Any = None,
         date: Any = None,
         run_id: str = DEFAULT_RUN,
     ) -> dict:
-        resolved = _first_str(release_id, release)
+        resolved = _first_str(release_id, releaseId, release)
         if resolved is None:
-            listing = await _releases(client, run_id, _first_str(event, event_id), _first_str(date))
+            listing = await _releases(client, run_id, _first_str(event, event_id, eventId), _first_str(date))
             found = listing["body"].get("releases", [])
             if len(found) != 1:
                 return {
@@ -193,26 +196,33 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
     )
     async def declare_interest(
         release_id: Any = None,
+        releaseId: Any = None,
         release: Any = None,
         event: Any = None,
         event_id: Any = None,
+        eventId: Any = None,
         date: Any = None,
         declaration_id: Any = None,
+        declarationId: Any = None,
         acceptable_slot_ids: Any = None,
-        slots: Any = None,
         slot_ids: Any = None,
+        slotIds: Any = None,
+        slots: Any = None,
         group_size: Any = None,
+        groupSize: Any = None,
         min_group_size: Any = None,
+        minGroupSize: Any = None,
         max_price_paise: Any = None,
+        maxPricePaise: Any = None,
         max_price: Any = None,
         user_contact: Any = None,
         mandate_id: Any = None,
         run_id: str = DEFAULT_RUN,
         idempotency_key: str | None = None,
     ) -> dict:
-        resolved = _first_str(release_id, release)
+        resolved = _first_str(release_id, releaseId, release)
         if resolved is None:
-            listing = await _releases(client, run_id, _first_str(event, event_id), _first_str(date))
+            listing = await _releases(client, run_id, _first_str(event, event_id, eventId), _first_str(date))
             found = listing["body"].get("releases", [])
             if len(found) != 1:
                 return _bad_request(
@@ -220,7 +230,7 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
                     f"(candidates: {found})"
                 )
             resolved = found[0]["release_id"]
-        slots_for_bid = _slot_ids(acceptable_slot_ids, slots, slot_ids)
+        slots_for_bid = _slot_ids(acceptable_slot_ids, slot_ids, slotIds, slots)
         if slots_for_bid is None:
             # Mock convenience: with no slot ids given, bid for the release's own slots, which is what declaring
             # interest in that release means. A model that never read the slot ids therefore cannot drop the bid.
@@ -230,9 +240,9 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
             slots_for_bid = [slot["slot_id"] for slot in detail["body"].get("slots", [])]
         if not slots_for_bid:
             return _bad_request("acceptable_slot_ids is required; call get_release for the release's slot ids")
-        group = _coerce_int(group_size)
-        minimum = _coerce_int(min_group_size)
-        ceiling = _coerce_int(max_price_paise if max_price_paise is not None else max_price)
+        group = _first_int(group_size, groupSize)
+        minimum = _first_int(min_group_size, minGroupSize)
+        ceiling = _first_int(max_price_paise, maxPricePaise, max_price)
         if group is None or minimum is None or ceiling is None:
             return _bad_request(
                 "group_size, min_group_size and max_price_paise (paise) are required; received "
@@ -246,7 +256,7 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
             idem=idempotency_key,
             json={
                 # A stable fallback keeps a retry of the same bid from becoming a second pool entry.
-                "declaration_id": _first_str(declaration_id) or f"decl_{run_id}_{resolved}",
+                "declaration_id": _first_str(declaration_id, declarationId) or f"decl_{run_id}_{resolved}",
                 "acceptable_slot_ids": slots_for_bid,
                 "group_size": group,
                 "min_group_size": minimum,
@@ -304,6 +314,15 @@ def _first_str(*candidates: Any) -> str | None:
     return None
 
 
+def _first_int(*candidates: Any) -> int | None:
+    """First candidate that coerces to an int, so a tool may declare several aliases for one number."""
+    for candidate in candidates:
+        coerced = _coerce_int(candidate)
+        if coerced is not None:
+            return coerced
+    return None
+
+
 def _slot_ids(*candidates: Any) -> list[str] | None:
     """Slot ids as a list, a comma/space-separated string, or a single id."""
     for candidate in candidates:
@@ -352,6 +371,9 @@ async def _releases(client: httpx.AsyncClient, run_id: str, event: str | None, d
     return {"status_code": 200, "body": {"releases": releases}}
 
 
+AMOUNT_ARG_NAMES = ("amount_value", "amountValue", "amount", "amount_paise", "amountPaise")
+
+
 def _amount_or_error(*candidates: Any) -> tuple[int | None, dict | None]:
     """First usable amount wins. On failure the error echoes exactly what arrived, so the model's argument
     shape is visible in the agent's reply instead of only in a platform-side validation message."""
@@ -359,9 +381,7 @@ def _amount_or_error(*candidates: Any) -> tuple[int | None, dict | None]:
         coerced = _coerce_amount(candidate)
         if coerced is not None:
             return coerced, None
-    received = ", ".join(
-        f"{name}={value!r}" for name, value in zip(("amount_value", "amount", "amount_paise"), candidates, strict=False)
-    )
+    received = ", ".join(f"{name}={value!r}" for name, value in zip(AMOUNT_ARG_NAMES, candidates, strict=False))
     return None, {
         "status_code": 400,
         "body": {
@@ -384,13 +404,15 @@ def _pinelabs(mcp: MCPServer, client: httpx.AsyncClient) -> None:
     )
     async def create_mandate(
         amount_value: Any = None,
+        amountValue: Any = None,
         amount: Any = None,
         amount_paise: Any = None,
+        amountPaise: Any = None,
         currency: str = "INR",
         run_id: str = DEFAULT_RUN,
         idempotency_key: str | None = None,
     ) -> dict:
-        value, error = _amount_or_error(amount_value, amount, amount_paise)
+        value, error = _amount_or_error(amount_value, amountValue, amount, amount_paise, amountPaise)
         if error is not None:
             return error
         return await _call(
@@ -403,8 +425,15 @@ def _pinelabs(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         )
 
     @mcp.tool(description="Read the remaining authorised balance for a mandate.")
-    async def get_mandate_balance(authorization_id: str, run_id: str = DEFAULT_RUN) -> dict:
-        return await _call(client, "GET", f"/pinelabs/mandates/{authorization_id}/balance", run_id=run_id)
+    async def get_mandate_balance(
+        authorization_id: Any = None,
+        authorizationId: Any = None,
+        run_id: str = DEFAULT_RUN,
+    ) -> dict:
+        mandate = _first_str(authorization_id, authorizationId)
+        if mandate is None:
+            return _bad_request("authorization_id is required; take it from the create_mandate response")
+        return await _call(client, "GET", f"/pinelabs/mandates/{mandate}/balance", run_id=run_id)
 
     @mcp.tool(
         description=(
@@ -413,20 +442,26 @@ def _pinelabs(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         )
     )
     async def execute(
-        authorization_id: str,
+        authorization_id: Any = None,
+        authorizationId: Any = None,
         amount_value: Any = None,
+        amountValue: Any = None,
         amount: Any = None,
         amount_paise: Any = None,
+        amountPaise: Any = None,
         run_id: str = DEFAULT_RUN,
         idempotency_key: str | None = None,
     ) -> dict:
-        value, error = _amount_or_error(amount_value, amount, amount_paise)
+        mandate = _first_str(authorization_id, authorizationId)
+        if mandate is None:
+            return _bad_request("authorization_id is required; take it from the create_mandate response")
+        value, error = _amount_or_error(amount_value, amountValue, amount, amount_paise, amountPaise)
         if error is not None:
             return error
         return await _call(
             client,
             "POST",
-            f"/pinelabs/mandates/{authorization_id}/execute",
+            f"/pinelabs/mandates/{mandate}/execute",
             run_id=run_id,
             idem=idempotency_key,
             json={"amount": {"value": value}},
