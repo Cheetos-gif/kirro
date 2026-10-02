@@ -21,6 +21,7 @@ which also shares the pool. See `docs/connectors.md` and ADR-013.
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -109,6 +110,21 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         on_date: Any = None,
         run_id: str = DEFAULT_RUN,
     ) -> dict:
+        _record(
+            "list_releases",
+            run_id,
+            {
+                key: value
+                for key, value in {
+                    "event_id": event_id,
+                    "eventId": eventId,
+                    "event": event,
+                    "date": date,
+                    "on_date": on_date,
+                }.items()
+                if value is not None
+            },
+        )
         return await _releases(client, run_id, _first_str(event_id, eventId, event), _first_str(date, on_date))
 
     @mcp.tool(
@@ -127,6 +143,21 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         date: Any = None,
         run_id: str = DEFAULT_RUN,
     ) -> dict:
+        _record(
+            "get_release",
+            run_id,
+            {
+                key: value
+                for key, value in {
+                    "release_id": release_id,
+                    "releaseId": releaseId,
+                    "event": event,
+                    "eventId": eventId,
+                    "date": date,
+                }.items()
+                if value is not None
+            },
+        )
         resolved = _first_str(release_id, releaseId, release)
         if resolved is None:
             listing = await _releases(client, run_id, _first_str(event, event_id, eventId), _first_str(date))
@@ -220,6 +251,29 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         run_id: str = DEFAULT_RUN,
         idempotency_key: str | None = None,
     ) -> dict:
+        _record(
+            "declare_interest",
+            run_id,
+            {
+                key: value
+                for key, value in {
+                    "release_id": release_id,
+                    "releaseId": releaseId,
+                    "release": release,
+                    "event": event,
+                    "eventId": eventId,
+                    "date": date,
+                    "declaration_id": declaration_id,
+                    "acceptable_slot_ids": acceptable_slot_ids,
+                    "slots": slots,
+                    "group_size": group_size,
+                    "min_group_size": min_group_size,
+                    "max_price_paise": max_price_paise,
+                    "maxPricePaise": maxPricePaise,
+                }.items()
+                if value is not None
+            },
+        )
         resolved = _first_str(release_id, releaseId, release)
         if resolved is None:
             listing = await _releases(client, run_id, _first_str(event, event_id, eventId), _first_str(date))
@@ -341,6 +395,35 @@ def _bad_request(message: str) -> dict:
     return {"status_code": 400, "body": {"error": {"code": "BAD_REQUEST", "message": message}}}
 
 
+# Set by `build_surfaces` from `app.state.mock`; None when the tools are exercised without an app (tests).
+_TOOL_LOG: Any = None
+
+
+def _record(tool: str, run_id: str, arguments: dict[str, Any]) -> None:
+    """Append every MCP tool invocation, with the arguments as received, to the run's request log.
+
+    The platform validates arguments before forwarding them, and our own guards answer before reaching a route,
+    so without this a tool that failed inside a guard is indistinguishable from one the platform never sent.
+    """
+    if _TOOL_LOG is None:
+        return
+    _TOOL_LOG.log(
+        run_id,
+        {
+            "ts": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+            "request_id": "",
+            "upstream_request_id": "",
+            "path": "mcp",
+            "target": f"mcp.{tool}",
+            "scenario": None,
+            "request": arguments,
+            "response": None,
+            "status": None,
+            "latency_ms": 0,
+        },
+    )
+
+
 async def _releases(client: httpx.AsyncClient, run_id: str, event: str | None, date: str | None) -> dict:
     """List releases, tolerating a free-text event.
 
@@ -412,6 +495,21 @@ def _pinelabs(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         run_id: str = DEFAULT_RUN,
         idempotency_key: str | None = None,
     ) -> dict:
+        _record(
+            "create_mandate",
+            run_id,
+            {
+                key: value
+                for key, value in {
+                    "amount_value": amount_value,
+                    "amountValue": amountValue,
+                    "amount": amount,
+                    "amount_paise": amount_paise,
+                    "amountPaise": amountPaise,
+                }.items()
+                if value is not None
+            },
+        )
         value, error = _amount_or_error(amount_value, amountValue, amount, amount_paise, amountPaise)
         if error is not None:
             return error
@@ -551,6 +649,8 @@ def build_surfaces(app: Any) -> tuple[dict[str, MCPServer], MCPServer]:
     `docs/agenticorg/platform-map.md`.
     """
     client = _client(app)
+    global _TOOL_LOG
+    _TOOL_LOG = getattr(app.state, "mock", None)
     per_surface: dict[str, MCPServer] = {}
     for name, register in BUILDERS.items():
         mcp = MCPServer(f"kirro_{name}", instructions=SURFACE_INSTRUCTIONS[name])

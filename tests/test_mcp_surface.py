@@ -24,7 +24,7 @@ H = {"X-Run-Id": "mcp"}
 
 
 @pytest.fixture
-def mcp_base(tmp_path):
+def mcp_server(tmp_path):
     s = socket.socket()
     s.bind(("127.0.0.1", 0))
     port = s.getsockname()[1]
@@ -36,9 +36,14 @@ def mcp_base(tmp_path):
         if server.started:
             break
         time.sleep(0.05)
-    yield f"http://127.0.0.1:{port}"
+    yield f"http://127.0.0.1:{port}", tmp_path
     server.should_exit = True
     t.join(timeout=5)
+
+
+@pytest.fixture
+def mcp_base(mcp_server):
+    return mcp_server[0]
 
 
 @asynccontextmanager
@@ -294,3 +299,21 @@ def test_lookup_survives_a_misresolved_date_and_a_bid_without_slots(mcp_base):
     assert [item["release_id"] for item in listed["body"]["releases"]] == ["rel_badminton_sat"]
     assert fetched["body"]["release_id"] == "rel_badminton_sat"
     assert bid["status_code"] == 200 and bid["body"]["status"] == "DECLARED"
+
+
+def test_every_tool_invocation_is_logged_with_the_arguments_received(mcp_server):
+    """A guard that answers inside the tool used to leave no trace at all, so a call the platform made and we
+    rejected was indistinguishable from one it never sent. The arguments as received must land in the run log."""
+    base, log_dir = mcp_server
+
+    async def go():
+        async with session(f"{base}/venue/mcp") as s:
+            await s.call_tool("list_releases", {"event": "badminton"})
+            await s.call_tool("declare_interest", {"group_size": 4})
+
+    asyncio.run(go())
+    lines = [json.loads(line) for line in (log_dir / "default.jsonl").read_text().splitlines()]
+    tools = {line["target"]: line["request"] for line in lines if line["target"].startswith("mcp.")}
+    assert tools["mcp.list_releases"] == {"event": "badminton"}
+    # The guard answered, but the argument it was missing is recorded as absent rather than silently dropped.
+    assert tools["mcp.declare_interest"] == {"group_size": 4}
