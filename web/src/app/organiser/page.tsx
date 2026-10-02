@@ -22,11 +22,11 @@ export default async function OrganiserPage() {
     return (
       <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-16">
         <Alert>
-          <AlertTitle>No approved organiser account</AlertTitle>
+          <AlertTitle>You are not an organiser yet</AlertTitle>
           <AlertDescription className="flex flex-col gap-3">
-            <span>Request organiser access first; an admin approves it.</span>
+            <span>Send a request and the team will approve it.</span>
             <Button size="sm" className="w-fit" render={<Link href="/organiser/request" />}>
-              Request organiser access
+              Ask to organise
             </Button>
           </AlertDescription>
         </Alert>
@@ -50,7 +50,7 @@ export default async function OrganiserPage() {
     <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-10">
       <header className="mb-6">
         <h1 className="font-heading text-2xl font-semibold tracking-tight">{mine.name}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Organiser dashboard · {viewer.email}</p>
+        <p className="mt-1 text-sm text-muted-foreground">Organiser dashboard, {viewer.email}</p>
       </header>
 
       <div className="flex flex-col gap-6">
@@ -58,7 +58,7 @@ export default async function OrganiserPage() {
           <CardHeader>
             <CardTitle>Your events</CardTitle>
             <CardDescription>
-              Draft events stay out of public listings until published.
+              Draft events stay out of the listings until you publish them.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
@@ -97,15 +97,12 @@ export default async function OrganiserPage() {
                                 release.allocation_mode === 'fair_draw' ? 'default' : 'secondary'
                               }
                             >
-                              {release.allocation_mode === 'fair_draw'
-                                ? 'Fair draw'
-                                : 'Instant buy'}
+                              {release.allocation_mode === 'fair_draw' ? 'Draw' : 'Buy now'}
                             </Badge>
                             <span>
-                              {declared} declared
                               {release.allocation_mode === 'fair_draw'
-                                ? ' — the draw picks winners'
-                                : ''}
+                                ? `${declared} in the draw`
+                                : 'sells in order of arrival'}
                             </span>
                           </li>
                         ))}
@@ -120,7 +117,7 @@ export default async function OrganiserPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Create an event</CardTitle>
+            <CardTitle>New event</CardTitle>
           </CardHeader>
           <CardContent>
             <CreateEventForm />
@@ -129,10 +126,10 @@ export default async function OrganiserPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Create a release</CardTitle>
+            <CardTitle>New release</CardTitle>
             <CardDescription>
-              A fair-draw release can only be entered by declaring interest; an instant-buy release
-              sells first come.
+              A release belongs to one of your events. A draw release can only be joined by entering
+              the draw; a buy-now release sells in order of arrival.
             </CardDescription>
           </CardHeader>
           <CardContent>

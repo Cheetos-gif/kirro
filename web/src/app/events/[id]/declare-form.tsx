@@ -18,10 +18,10 @@ export function DeclareForm({ releaseId, slots }: { releaseId: string; slots: Sl
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Declare interest</CardTitle>
+        <CardTitle>Join the draw</CardTitle>
         <CardDescription>
-          Tell KIRRO what you would accept. The draw runs the same whether you reply fast or slow —
-          speed buys nothing here.
+          Say what you would accept. The draw runs once the window closes and treats everyone the
+          same, so there is no rush.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -29,12 +29,12 @@ export function DeclareForm({ releaseId, slots }: { releaseId: string; slots: Sl
           <input type="hidden" name="release_id" value={releaseId} />
 
           <fieldset className="flex flex-col gap-2">
-            <legend className="mb-1 text-sm font-medium">Acceptable slots</legend>
+            <legend className="mb-1 text-sm font-medium">Slots you would take</legend>
             {slots.map(slot => (
               <Label key={slot.slot_id} className="flex items-center gap-2 font-normal">
                 <Checkbox name="slot_ids" value={slot.slot_id} defaultChecked />
                 <span>
-                  {slot.label} · {formatPaise(slot.price_per_person_paise)}
+                  {slot.label}, {formatPaise(slot.price_per_person_paise)}
                 </span>
               </Label>
             ))}
@@ -42,7 +42,7 @@ export function DeclareForm({ releaseId, slots }: { releaseId: string; slots: Sl
 
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor={`group-${releaseId}`}>Group size</Label>
+              <Label htmlFor={`group-${releaseId}`}>People</Label>
               <Input
                 id={`group-${releaseId}`}
                 name="group_size"
@@ -53,7 +53,7 @@ export function DeclareForm({ releaseId, slots }: { releaseId: string; slots: Sl
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor={`min-group-${releaseId}`}>Minimum group</Label>
+              <Label htmlFor={`min-group-${releaseId}`}>Fewest people</Label>
               <Input
                 id={`min-group-${releaseId}`}
                 name="min_group_size"
@@ -64,7 +64,7 @@ export function DeclareForm({ releaseId, slots }: { releaseId: string; slots: Sl
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor={`ceiling-${releaseId}`}>Ceiling per person (₹)</Label>
+              <Label htmlFor={`ceiling-${releaseId}`}>Most you will pay each (₹)</Label>
               <Input
                 id={`ceiling-${releaseId}`}
                 name="max_price_rupees"
@@ -77,7 +77,7 @@ export function DeclareForm({ releaseId, slots }: { releaseId: string; slots: Sl
           </div>
 
           <Button type="submit" disabled={pending}>
-            {pending ? 'Submitting…' : 'Declare interest'}
+            {pending ? 'Joining...' : 'Join the draw'}
           </Button>
 
           {state ? (

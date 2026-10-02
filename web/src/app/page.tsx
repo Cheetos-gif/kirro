@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { isApiError } from '@/api';
+import { TalkToKirro } from '@/components/talk-to-kirro';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -42,10 +43,11 @@ export default async function HomePage() {
     return (
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-16">
         <Alert variant="destructive">
-          <AlertTitle>Mock server unreachable</AlertTitle>
+          <AlertTitle>Cannot reach the booking service</AlertTitle>
           <AlertDescription>
-            {isApiError(error) ? error.message : 'Could not load listings.'} Start it with{' '}
-            <code>bash scripts/dev.sh</code> or set <code>MOCK_API_URL</code>.
+            {isApiError(error) ? error.message : 'Something went wrong.'} Run{' '}
+            <code>bash scripts/dev.sh</code> from the repo root, or point <code>MOCK_API_URL</code>{' '}
+            at a running server.
           </AlertDescription>
         </Alert>
       </main>
@@ -55,17 +57,17 @@ export default async function HomePage() {
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10">
       <section className="mb-8">
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">Open listings</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Scarce inventory books by declared-interest draw; everything else is a plain first-come
-          buy. The badge on each listing says which.
+        <h1 className="font-heading text-2xl font-semibold tracking-tight">What is on sale</h1>
+        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+          Slots that more people want than there are seats go to a draw. The rest you can buy
+          straight away. The badge on each listing says which one it is.
         </p>
       </section>
 
       {releases.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-sm text-muted-foreground">
-            No published releases yet. Organisers create them from the organiser dashboard.
+            Nothing is on sale right now.
           </CardContent>
         </Card>
       ) : (
@@ -82,7 +84,7 @@ export default async function HomePage() {
                     </Link>
                   </CardTitle>
                   <CardDescription>
-                    {organiser?.name ?? 'Unknown organiser'} · {formatDate(detail.opens_at)}
+                    {organiser?.name ?? 'Unknown organiser'}, {formatDate(detail.opens_at)}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-3">
@@ -90,11 +92,10 @@ export default async function HomePage() {
                     <Badge
                       variant={detail.allocation_mode === 'fair_draw' ? 'default' : 'secondary'}
                     >
-                      {detail.allocation_mode === 'fair_draw' ? 'Fair draw' : 'Instant buy'}
+                      {detail.allocation_mode === 'fair_draw' ? 'Draw' : 'Buy now'}
                     </Badge>
                     <span className="text-xs text-muted-foreground">
-                      {detail.slots.length} slot{detail.slots.length === 1 ? '' : 's'} · {seats}{' '}
-                      seat
+                      {detail.slots.length} slot{detail.slots.length === 1 ? '' : 's'}, {seats} seat
                       {seats === 1 ? '' : 's'}
                     </span>
                   </div>
@@ -115,6 +116,10 @@ export default async function HomePage() {
           })}
         </div>
       )}
+
+      <section className="mt-8">
+        <TalkToKirro />
+      </section>
     </main>
   );
 }

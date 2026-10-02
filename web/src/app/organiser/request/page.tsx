@@ -20,36 +20,34 @@ export default async function OrganiserRequestPage() {
 
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-10">
-      <h1 className="mb-6 font-heading text-2xl font-semibold tracking-tight">
-        Become an organiser
-      </h1>
+      <h1 className="mb-6 font-heading text-2xl font-semibold tracking-tight">Organise an event</h1>
 
       {approved ? (
         <Alert>
           <AlertTitle>
-            Approved <Badge variant="secondary">{approved.name}</Badge>
+            You are set up as <Badge variant="secondary">{approved.name}</Badge>
           </AlertTitle>
           <AlertDescription className="flex flex-col gap-3">
-            <span>Your organiser account is active.</span>
+            <span>You can create events and releases from here.</span>
             <Button size="sm" className="w-fit" render={<Link href="/organiser" />}>
-              Go to organiser dashboard
+              Go to my events
             </Button>
           </AlertDescription>
         </Alert>
       ) : pending ? (
         <Alert>
-          <AlertTitle>Request under review</AlertTitle>
+          <AlertTitle>Your request is with the team</AlertTitle>
           <AlertDescription>
-            An admin will approve or decline your request. You are a normal user until then.
+            You will keep booking like any other user until it is approved.
           </AlertDescription>
         </Alert>
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle>Request organiser access</CardTitle>
+            <CardTitle>Ask to organise</CardTitle>
             <CardDescription>
-              Organisers create events and releases. Requests are approved by an admin; you stay a
-              normal user until then.
+              Organisers put events and releases on the site. The team approves requests, and you
+              can book like anyone else while you wait.
             </CardDescription>
           </CardHeader>
           <CardContent>

@@ -19,8 +19,8 @@ export function BuyForm({ releaseId, slots }: { releaseId: string; slots: Slot[]
       <CardHeader>
         <CardTitle>Buy now</CardTitle>
         <CardDescription>
-          First come, first served: this holds the seats, charges, and confirms in one step. No draw
-          is involved.
+          These seats sell in order of arrival. Buying holds them, takes the payment and confirms in
+          one step.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -39,13 +39,13 @@ export function BuyForm({ releaseId, slots }: { releaseId: string; slots: Slot[]
               >
                 {slots.map(slot => (
                   <option key={slot.slot_id} value={slot.slot_id} disabled={slot.capacity < 1}>
-                    {slot.label} · {formatPaise(slot.price_per_person_paise)} · {slot.capacity} left
+                    {slot.label}, {formatPaise(slot.price_per_person_paise)}, {slot.capacity} left
                   </option>
                 ))}
               </select>
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor={`qty-${releaseId}`}>Quantity</Label>
+              <Label htmlFor={`qty-${releaseId}`}>How many</Label>
               <Input
                 id={`qty-${releaseId}`}
                 name="quantity"
@@ -59,7 +59,7 @@ export function BuyForm({ releaseId, slots }: { releaseId: string; slots: Slot[]
           </div>
 
           <Button type="submit" disabled={pending}>
-            {pending ? 'Booking…' : 'Buy'}
+            {pending ? 'Buying...' : 'Buy'}
           </Button>
 
           {state ? (

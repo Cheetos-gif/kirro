@@ -21,11 +21,11 @@ export function RequestOrganiserForm({ defaultName }: { defaultName?: string }) 
         <Input id="org-name" name="name" defaultValue={defaultName} required />
       </div>
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="org-contact">Contact</Label>
+        <Label htmlFor="org-contact">How to reach you</Label>
         <Input id="org-contact" name="contact" placeholder="Phone or email" required />
       </div>
       <Button type="submit" disabled={pending} className="w-fit">
-        {pending ? 'Submitting…' : 'Request organiser access'}
+        {pending ? 'Sending...' : 'Send request'}
       </Button>
       {state ? (
         <Alert variant={state.ok ? 'default' : 'destructive'}>

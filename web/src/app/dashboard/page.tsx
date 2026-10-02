@@ -27,9 +27,9 @@ export default async function DashboardPage() {
     return (
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-16">
         <Alert variant="destructive">
-          <AlertTitle>Could not load your dashboard</AlertTitle>
+          <AlertTitle>Cannot reach the booking service</AlertTitle>
           <AlertDescription>
-            {error instanceof Error ? error.message : 'Mock server unreachable.'}
+            {error instanceof Error ? error.message : 'Something went wrong.'}
           </AlertDescription>
         </Alert>
       </main>
@@ -44,14 +44,14 @@ export default async function DashboardPage() {
     <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-10">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="font-heading text-2xl font-semibold tracking-tight">Your dashboard</h1>
+          <h1 className="font-heading text-2xl font-semibold tracking-tight">My bookings</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {viewer.email} · role {viewer.role}
+            {viewer.email}, signed in as {viewer.role}
           </p>
         </div>
         {viewer.role === 'user' ? (
           <Button variant="outline" size="sm" render={<Link href="/organiser/request" />}>
-            Request organiser access
+            Organise an event
           </Button>
         ) : null}
       </header>
@@ -59,22 +59,21 @@ export default async function DashboardPage() {
       <div className="flex flex-col gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>Declared interest</CardTitle>
+            <CardTitle>Draw entries</CardTitle>
             <CardDescription>
-              Entries in a release&apos;s pool. Allocation is decided by the fair draw, not by order
-              of arrival.
+              Releases you have joined. The draw result arrives on chat after the window closes.
             </CardDescription>
           </CardHeader>
           <CardContent>
             {declarations.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No declarations yet.</p>
+              <p className="text-sm text-muted-foreground">You have not joined a draw yet.</p>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Release</TableHead>
-                    <TableHead>Group</TableHead>
-                    <TableHead>Ceiling</TableHead>
+                    <TableHead>People</TableHead>
+                    <TableHead>Most you will pay</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -83,9 +82,9 @@ export default async function DashboardPage() {
                     <TableRow key={declaration.declaration_id}>
                       <TableCell>{declaration.release_id}</TableCell>
                       <TableCell>
-                        {declaration.min_group_size}–{declaration.group_size}
+                        {declaration.min_group_size} to {declaration.group_size}
                       </TableCell>
-                      <TableCell>{formatPaise(declaration.max_price_paise)}</TableCell>
+                      <TableCell>{formatPaise(declaration.max_price_paise)} each</TableCell>
                       <TableCell>
                         <Badge variant="secondary">{declaration.status}</Badge>
                       </TableCell>
@@ -101,7 +100,7 @@ export default async function DashboardPage() {
           <CardHeader>
             <CardTitle>Bookings</CardTitle>
             <CardDescription>
-              Confirmed instant buys. Fair-draw confirmations appear once the draw runs.
+              Seats you bought outright. Draw winners show up here after they are confirmed.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -133,7 +132,7 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle>Payments</CardTitle>
-            <CardDescription>Captured against your mandates.</CardDescription>
+            <CardDescription>Charges on your account.</CardDescription>
           </CardHeader>
           <CardContent>
             {payments.length === 0 ? (

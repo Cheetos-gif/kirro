@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 
 import { SignInButton } from '@/components/auth-buttons';
+import { TalkToKirro } from '@/components/talk-to-kirro';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,8 +32,8 @@ async function ActionPanel({
           <CardTitle>Sign in to take part</CardTitle>
           <CardDescription>
             {mode === 'fair_draw'
-              ? 'Declaring interest needs an account so the draw can reach you.'
-              : 'Buying needs an account so the booking is yours.'}
+              ? 'We need an account so the draw result reaches you.'
+              : 'We need an account so the booking is yours.'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -66,9 +67,9 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
     return (
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-16">
         <Alert variant="destructive">
-          <AlertTitle>Could not load this event</AlertTitle>
+          <AlertTitle>Cannot reach the booking service</AlertTitle>
           <AlertDescription>
-            {loaded.error instanceof Error ? loaded.error.message : 'Mock server unreachable.'}
+            {loaded.error instanceof Error ? loaded.error.message : 'Something went wrong.'}
           </AlertDescription>
         </Alert>
       </main>
@@ -83,8 +84,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
       <header className="mb-6">
         <h1 className="font-heading text-2xl font-semibold tracking-tight">{event.name}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {event.fulfilment === 'physical' ? 'Physical fulfilment' : 'Digital fulfilment'} · status{' '}
-          {event.status}
+          {event.fulfilment === 'physical' ? 'Posted to you' : 'Digital tickets'}
         </p>
       </header>
 
@@ -95,7 +95,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
               <CardTitle className="flex items-center gap-2">
                 <span>{release.release_id}</span>
                 <Badge variant={release.allocation_mode === 'fair_draw' ? 'default' : 'secondary'}>
-                  {release.allocation_mode === 'fair_draw' ? 'Fair draw' : 'Instant buy'}
+                  {release.allocation_mode === 'fair_draw' ? 'Draw' : 'Buy now'}
                 </Badge>
               </CardTitle>
               <CardDescription>Opens {formatDateTime(release.opens_at)}</CardDescription>
@@ -110,7 +110,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
                     <span>
                       {slot.label}
                       <span className="block text-xs text-muted-foreground">
-                        {formatDateTime(slot.starts_at)} · {slot.slot_id}
+                        {formatDateTime(slot.starts_at)}
                       </span>
                     </span>
                     <span className="text-right whitespace-nowrap">
@@ -124,10 +124,10 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
               </ul>
               {release.allocation_mode === 'fair_draw' ? (
                 <Alert>
-                  <AlertTitle>Scarce inventory — allocated by draw</AlertTitle>
+                  <AlertTitle>This one goes to a draw</AlertTitle>
                   <AlertDescription>
-                    Declaring interest is not a booking. Everyone in the pool gets the same fair,
-                    seeded draw; seats are confirmed afterwards.
+                    Add your name and the draw decides who gets the seats. Joining early does not
+                    improve your chances.
                   </AlertDescription>
                 </Alert>
               ) : null}
@@ -142,10 +142,12 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
         ))}
         {releases.length === 0 ? (
           <Alert>
-            <AlertTitle>No releases yet</AlertTitle>
-            <AlertDescription>This event has no bookable release at the moment.</AlertDescription>
+            <AlertTitle>Nothing on sale here yet</AlertTitle>
+            <AlertDescription>This event has no release open at the moment.</AlertDescription>
           </Alert>
         ) : null}
+
+        <TalkToKirro />
       </div>
     </main>
   );

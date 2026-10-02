@@ -11,14 +11,14 @@ export default async function SignInPage() {
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-16">
       <Card>
         <CardHeader>
-          <CardTitle>Sign in to KIRRO</CardTitle>
+          <CardTitle>Sign in</CardTitle>
           <CardDescription>
-            Any Google account can browse and buy. Organiser access is requested from your
-            dashboard; admin is seeded separately.
+            Use your Google account. Everyone starts as a user, and you can ask to organise events
+            from your bookings page once you are in.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <SignInButton />
+          <SignInButton label="Continue with Google" />
         </CardContent>
       </Card>
     </main>

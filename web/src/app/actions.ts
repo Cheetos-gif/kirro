@@ -63,7 +63,7 @@ export async function declareAction(_prev: ActionState, formData: FormData): Pro
     revalidatePath('/dashboard');
     return {
       ok: true,
-      message: `Declared interest (${result.declaration_id}). The draw decides allocation.`,
+      message: `You are in the draw (${result.declaration_id}). The result shows on your bookings page.`,
     };
   } catch (error) {
     return { ok: false, message: messageOf(error) };
@@ -125,7 +125,7 @@ export async function requestOrganiserAction(
       requested_by: viewer.email,
     });
     revalidatePath('/organiser/request');
-    return { ok: true, message: 'Request submitted. An admin will review it.' };
+    return { ok: true, message: 'Request sent. The team will review it.' };
   } catch (error) {
     return { ok: false, message: messageOf(error) };
   }
@@ -145,7 +145,11 @@ export async function createEventAction(
   try {
     await api.createEvent({ name: name.trim(), organiser_id: organiserId, status });
     revalidatePath('/organiser');
-    return { ok: true, message: `Event created (${status}).` };
+    return {
+      ok: true,
+      message:
+        status === 'published' ? 'Event created and published.' : 'Event created as a draft.',
+    };
   } catch (error) {
     return { ok: false, message: messageOf(error) };
   }
@@ -250,7 +254,7 @@ export async function approveOrganiserAction(
   try {
     await api.approveOrganiser(organiserId);
     revalidatePath('/admin');
-    return { ok: true, message: 'Organiser approved.' };
+    return { ok: true, message: 'Approved.' };
   } catch (error) {
     return { ok: false, message: messageOf(error) };
   }
@@ -275,7 +279,7 @@ export async function scenarioAction(_prev: ActionState, formData: FormData): Pr
       scenario,
       ...(delayS !== null ? { delay_s: delayS } : {}),
     });
-    return { ok: true, message: `Scenario "${scenario}" armed for ${target}.` };
+    return { ok: true, message: `Scenario set: ${scenario} on ${target}.` };
   } catch (error) {
     return { ok: false, message: messageOf(error) };
   }
@@ -289,7 +293,7 @@ export async function resetRunAction(
   try {
     await api.resetRun();
     revalidatePath('/admin');
-    return { ok: true, message: 'Run reset.' };
+    return { ok: true, message: 'Run cleared.' };
   } catch (error) {
     return { ok: false, message: messageOf(error) };
   }

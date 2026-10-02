@@ -45,9 +45,9 @@ export default async function AdminPage() {
     return (
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-16">
         <Alert variant="destructive">
-          <AlertTitle>Could not load admin data</AlertTitle>
+          <AlertTitle>Cannot reach the booking service</AlertTitle>
           <AlertDescription>
-            {error instanceof Error ? error.message : 'Mock server unreachable.'}
+            {error instanceof Error ? error.message : 'Something went wrong.'}
           </AlertDescription>
         </Alert>
       </main>
@@ -65,15 +65,15 @@ export default async function AdminPage() {
         <Stat
           label="Organisers"
           value={String(state.organisers)}
-          hint={`${pending.length} pending`}
+          hint={`${pending.length} waiting`}
         />
         <Stat
-          label="Declarations"
+          label="Draw entries"
           value={String(state.declarations)}
           hint={`${state.bookings} bookings`}
         />
         <Stat
-          label="Captured"
+          label="Taken"
           value={formatPaise(state.captured_paise)}
           hint={`${formatPaise(state.refunded_paise)} refunded`}
         />
@@ -82,12 +82,12 @@ export default async function AdminPage() {
       <div className="flex flex-col gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>Pending organiser approvals</CardTitle>
-            <CardDescription>Self-serve requests waiting on an admin.</CardDescription>
+            <CardTitle>Organiser requests</CardTitle>
+            <CardDescription>People asking to organise events.</CardDescription>
           </CardHeader>
           <CardContent>
             {pending.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nothing pending.</p>
+              <p className="text-sm text-muted-foreground">Nothing waiting.</p>
             ) : (
               <Table>
                 <TableHeader>
@@ -144,7 +144,7 @@ export default async function AdminPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {organiser.requested_by ?? '—'}
+                      {organiser.requested_by ?? 'none'}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -187,10 +187,10 @@ export default async function AdminPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Scenario controls</CardTitle>
+            <CardTitle>Demo controls</CardTitle>
             <CardDescription>
-              Arm a mock failure for the live demo. Harness-only; requests still carry only normal
-              payloads.
+              Make the next call to a target behave badly, so a failure can be shown live. Only
+              affects this run.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-6">

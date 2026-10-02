@@ -6,6 +6,7 @@ import './globals.css';
 
 import { MotionProvider } from '@/components/motion';
 import { QueryProvider, ThemeProvider } from '@/components/providers';
+import { SiteFooter } from '@/components/site-footer';
 import { SiteHeader } from '@/components/site-header';
 import { Toaster } from '@/components/ui/sonner';
 import { currentViewer } from '@/lib/auth/roles';
@@ -24,9 +25,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'KIRRO — declared-interest booking',
+  title: 'KIRRO',
   description:
-    'Listings, declared-interest draws and instant buys for scarce inventory. KIRRO mock-server portal.',
+    'Book courts, seats and passes. Slots that people compete for go to a fair draw; the rest sell straight away.',
 };
 
 export default async function RootLayout({
@@ -56,6 +57,7 @@ export default async function RootLayout({
               <MotionProvider>
                 <SiteHeader viewer={viewer} />
                 {children}
+                <SiteFooter />
               </MotionProvider>
             </NuqsAdapter>
           </QueryProvider>

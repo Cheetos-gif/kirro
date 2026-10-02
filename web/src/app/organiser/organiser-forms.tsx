@@ -14,6 +14,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { KirroEvent } from '@/lib/kirro/schemas';
 
+const SELECT_CLASS =
+  'h-9 w-full rounded-3xl border border-transparent bg-input/50 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30';
+
 function Result({ state }: { state: ActionState }) {
   if (!state) return null;
   return (
@@ -34,18 +37,13 @@ export function CreateEventForm() {
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="event-status">Status</Label>
-        <select
-          id="event-status"
-          name="status"
-          defaultValue="draft"
-          className="h-9 w-full rounded-3xl border border-transparent bg-input/50 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
-        >
+        <select id="event-status" name="status" defaultValue="draft" className={SELECT_CLASS}>
           <option value="draft">Draft</option>
           <option value="published">Published</option>
         </select>
       </div>
       <Button type="submit" disabled={pending} className="w-fit">
-        {pending ? 'Creating…' : 'Create event'}
+        {pending ? 'Creating...' : 'Create event'}
       </Button>
       <Result state={state} />
     </form>
@@ -64,7 +62,7 @@ export function EventStatusForm({ event }: { event: KirroEvent }) {
       <input type="hidden" name="event_id" value={event.event_id} />
       <input type="hidden" name="status" value={next} />
       <Button type="submit" variant="outline" size="sm" disabled={pending}>
-        {pending ? 'Saving…' : next === 'published' ? 'Publish' : 'Unpublish'}
+        {pending ? 'Saving...' : next === 'published' ? 'Publish' : 'Unpublish'}
       </Button>
       {state && !state.ok ? (
         <span className="text-xs text-destructive">{state.message}</span>
@@ -78,7 +76,9 @@ export function CreateReleaseForm({ events }: { events: KirroEvent[] }) {
 
   if (events.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">Create an event before adding a release.</p>
+      <p className="text-sm text-muted-foreground">
+        Create an event first, then add a release to it.
+      </p>
     );
   }
 
@@ -87,12 +87,7 @@ export function CreateReleaseForm({ events }: { events: KirroEvent[] }) {
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="rel-event">Event</Label>
-          <select
-            id="rel-event"
-            name="event_id"
-            required
-            className="h-9 w-full rounded-3xl border border-transparent bg-input/50 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
-          >
+          <select id="rel-event" name="event_id" required className={SELECT_CLASS}>
             {events.map(event => (
               <option key={event.event_id} value={event.event_id}>
                 {event.name} ({event.status})
@@ -101,15 +96,15 @@ export function CreateReleaseForm({ events }: { events: KirroEvent[] }) {
           </select>
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="rel-mode">Allocation</Label>
+          <Label htmlFor="rel-mode">How it sells</Label>
           <select
             id="rel-mode"
             name="allocation_mode"
             defaultValue="fair_draw"
-            className="h-9 w-full rounded-3xl border border-transparent bg-input/50 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+            className={SELECT_CLASS}
           >
-            <option value="fair_draw">Fair draw (scarce — declared interest)</option>
-            <option value="instant_buy">Instant buy (first come)</option>
+            <option value="fair_draw">Draw, for slots people compete for</option>
+            <option value="instant_buy">Buy now, in order of arrival</option>
           </select>
         </div>
         <div className="flex flex-col gap-1.5">
@@ -117,19 +112,19 @@ export function CreateReleaseForm({ events }: { events: KirroEvent[] }) {
           <Input id="rel-date" name="date" type="date" required />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="rel-opens">Opens at</Label>
+          <Label htmlFor="rel-opens">Opens</Label>
           <Input id="rel-opens" name="opens_at" type="datetime-local" required />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="rel-label">Slot label</Label>
-          <Input id="rel-label" name="label" placeholder="Court 1, 07:00-08:00" required />
+          <Input id="rel-label" name="label" placeholder="Court 1, 07:00 to 08:00" required />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="rel-starts">Starts at</Label>
+          <Label htmlFor="rel-starts">Starts</Label>
           <Input id="rel-starts" name="starts_at" type="datetime-local" required />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="rel-capacity">Capacity</Label>
+          <Label htmlFor="rel-capacity">Seats</Label>
           <Input
             id="rel-capacity"
             name="capacity"
@@ -140,7 +135,7 @@ export function CreateReleaseForm({ events }: { events: KirroEvent[] }) {
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="rel-price">Price per person (₹)</Label>
+          <Label htmlFor="rel-price">Price each (₹)</Label>
           <Input
             id="rel-price"
             name="price_rupees"
@@ -152,7 +147,7 @@ export function CreateReleaseForm({ events }: { events: KirroEvent[] }) {
         </div>
       </div>
       <Button type="submit" disabled={pending} className="w-fit">
-        {pending ? 'Creating…' : 'Create release'}
+        {pending ? 'Creating...' : 'Create release'}
       </Button>
       <Result state={state} />
     </form>

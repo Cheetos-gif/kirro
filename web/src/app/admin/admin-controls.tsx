@@ -40,7 +40,7 @@ export function ApproveOrganiserButton({ organiserId }: { organiserId: string })
     <form action={action} className="flex items-center gap-2">
       <input type="hidden" name="organiser_id" value={organiserId} />
       <Button type="submit" size="sm" disabled={pending}>
-        {pending ? 'Approving…' : 'Approve'}
+        {pending ? 'Approving...' : 'Approve'}
       </Button>
       {state && !state.ok ? (
         <span className="text-xs text-destructive">{state.message}</span>
@@ -81,12 +81,12 @@ export function ScenarioForm() {
           </select>
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="scenario-delay">Delay (s)</Label>
+          <Label htmlFor="scenario-delay">Delay (seconds)</Label>
           <Input id="scenario-delay" name="delay_s" type="number" min={0} placeholder="optional" />
         </div>
       </div>
       <Button type="submit" disabled={pending} className="w-fit">
-        {pending ? 'Arming…' : 'Arm scenario'}
+        {pending ? 'Setting...' : 'Set scenario'}
       </Button>
       {state ? (
         <Alert variant={state.ok ? 'default' : 'destructive'}>
@@ -103,7 +103,7 @@ export function ResetRunButton() {
   return (
     <form action={action} className="flex items-center gap-3">
       <Button type="submit" variant="destructive" size="sm" disabled={pending}>
-        {pending ? 'Resetting…' : 'Reset this run'}
+        {pending ? 'Clearing...' : 'Clear this run'}
       </Button>
       {state ? (
         <span className={state.ok ? 'text-xs text-muted-foreground' : 'text-xs text-destructive'}>
