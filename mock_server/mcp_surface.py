@@ -215,10 +215,8 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
             "release_id is required (the id from list_releases, or an event name such as badminton). "
             "group_size, min_group_size and max_price_paise are required; max_price_paise is the per-person "
             "ceiling in paise, so Rs 300 per person is 30000. acceptable_slot_ids is optional: leave it empty to "
-            "bid for every slot in the release. If you have already reserved the amount, pass the mandate's "
-            "authorization id as mandate_id and the user's contact as user_contact — the window workflow needs both "
-            "to capture the payment and notify the user. You must call this to pool a bid: never tell the user they "
-            "are in the pool unless this call has returned success."
+            "bid for every slot in the release. You must call this to pool a bid: never tell the user they are in "
+            "the pool unless this call has returned success."
         )
     )
     async def declare_interest(
@@ -227,8 +225,6 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         min_group_size: Any = None,
         max_price_paise: Any = None,
         acceptable_slot_ids: Any = None,
-        mandate_id: Any = None,
-        user_contact: Any = None,
         run_id: str = DEFAULT_RUN,
         idempotency_key: str | None = None,
     ) -> dict:
@@ -241,8 +237,6 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
                 "min_group_size": min_group_size,
                 "max_price_paise": max_price_paise,
                 "acceptable_slot_ids": acceptable_slot_ids,
-                "mandate_id": mandate_id,
-                "user_contact": user_contact,
             },
         )
         listing = await _releases(client, run_id, _first_str(release_id), None)
@@ -282,11 +276,12 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
                 "group_size": group,
                 "min_group_size": minimum,
                 "max_price_paise": ceiling,
-                "user_contact": _first_str(user_contact),
+                "user_contact": None,
                 # The model does not carry the authorization id from the mandate result into the bid, and the pool
-                # entry is what the allocation captures against, so a bid without one takes the mandate this run
-                # most recently created — the declare flow reserves immediately before it bids.
-                "mandate_id": _first_str(mandate_id) or _LATEST_MANDATE.get(run_id),
+                # entry is what the allocation captures against, so a bid takes the mandate this run most recently
+                # created — the declare flow reserves immediately before it bids. Exposing it as a parameter only
+                # lengthened the tool's signature, which is what the model's argument emission degrades on.
+                "mandate_id": _LATEST_MANDATE.get(run_id),
             },
         )
 
