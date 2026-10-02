@@ -7,7 +7,7 @@ import {
   RoomAudioRenderer,
   useConnectionState,
   useLocalParticipant,
-  useSessionMessages,
+  useTranscriptions,
   useVoiceAssistant,
   VoiceAssistantControlBar,
 } from '@livekit/components-react';
@@ -68,24 +68,25 @@ export function mergeTurn(lines: TranscriptLine[], turn: TranscriptLine): Transc
 function Call({ onTurn }: { onTurn: (line: TranscriptLine) => void }) {
   const { state, audioTrack } = useVoiceAssistant();
   const connection = useConnectionState();
-  // The session's own message stream: user and agent transcriptions plus any text chat, already
-  // deduplicated by id by LiveKit.
-  const { messages } = useSessionMessages();
+  // `useTranscriptions` rather than `useSessionMessages`: the latter is beta and returns nothing
+  // outside a `SessionProvider`, which this page does not use — measured on the deployed page, an
+  // empty transcript with every message dropped.
+  const transcriptions = useTranscriptions();
   const { localParticipant } = useLocalParticipant();
 
   useEffect(() => {
-    for (const message of messages) {
-      const mine = message.from?.identity === localParticipant.identity;
-      // `lk.segment_id` groups an utterance across its revisions; the message id is the fallback.
-      const segment = message.attributes?.['lk.segment_id'] ?? message.id;
+    for (const line of transcriptions) {
+      const mine = line.participantInfo.identity === localParticipant.identity;
+      // `lk.segment_id` groups an utterance across its revisions; the stream id is the fallback.
+      const segment = line.streamInfo.attributes?.['lk.segment_id'] ?? line.streamInfo.id;
       onTurn({
         key: `${mine ? 'me' : 'them'}|${segment}`,
         mine,
-        text: message.message ?? '',
-        at: message.timestamp,
+        text: line.text,
+        at: line.streamInfo.timestamp ?? 0,
       });
     }
-  }, [messages, localParticipant.identity, onTurn]);
+  }, [transcriptions, localParticipant.identity, onTurn]);
 
   const label =
     connection === ConnectionState.Connected
