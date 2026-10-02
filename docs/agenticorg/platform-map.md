@@ -765,11 +765,11 @@ experiment; both are now trimmed to a demo-ready state:
 
 ## 11. Tool arguments: what arrives, what the mock resolves, and what the platform withholds
 
-**Status: partially resolved, and the remainder is platform-side.** One schema change did visibly fix the argument
-pass-through — see the timeline below, which is the decisive evidence — and the mock now also resolves every
-ambiguity it can from the state it holds. But the pass-through later stopped for the same tools without this repo
-changing, and six remedies have not restored it. Read this section as: the mechanism we could influence, the
-ambiguities we now absorb, and the observation to take to the platform.
+**Status: the argument pass-through is intermittent and platform-side.** One schema change tracked it for a while, the
+mock now also resolves every ambiguity it can from the state it holds, and — when the pass-through is up — the whole
+chain runs end to end through the real agents (§12). But it goes down for periods at a time while `create_mandate`
+keeps working in the same conversation, and nothing in this repo correlates with either state. Read this section as:
+the mechanism we could influence, the ambiguities we now absorb, and the timestamps to take to the platform.
 
 **The mechanism we could influence:** a parameter declared with a concrete type and default (`release_id: str = ""`,
 `group_size: int = 0`) arrives **empty or zero** no matter what the model chose, while an untyped one
@@ -865,16 +865,18 @@ cheap to detect — the log simply has no invocation — but nothing on our side
 The same tools, from the same agents, behaved differently across the session without their schemas changing in any
 way that correlates:
 
-| window (2026-10-02) | venue tools                                                                                                                    | mandate tool |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------ |
-| 02:05 – 02:34       | arguments arrive — `declare_interest` with the conversation's values, `get_release` and `draw` with their release ids and bids | arrives      |
-| 02:40 onwards       | every call arrives all-null, across both agents, every schema variant, and three fresh conversations                           | arrives      |
+| window (2026-10-02) | venue tools                                                                                                                    | mandate tool                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------- |
+| 02:05 – 02:34       | arguments arrive — `declare_interest` with the conversation's values, `get_release` and `draw` with their release ids and bids | arrives                                            |
+| 02:40 – 03:51       | every call arrives all-null, across both agents, every schema variant, and several fresh conversations                         | arrives, flapping (one empty call, then the value) |
+| 03:59 → **working** | arguments arrive again, and the whole chain ran on them (§12)                                                                  | arrives                                            |
 
-So the six schema-side remedies above were all tested inside the failing window, and the "untyped parameters" fix
-that appeared to work at 02:05 was tested inside the good one. That is why the table's remedies cannot be read as
-causal: **the pass-through changed on the platform's side at around 02:40**, and nothing in this repo changed with it.
-That is the observation to correlate with the platform's own deploys, and it is the first thing to re-test before
-concluding anything from a new remedy. (Re-tested at 03:34: still null.)
+So the schema-side remedies above were all tested inside the broken window, and the "untyped parameters" fix that
+appeared to work at 02:05 was tested inside the first good one. That is why the table's remedies cannot be read as
+causal: **the pass-through comes and goes on the platform's side**, and nothing in this repo tracks it. Two
+consequences worth carrying forward: the timestamps above are the observation to take to the platform, and because it
+is intermittent, **a single failed attempt proves nothing** — re-test before concluding anything from a new remedy.
+This section's remedies are therefore a record of what was ruled out, not of what caused it.
 
 **The platform's own copy of the schema is correct**, which rules out staleness and makes re-registration pointless as
 a remedy. `GET /api/v1/connectors/{id}` returns `tool_schemas`, and for the current connector the venue tools match
@@ -1049,21 +1051,38 @@ Two consecutive live runs, same public mock:
   engine's reversal (`release_hold`, `release` mandate) the state reads
   `{active_holds: 0, bookings: 0, payments: 0, released_mandates: 1}` and the hold reports `released`.
 
-### The allocate leg runs through the real agent too
+### The whole chain now runs through the real platform agents (verified 2026-10-02 04:01)
 
-With the pool holding one bid, driving the allocator agent by chat (it had been promoted to `active`) produced a
-complete allocation up to the capture, each step visible in the mock's log:
+Both blockers cleared at once: the argument pass-through came back (§11's timeline is intermittent, not a permanent
+break), and with a bid in the pool the allocator drove the rest. One conversation each, no repo-side intervention
+during the run, every step visible in the mock's log:
 
-| step           | evidence                                                                                                           |
-| -------------- | ------------------------------------------------------------------------------------------------------------------ |
-| pool + release | `list_pool_entries` and `get_release`, both with the release id                                                    |
-| draw           | `allocator.draw` → `{"slot_id": "bd_0700", "group_size_allocated": 4, "status": "ALLOCATED", "seed": "ae20c6d2…"}` |
-| hold           | `venue.hold` → `hold_0001`, quantity 4, `price_per_unit_paise 25000`                                               |
-| hold verified  | `venue.hold_get` → `status: "active"`                                                                              |
-| then           | it stopped honestly: the bid it was given carries no mandate to capture against                                    |
+| time (UTC) | what the platform agent called                                                                                   | result                                                                                                       |
+| ---------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| 03:59:28   | `create_mandate` `{amount_value: 120000}`                                                                        | mandate `ACTIVE` — the conversation's 4 × Rs 300, in paise                                                   |
+| 03:59:33   | `get_release`                                                                                                    | release fetched                                                                                              |
+| 03:59:36   | `declare_interest` `{release_id: "rel_badminton_sat", group_size: 4, min_group_size: 2, max_price_paise: 30000}` | pool entry: those values **plus** `mandate_id: auth_0001` (the run's mandate, attached by the mock)          |
+| 04:01:24   | `draw` (release_id + the pool entry as its bid)                                                                  | `ALLOCATED`, slot `bd_0700`, group 4                                                                         |
+| 04:01:26   | `create_hold`                                                                                                    | `hold_0001`, 4 seats, `price_per_unit_paise 25000`, ttl 3600                                                 |
+| 04:01:30   | `get_hold`                                                                                                       | `active` — checked before charging, as `workflow-spec.md` §2 requires                                        |
+| 04:01:33   | `execute` `{amount: {value: 100000}}`                                                                            | `pay_0001` **SUCCESS** (4 × 25000 = the hold's price, under the 120000 mandate and the 30000/person ceiling) |
+| 04:01:37   | `confirm_booking` `{hold_id, payment_id}`                                                                        | **`BK-0001` CONFIRMED**, `amount_paise 100000`                                                               |
 
-That last line is now covered by the mandate fallback (§11), so a repeat run with a bid in the pool has everything
-the capture needs. The chain is bounded only by the model's own argument emission, not by the mock.
+Final state for the run: `{holds: 1, active_holds: 1, bookings: 1, mandates: 1, payments: 1}`. The agent's own report
+to the user matched the log: *"Outcome: Win — Booking Reference: BK-0001 — Amount Charged: ₹1000.00"*.
+
+Two gaps remain in that run, both worth knowing:
+
+- **The mandate's residual was not released** (`released_mandates: 0`): 120000 was reserved and 100000 charged, and
+  `workflow-spec.md` §2 step 4.f wants the leftover released. The allocator's prompt asks for it; the model stopped at
+  the booking. A money-safety follow-up for the prompt, not a mock change — the tool exists and is granted.
+- **The hold stays `active`** after the booking, which is correct here: the capacity really is consumed, so it must
+  not be freed on expiry (only an explicit `release_hold` frees it).
+
+Note also which message preceded the working declare call: a fresh conversation whose *first* message dictated the
+call and its arguments, after the previous turn had been refused. The allocator, in contrast, received only natural
+language ("run the full allocation… draw the slots, hold the winner's slot, capture the mandate, confirm the booking")
+and still delivered every argument — so the recovery is the pass-through itself, not the phrasing.
 
 One caveat when re-checking those states: `POST /__admin/reset` clears one run when its **body** carries `run_id`, and
 **all** state when it does not (`docs/connectors.md`) — it reads the body, not `X-Run-Id`. A later global reset
