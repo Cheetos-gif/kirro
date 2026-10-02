@@ -104,8 +104,8 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 
     @mcp.tool(
         description=(
-            "Fetch one release with its slots. Pass the release id that list_releases returned, or an event name "
-            "such as badminton. Called with no release_id it returns the released list, so you can pick from it."
+            "Fetch one booking release with its slots, capacity and opening time. release_id is required: pass an "
+            "id such as rel_badminton_sat, or an event name such as badminton."
         )
     )
     async def get_release(release_id: Any = None, run_id: str = DEFAULT_RUN) -> dict:
@@ -211,10 +211,11 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 
     @mcp.tool(
         description=(
-            "Enter the user's bid into a release's declared-interest pool. Pass release_id (the id from "
-            "list_releases, e.g. rel_badminton_sat), group_size, min_group_size and max_price_paise — the "
-            "per-person ceiling in PAISE, so Rs 300 per person is 30000. Acceptable_slot_ids is optional; empty "
-            "means every slot in the release. Never tell the user they are in the pool unless this returns success."
+            "Enter the user's bid into a booking release's declared-interest pool. release_id: an id such as "
+            "rel_badminton_sat. group_size: how many people are coming. min_group_size: the fewest they would "
+            "still accept. max_price_paise: their per-person ceiling in paise, so Rs 300 is 30000. "
+            "acceptable_slot_ids is optional; empty means every slot in the release. Never tell the user they are "
+            "in the pool unless this returns success."
         )
     )
     async def declare_interest(
@@ -285,8 +286,9 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 
     @mcp.tool(
         description=(
-            "List the release's declared-interest pool (one entry per pending bid). release_id is required — the "
-            "entries this returns are the bids to pass to draw."
+            "List a booking release's declared-interest pool: one entry per pending bid, each with its "
+            "declaration_id, acceptable_slot_ids, group_size, min_group_size and max_price_paise. release_id is "
+            "required: an id such as rel_badminton_sat."
         )
     )
     async def list_pool_entries(release_id: Any = None, run_id: str = DEFAULT_RUN) -> dict:
@@ -645,9 +647,10 @@ def _allocator(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 
     @mcp.tool(
         description=(
-            "Run the DIFD draw for a release's pool. release_id and bids are required: bids is the list of pool "
-            "entries from list_pool_entries. Deterministic for a given (release, window), so re-running it cannot "
-            "change an allocation."
+            "Run the fair draw for a booking release's bids, one result per bid. release_id: an id such as "
+            "rel_badminton_sat. bids: the entries to draw for, each with declaration_id, acceptable_slot_ids, "
+            "group_size, min_group_size and max_price_paise. Deterministic for the same release and window, so "
+            "re-running it cannot change an allocation."
         )
     )
     async def draw(
