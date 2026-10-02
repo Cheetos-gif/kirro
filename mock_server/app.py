@@ -438,7 +438,11 @@ def create_app(log_dir: str | None = None) -> FastAPI:
                 bids.append(
                     Bid(
                         declaration_id=b["declaration_id"],
-                        user_id=b["user_id"],
+                        # A bid copied straight off the pool carries no user_id — our own pool entries identify a
+                        # bid by its declaration — so the declaration id stands in as the identity the
+                        # one-win-per-user rule needs. Required, and live: this raised KeyError('user_id') and the
+                        # draw could not run at all until the pool entry provided one.
+                        user_id=b.get("user_id") or b["declaration_id"],
                         acceptable_slot_ids=tuple(b.get("acceptable_slot_ids") or ()),
                         group_size=b["group_size"],
                         min_group_size=b.get("min_group_size", b["group_size"]),

@@ -374,10 +374,11 @@ def test_pool_and_draw_resolve_their_release_from_the_bids(mcp_base):
             )
             pool = payload(await s.call_tool("list_pool_entries", {}))
         async with session(f"{mcp_base}/allocator/mcp") as s:
+            # Copied off the pool exactly as the model copies it — no user_id, since the pool entry has none. An
+            # earlier version of this test added one by hand and so missed the KeyError the live run hit.
             bids = [
                 {
                     "declaration_id": entry["declaration_id"],
-                    "user_id": "u1",
                     "acceptable_slot_ids": entry["acceptable_slot_ids"],
                     "group_size": entry["group_size"],
                     "min_group_size": entry["min_group_size"],
