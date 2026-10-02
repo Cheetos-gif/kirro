@@ -748,9 +748,20 @@ into `agent-spec.md` §3) has since been verified to work: the agent does call `
 arguments arrive it produces a correct pool entry (§11). What the locked prompt costs is the ability to fix the
 remaining behaviour — see §11's closing paragraph — from this account.
 
-**Cleanup owed:** `mcp_kirro_all` through `_v18` are superseded by `_v19` — the agents link only the newest. The
-tenant also holds four functionally identical declare agents, all `active`: `Kirro` (`455907ea`), `Kirro Declare v2`
-(`29319fb1`), `v3` (`999976b7`) and `v4` (`27ec9d3c`); `v4` is linked to the current connector and is the one to keep.
+**Agent lifecycle (verified 2026-10-02):** `DELETE` on an `active` agent returns 409 *"Cannot delete agent in 'active'
+status. Pause or retire the agent first."* — so it is **pause** (200 → `paused`) then **retire** (200 → `retired`) then
+delete (200). All three exist as `POST /api/v1/agents/{id}/{pause|retire|delete}`.
+
+**Tenant cleaned up 2026-10-02.** The investigation had left one connector per schema iteration and one agent per
+experiment; both are now trimmed to a demo-ready state:
+
+- **Connectors:** the 20 superseded `mcp_kirro_all_v1…v20` deleted, along with the non-MCP probe. Remaining are the
+  four per-surface mocks (`mcp_venue_kirro`, `mcp_pinelabs_kirro`, `mcp_allocator_kirro`, `mcp_delhivery_kirro`), the
+  aggregate **`mcp_kirro_all_v21`** the agents link, and the native ones (`whatsapp_kirro`, `pinelabs_plural`,
+  `stripe`, `tally`, `zoho_books`, `gstn`, `banking_aa`).
+- **Agents:** `Kirro Declare v2`, `v3` and `Kirro` retired and deleted; **`Kirro Declare v4`** (`27ec9d3c`) and
+  **`Kirro Allocator`** (`5591e57a`) remain, both `active`. The five platform built-ins are untouched.
+- **Workflow:** one, `Kirro Window Allocation`, `Trigger | schedule`.
 
 ## 11. Tool arguments: what arrives, what the mock resolves, and what the platform withholds
 
