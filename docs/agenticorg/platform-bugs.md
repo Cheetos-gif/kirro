@@ -71,13 +71,14 @@ unknown-route 401 is no evidence that an endpoint is missing: `/api/v1/api-keys`
 **Separately, a non-MCP custom connector cannot pass this platform's health check.** `mcp_vachana_kirro`,
 re-registered with a working Gnani key, reports `{"status": "not_configured", "reason": "No tools discovered for this MCP server"}`. The checker probes for MCP tool discovery even when the MCP checkbox is off (ADR-011 Risk 2).
 
-**Resolution, not platform-dependent: a browser voice bridge (ADR-016).** Rather than a phone call, `web/` (the
-portal this repo already deploys) gets a "Talk to Kirro" page: browser mic → a small stateless `voice_bridge/`
-service on the same cluster as `kirro-mock` → Gnani Prisma STT (realtime WebSocket) → `chat/query` on the agent
-(session-cookie auth, same mechanism as item 1) → Gnani Timbre TTS (realtime WebSocket) → back to the browser. Free
-(Gnani's key is already live; no Twilio number, no per-minute telephony cost) and does not need `agenticorg:admin`.
-Known limitation carried into the ADR: `chat/history` is one flat thread per `(user, agent)`, so the bridge
-serializes calls — one at a time — until AgenticOrg exposes a per-conversation endpoint.
+**Resolution, not platform-dependent: a browser voice channel.** Rather than a phone call, `web/` (the
+portal this repo already deploys) gets a "Talk to KIRRO" page that joins a LiveKit room; a self-hosted
+`livekit-server` and a `voice_bridge/` agent worker carry the audio, with Gnani's own LiveKit plugin doing
+speech-to-text and text-to-speech around the AgenticOrg agent (`docs/decisions/ADR-016-...`,
+`docs/decisions/ADR-017-voice-channel-on-livekit.md`). Free — the Gnani key is already live, LiveKit is open
+source and self-hosted, no Twilio number, no per-minute telephony or cloud cost — and it needs no
+`agenticorg:admin`. Verified end to end on a local room server: a caller's synthesized speech transcribed,
+the agent answered, and the reply came back as audio.
 
 **What would still need admin, if the platform-native route is ever preferred instead:** `agenticorg:admin` for
 `voice-platform/endpoints` and `/release-approvals`, and accepting OpenAI/Gemini speech instead of Gnani.

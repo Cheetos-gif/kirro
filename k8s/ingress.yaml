@@ -23,3 +23,15 @@ spec:
                 name: kirro-mock
                 port:
                   number: 8081
+    # The voice channel's signalling WebSocket (ADR-017). Traefik upgrades it on the same router;
+    # the WebRTC media itself never passes through here.
+    - host: voice-kirro.upayan.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kirro-livekit
+                port:
+                  number: 7880

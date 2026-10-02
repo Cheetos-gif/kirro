@@ -1,0 +1,25 @@
+# LiveKit server configuration (ADR-017). Keys are NOT here — they arrive from the Secret through
+# LIVEKIT_KEYS, so this ConfigMap holds nothing sensitive.
+#
+# A single muxed UDP port (7882) instead of LiveKit's default 50000-60000 range, because one port is
+# a much smaller thing to open on a host firewall. See deployments.yaml for the port list.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kirro-livekit
+  namespace: kirro
+data:
+  config.yaml: |
+    port: 7880
+    rtc:
+      tcp_port: 7881
+      udp_port: 7882
+      # NODE_IP (the node's address) is set from the downward API; the server advertises that
+      # directly rather than asking an external service for its public IP.
+      use_external_ip: false
+    room:
+      auto_create: true
+      # A room that nobody is in does not need to linger.
+      empty_timeout: 120
+    logging:
+      level: info

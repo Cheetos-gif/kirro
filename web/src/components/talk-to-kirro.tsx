@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { AGENTICORG_URL } from '@/constants';
@@ -15,17 +17,22 @@ export function TalkToKirro() {
         <p className="text-sm text-muted-foreground">
           This site is one way to declare interest. The agent is the other: tell it a slot, your
           group size, and your price ceiling, and it does the same declare &rarr; draw &rarr; book
-          sequence described above. We&apos;ve tested it live through AgenticOrg&apos;s chat panel;
-          see <code className="font-mono">docs/testing.md</code> for the run log.
+          sequence described above. Talk to it in the browser &mdash; Gnani transcribes you and
+          speaks the reply back.
         </p>
-        <Button
-          variant="outline"
-          className="w-fit"
-          render={<a href={AGENTICORG_URL} target="_blank" rel="noreferrer" />}
-          nativeButton={false}
-        >
-          Open KIRRO on AgenticOrg
-        </Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button className="w-fit" render={<Link href="/talk" />} nativeButton={false}>
+            Talk to KIRRO
+          </Button>
+          <Button
+            variant="outline"
+            className="w-fit"
+            render={<a href={AGENTICORG_URL} target="_blank" rel="noreferrer" />}
+            nativeButton={false}
+          >
+            Open on AgenticOrg
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

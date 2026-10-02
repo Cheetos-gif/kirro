@@ -62,6 +62,8 @@ Vercel project `kirro-web` (Root Directory `web`, Node 24.x), **git-connected to
 <https://kirro.upayan.dev>.
 
 Production environment variables: `MOCK_API_URL=https://api-kirro.upayan.dev`, `MOCK_RUN_ID=default`,
+`LIVEKIT_URL=wss://voice-kirro.upayan.dev`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` (the same key pair
+the cluster's `kirro-voice` secret holds — it signs the browser's room tokens),
 `ADMIN_EMAILS` (comma-separated), `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_TRUST_HOST=true`.
 Google OAuth needs the deployed callback URL registered: `https://<domain>/api/auth/callback/google`.
 
@@ -70,7 +72,9 @@ commit (or trigger a fresh Git deploy) for the change to take effect.
 
 ## Layout
 
-- `src/app/` — routes: `/`, `/events/[id]`, `/dashboard`, `/organiser`, `/organiser/request`, `/admin`, `/signin`.
+- `src/app/` — routes: `/`, `/events/[id]`, `/dashboard`, `/organiser`, `/organiser/request`, `/admin`,
+  `/signin`, `/talk` (the LiveKit voice channel, ADR-017), and `/api/voice/token` (mints a room token for
+  the signed-in viewer).
 - `src/app/actions.ts` — server actions (declare, buy, organiser request, event/release creation, approvals,
   scenario control, reset).
 - `src/lib/kirro/` — mock schemas, typed API calls, formatters.

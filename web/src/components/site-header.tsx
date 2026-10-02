@@ -13,13 +13,23 @@ export function SiteHeader({ viewer }: { viewer: Viewer | null }) {
       <nav className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-2 px-6 py-4">
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-2">
-            <Image src="/kirro.webp" alt="" width={22} height={22} className="rounded-md" priority />
+            <Image
+              src="/kirro.webp"
+              alt=""
+              width={22}
+              height={22}
+              className="rounded-md"
+              priority
+            />
             <span className="font-heading text-sm font-medium tracking-tight text-foreground">
               {SITE_NAME}
             </span>
           </Link>
           <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
             Listings
+          </Link>
+          <Link href="/talk" className="text-sm text-muted-foreground hover:text-foreground">
+            Talk to KIRRO
           </Link>
           {viewer ? (
             <Link href="/dashboard" className="text-sm text-muted-foreground hover:text-foreground">

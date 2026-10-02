@@ -186,11 +186,12 @@ sides *different* run ids, or they will not see each other's pool. Single writer
   connector** — it always probes for MCP tool discovery regardless of the checkbox, so this connector reports
   `not_configured` even with a valid credential (`docs/agenticorg/platform-bugs.md` Bug 3); that is a platform
   limitation, not a sign the credential is wrong.
-- **Call leg is the browser, not a phone network** (ADR-016, reversed from an earlier Twilio phone-call plan that
-  cost real money per number and per minute). A `web/` "Talk to Kirro" page captures the user's mic; a new stateless
-  `voice_bridge/` service relays audio to Gnani's realtime STT, drives "Kirro Declare" over its `chat/query`
-  endpoint, and relays the reply through Gnani's realtime TTS back to the browser. `twilio_kirro` stays registered
-  for the optional outbound SMS/WhatsApp notification leg (`agent-spec.md` §5), not for carrying a call.
+- **Call leg is the browser, not a phone network** (ADR-016, reversed from an earlier Twilio phone-call plan
+  that cost real money per number and per minute; the transport is LiveKit per ADR-017). A `web/` "Talk to
+  KIRRO" page joins a LiveKit room, and a self-hosted `livekit-server` in the same cluster carries the audio.
+  On the worker side, Gnani's own `livekit-plugins-gnani` supplies both speech directions around the
+  AgenticOrg agent, so KIRRO runs no speech plumbing of its own. `twilio_kirro` stays registered for the
+  optional outbound SMS/WhatsApp notification leg (`agent-spec.md` §5), not for carrying a call.
 - The old Inya client and the deterministic field extractor (`connectors/gnani/*`) were removed with the AgenticOrg
   migration — see ADR-011. Field parsing on the live path is the agent's own reasoning constrained by the Prompt
   (`docs/agenticorg/agent-spec.md`), not code in this repo (ADR-011 Risk 1).

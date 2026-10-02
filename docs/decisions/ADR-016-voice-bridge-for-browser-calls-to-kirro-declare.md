@@ -1,7 +1,11 @@
 # ADR-016: A voice bridge so a user can talk to Kirro Declare from the browser, Gnani doing STT/TTS
 
-Status: accepted (2026-10-02), implementation in progress. Supersedes the phone-call plan floated earlier the same
-day (Twilio + a call-handling bridge) — dropped because it costs money per call and per number
+Status: **amended by ADR-017** (2026-10-02) — the browser channel, its purpose, and the Gnani-vs-phone
+reasoning below all stand, but the hand-rolled relay and worklet described here were replaced by
+LiveKit and Gnani's own LiveKit plugin. Read ADR-017 for the current mechanism; this record is kept
+for the constraints it established (session-cookie auth, the shared chat thread, one call at a time).
+Supersedes the phone-call plan floated earlier the same day (Twilio + a call-handling bridge) —
+dropped because it costs money per call and per number
 (`docs/agenticorg/platform-bugs.md` Bug 3's "what's needed" section is updated accordingly).
 
 ## Context
@@ -109,12 +113,12 @@ becomes available. This is a real product constraint for a multi-user demo, not 
 
 ## Open items
 
-- AgenticOrg login credential for the bridge's own account — needed before the bridge can be deployed live; not
-  yet in hand as of this ADR.
-- Exact client-side resampling approach (48kHz browser mic -> 16kHz PCM, 1024-byte frames) — implemented as an
-  `AudioWorkletProcessor` in `web/`, per Gnani's own guidance that a browser cannot set the WebSocket's custom
-  auth headers and must proxy through a backend (`docs.gnani.ai/api/STT/stt-websocket` "Browser WebSocket cannot
-  set custom headers...").
-- Concurrency: one call at a time, enforced by the bridge, until AgenticOrg's chat API gets a conversation id or a
-  separate login becomes available for true multi-user calling.
-  </content>
+All three are now resolved, and by ADR-017 rather than by the mechanism this ADR described:
+
+- **AgenticOrg login credential** — in hand, in the gitignored `.env`, verified working
+  (`POST /api/v1/auth/login`, then `GET /api/v1/auth/me` returns the `developer` account).
+- **Client-side resampling** — no longer KIRRO's problem. LiveKit's browser SDK captures and encodes
+  the microphone; the `AudioWorkletProcessor` this ADR proposed was deleted with the relay.
+- **Concurrency** — unchanged, and still the real constraint: one call at a time, because
+  AgenticOrg's chat API has no conversation id and the worker shares one login. Enforced by
+  `replicas: 1` on the worker (ADR-017).

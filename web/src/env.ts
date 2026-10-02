@@ -11,6 +11,12 @@ export const env = createEnv({
     MOCK_API_URL: z.url().default('http://127.0.0.1:8081'),
     // Which mock run the portal reads and writes. Default shares the AgenticOrg agent's run.
     MOCK_RUN_ID: z.string().min(1).default('default'),
+    // The voice bridge's LiveKit room (ADR-017). `LIVEKIT_URL` is the WebSocket the browser
+    // connects to, handed to the client component as a prop; the key pair signs access tokens
+    // server-side and never leaves the server.
+    LIVEKIT_URL: z.string().default('ws://127.0.0.1:7880'),
+    LIVEKIT_API_KEY: z.string().default(''),
+    LIVEKIT_API_SECRET: z.string().default(''),
     // Comma-separated Google emails granted the admin role. Not stored in the mock.
     ADMIN_EMAILS: z.string().default(''),
     AUTH_SECRET: z.string().min(1).optional(),

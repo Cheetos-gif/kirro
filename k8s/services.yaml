@@ -8,3 +8,17 @@ spec:
   ports:
     - port: 8081
       targetPort: 8081
+---
+# The room server (ADR-017). Only the signalling port belongs on a Service: WebRTC media bypasses
+# Kubernetes entirely and goes straight to the node's own ports (see deployments.yaml).
+apiVersion: v1
+kind: Service
+metadata:
+  name: kirro-livekit
+spec:
+  selector:
+    app: kirro-livekit
+  ports:
+    - name: signalling
+      port: 7880
+      targetPort: 7880

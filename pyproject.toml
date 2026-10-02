@@ -10,6 +10,12 @@ dependencies = [
   "httpx>=0.27",
   "pyyaml>=6.0",
   "mcp>=2.2.0",
+  # voice_bridge only (ADR-016/ADR-017): the LiveKit agent worker — Gnani's own
+  # livekit-plugins-gnani supplies speech-to-text and text-to-speech, and livekit-agents
+  # runs the worker that joins the room the browser publishes its microphone to.
+  "livekit-agents>=1.8",
+  "livekit-plugins-gnani>=1.8",
+  "livekit-plugins-silero>=1.8.4",
 ]
 
 [dependency-groups]

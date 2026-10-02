@@ -1,9 +1,10 @@
-# One image (ghcr.io/cheetos-gif/kirro), one Deployment: kirro-mock is the mock external-services
-# backend the AgenticOrg-hosted KIRRO agent calls. KIRRO's decision-making brain lives on the
-# AgenticOrg platform (docs/decisions/ADR-011-kirro-brain-moves-to-agenticorg.md), not here.
+# One image (ghcr.io/cheetos-gif/kirro), three Deployments. KIRRO's decision-making brain lives on
+# the AgenticOrg platform (docs/decisions/ADR-011-kirro-brain-moves-to-agenticorg.md), not here.
 #
-# replicas: 1 is load-bearing — the mock keeps its state in SQLite (ADR-013), which is a
-# single-writer store. Do not scale this horizontally without moving the state first.
+# kirro-mock   the mock external services the AgenticOrg-hosted agent calls.
+# kirro-livekit  the WebRTC room server the browser publishes its microphone to (ADR-017).
+# kirro-voice    the LiveKit agent worker: Gnani speech around the AgenticOrg agent (ADR-017).
+#
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -11,6 +12,8 @@ metadata:
   labels:
     app: kirro-mock
 spec:
+  # replicas: 1 is load-bearing — the mock keeps its state in SQLite (ADR-013), which is a
+  # single-writer store. Do not scale this horizontally without moving the state first.
   replicas: 1
   selector:
     matchLabels:
@@ -76,3 +79,153 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: kirro-mock-data
+---
+# The WebRTC room server (ADR-017). LiveKit is open source and self-hosted: no per-minute cost and
+# no third-party account.
+#
+# hostNetwork is deliberate. WebRTC media cannot travel through an Ingress — only the signalling
+# WebSocket on 7880 can — so the server binds the node's own ports for media. That means this pod
+# needs the node's public IP and three ports open on the host firewall:
+#
+#   7880/tcp  signalling (also published through the voice-kirro.upayan.dev Ingress)
+#   7881/tcp  WebRTC over TCP (the fallback for networks that block UDP)
+#   7882/udp  WebRTC media (a single muxed port, which is why no 50000-60000 range is needed)
+#
+# A single node runs this, so there is nothing to coordinate between replicas.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kirro-livekit
+  labels:
+    app: kirro-livekit
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: kirro-livekit
+  template:
+    metadata:
+      labels:
+        app: kirro-livekit
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      priorityClassName: low-priority
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - vps
+      containers:
+        - name: kirro-livekit
+          image: livekit/livekit-server:v1.13.7
+          imagePullPolicy: IfNotPresent
+          args: ["--config-body", "$(LIVEKIT_CONFIG)"]
+          ports:
+            - { name: signalling, containerPort: 7880, protocol: TCP }
+            - { name: rtc-tcp, containerPort: 7881, protocol: TCP }
+            - { name: rtc-udp, containerPort: 7882, protocol: UDP }
+          env:
+            - name: LIVEKIT_CONFIG
+              valueFrom:
+                configMapKeyRef: { name: kirro-livekit, key: config.yaml }
+            # Key pair, shared with the worker. Create the secret before this syncs.
+            - name: LIVEKIT_KEYS
+              valueFrom:
+                secretKeyRef: { name: kirro-voice, key: LIVEKIT_KEYS }
+            # The address the server advertises to clients for media.
+            - name: NODE_IP
+              valueFrom:
+                fieldRef: { fieldPath: status.hostIP }
+          readinessProbe:
+            httpGet: { path: /, port: 7880 }
+            initialDelaySeconds: 2
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+---
+# The voice bridge (ADR-017): a LiveKit agent worker that joins the room and runs Gnani
+# speech-to-text and text-to-speech around the AgenticOrg agent.
+#
+# replicas: 1 because the worker drives one shared AgenticOrg login whose chat history is a single
+# flat thread (ADR-016), so calls must not be processed concurrently.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kirro-voice
+  labels:
+    app: kirro-voice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kirro-voice
+  template:
+    metadata:
+      labels:
+        app: kirro-voice
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      priorityClassName: low-priority
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - vps
+      containers:
+        - name: kirro-voice
+          image: ghcr.io/cheetos-gif/kirro:latest
+          imagePullPolicy: Always
+          command: ["python", "-m", "voice_bridge.agent", "start"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            # In-cluster address: the worker talks to the room server directly, not through the
+            # public Ingress.
+            - name: LIVEKIT_URL
+              value: ws://kirro-livekit:7880
+            - name: AGENTICORG_BASE_URL
+              value: https://agenticorg.hackathon.pinelabs.com
+            - name: VOICE_HEALTH_PORT
+              value: "8082"
+            - name: LIVEKIT_API_KEY
+              valueFrom:
+                secretKeyRef: { name: kirro-voice, key: LIVEKIT_API_KEY }
+            - name: LIVEKIT_API_SECRET
+              valueFrom:
+                secretKeyRef: { name: kirro-voice, key: LIVEKIT_API_SECRET }
+            - name: GNANI_API_KEY
+              valueFrom:
+                secretKeyRef: { name: kirro-voice, key: GNANI_API_KEY }
+            - name: AGENTICORG_EMAIL
+              valueFrom:
+                secretKeyRef: { name: kirro-voice, key: AGENTICORG_EMAIL }
+            - name: AGENTICORG_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: kirro-voice, key: AGENTICORG_PASSWORD }
+          ports:
+            - containerPort: 8082
+          readinessProbe:
+            httpGet: { path: /, port: 8082 }
+            initialDelaySeconds: 5
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 768Mi }

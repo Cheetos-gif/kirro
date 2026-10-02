@@ -220,6 +220,37 @@ cancel the request?"* — no false claim. The specific cause this run (a guessed
 argument) differs from the demo screenshot's, but the property the rule protects — never say "you're in the pool"
 without the tool confirming it — held on the first live test.
 
+## The voice channel (ADR-016, ADR-017)
+
+The browser voice channel is a LiveKit room with a `voice_bridge/` worker on the other side: Gnani's own
+`livekit-plugins-gnani` does speech-to-text and text-to-speech, the Silero VAD plugin (model bundled in the
+package) does turn detection locally, and the AgenticOrg agent is the model stage.
+
+**Offline (`uv run pytest`)**: `tests/test_voice_bridge.py` covers the AgenticOrg client (login, the CSRF body
+field the platform actually accepts, re-auth on an expired session) and the LLM adapter that exposes that agent
+to the LiveKit pipeline (newest user turn in, the answer out, an honest failure line when the agent is
+unreachable, nothing sent for an empty turn, and the assembled session holding Gnani on both speech sides).
+No network, no LiveKit server, no Gnani.
+
+**Live (run by hand, 2026-10-02)** — `livekit-server --dev` locally, the worker started with the real Gnani
+and AgenticOrg credentials, and a caller that joins the room and publishes synthesized speech as its
+microphone track at real-time cadence:
+
+```
+caller speech: 4.5s
+joined room kirro-test
+  subscribed to agent-AJ_AU7jym8qq2hs's audio
+  [caller]  for four people 300 per person maximum
+  [agent]   What event or venue are you interested in?
+agent audio: 1059 frames (21.2s), 173 of them with speech
+PASS: full voice loop
+```
+
+That is the whole chain: Gnani STT transcribed the caller, the AgenticOrg agent decided and replied, and Gnani
+TTS spoke the reply back through the room. The caller's first words are clipped in that run because the worker
+takes a couple of seconds to dispatch into a newly created room — in the portal the caller waits for the UI to
+say "Listening" before speaking, so the real flow does not lose them.
+
 ## Failure cases to test by hand once credentials exist
 
 Outbound call blocked by handset spam filter; Gnani silence/interruption timeouts; real Hinglish transcription of

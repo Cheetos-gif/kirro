@@ -34,3 +34,33 @@ spec:
       ports:
         - protocol: TCP
           port: 8081
+---
+# The room server takes the same shape (ADR-017). Only its signalling port needs a policy: with
+# hostNetwork the media ports are the node's, outside what a pod-level NetworkPolicy governs.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kirro-livekit-ingress
+  namespace: kirro
+spec:
+  podSelector:
+    matchLabels:
+      app: kirro-livekit
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 7880
+        - protocol: TCP
+          port: 7881
+        - protocol: UDP
+          port: 7882

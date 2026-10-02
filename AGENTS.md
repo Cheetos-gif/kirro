@@ -16,6 +16,9 @@ What is here:
 
 - `mock_server/` — the mock external services the platform agent calls: venue inventory + holds + declared-interest
   pool, Pine Labs mandate hold/release, the DIFD draw, and the mandatory Delhivery mock.
+- `voice_bridge/` — the browser voice channel (ADR-016, ADR-017): a LiveKit agent worker running Gnani
+  speech-to-text and text-to-speech around the "Kirro Declare" agent, which it drives over AgenticOrg's chat
+  API. A relay, not a decision-maker.
 - `allocator/` — the DIFD seeded fair draw, the reference the mock's `/allocator/draw` transcribes.
 - `logging_/redact.py` — key/token/phone redaction shared by the mock request log.
 - `tests/` — mock-server scenarios and allocator properties.
@@ -57,13 +60,20 @@ allocator/engine.py    DIFD: pure deterministic allocation over (slots, bids, re
 allocator/fairness.py  weighted-permutation fairness
 allocator/schemas.py   allocation request/result models
 mock_server/mcp_surface.py  MCP servers, one per surface (ADR-012); tools call this same app in-process
+voice_bridge/agent.py  LiveKit agent worker (ADR-017): Gnani STT/TTS + Silero VAD around the agent
+voice_bridge/agenticorg.py      logs in and drives "Kirro Declare" over AgenticOrg's chat API
+voice_bridge/agenticorg_llm.py  exposes that agent as the pipeline's llm.LLM (newest turn in, answer out)
 logging_/redact.py     key/token/phone redaction applied before anything is logged
 tests/                 test_mock_server.py (scenarios, incl. a real uvicorn thread), test_allocator.py,
-                       test_mcp_surface.py (MCP tool catalogs + REST/MCP state parity)
-k8s/                   Deployment, Service, Ingress, NetworkPolicy (single service: kirro-mock)
+                       test_mcp_surface.py (MCP tool catalogs + REST/MCP state parity),
+                       test_state_durability.py, test_voice_bridge.py (AgenticOrg client + LLM adapter,
+                       no network, no LiveKit server)
+k8s/                   Deployments (kirro-mock, kirro-livekit, kirro-voice), Services, Ingress,
+                       NetworkPolicy, ConfigMap, PVC
 scripts/dev.sh         starts the mock server on :8081 in the foreground
-web/                   Next.js portal (ADR-015): listings, declare/instant-buy, dashboard, organiser, admin.
-                       Server-side only, talks to mock_server over HTTP; deployed to Vercel from the fork.
+web/                   Next.js portal (ADR-015): listings, declare/instant-buy, dashboard, organiser, admin,
+                       and /talk (the LiveKit voice channel, ADR-017). Server-side only, talks to
+                       mock_server over HTTP; deployed to Vercel from the fork.
 docs/                  agenticorg/ (spec + platform-map.md, the AgenticOrg site/API reference), decisions/ (ADRs),
                        architecture.md, connectors.md, ...
 ```
@@ -152,6 +162,14 @@ uv run pre-commit install           # one-time: wires the markdown-formatter com
 uv run pre-commit run --all-files
 uv run uvicorn mock_server.app:app --port 8081      # or:
 bash scripts/dev.sh                 # mock server on :8081 (GET /health)
+```
+
+The voice worker (optional; needs `GNANI_API_KEY`, `AGENTICORG_EMAIL`, `AGENTICORG_PASSWORD`,
+`AGENTICORG_BASE_URL`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` — ADR-017). Against a
+local room server (`livekit-server --dev` prints a dev key pair, `devkey`/`secret`):
+
+```
+uv run python -m voice_bridge.agent dev     # joins rooms and serves /health on :8082
 ```
 
 The portal (optional; needs the mock running on :8081):
