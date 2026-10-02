@@ -102,6 +102,33 @@ Agents: `Kirro Declare v4` (`27ec9d3c`) and `Kirro Allocator` (`5591e57a`), both
 | L04 (interruption leg) | *"wait, sorry"* mid-declaration | **pass** | the open question (*"What is the date you want to book…"*) was followed by *"wait, sorry"*, which produced *"No problem! Please let me know what you'd like to change…"* — no read-back, no advance, no tool call. (The silence leg is not observable in the chat panel: the agent only replies on input.) |
 | L06 | `insufficient_balance` on `create_mandate` | **pass** | `mcp.create_mandate {amount_value: 120000}` → `pinelabs.create_mandate` **402 `INSUFFICIENT_BALANCE`**; state `mandates: 0`; the agent said *"The reservation failed due to insufficient balance in the customer account. Would you like to try again with a different amount or cancel the request?"* — never claimed reserved (04:59) |
 
+**L15 and L16, re-verified 2026-10-02 10:36–10:47 — both pass, and the fix is a real defect fix, not a platform
+workaround.** The pass-through came up for a ~15-minute window (list_releases succeeded at 10:36, draw calls kept
+landing with real arguments through 10:46). Root-caused L15/L16 properly this time, against the consolidated
+`Kirro Allocator` (`5591e57a`):
+
+- `allocator.draw` allocates the bid's full `group_size` regardless of the mock's `partial_group`-scenario capacity
+  cut — the DIFD engine only knows the release's nominal capacity, not a scenario applied at `create_hold` time.
+  That's expected mock behaviour (a capacity drop between draw and hold is a real-world case, not a bug), so the
+  gap was squarely on the agent: `create_hold` returned `409 INSUFFICIENT_CAPACITY {available: 3}` and the agent
+  released the mandate instead of retrying with the available count — even when the bid's `min_group_size` allowed
+  it. Landed a rule on `Kirro Allocator` (pause → `PATCH` → resume, same mechanism as the loser-release fix):
+  *"If create_hold fails with INSUFFICIENT_CAPACITY and the available count is >= min_group_size, retry once with
+  quantity = available; charge and confirm for that quantity; state the partial count explicitly."*
+- **L16** (all-or-nothing bid of 4, `min_group_size: 4` > `available: 3`) — re-run first, before the fix, to confirm
+  the baseline: `create_hold(4)` → 409 → **no retry attempted** (correctly, since `min_group_size` doesn't allow a
+  partial) → `release {"authorization_id": "auth_0001"}` → `pinelabs.release` **RELEASED 120000**; state
+  `released_mandates: 1`. Agent: *"Outcome: Unallocated... Mandate: Released successfully."* **Pass**, and this
+  passed even before the partial-fallback rule — L16's defining behaviour is refusing the fallback, which the
+  original loser-release rule already covered.
+- **L15** (bid of 4, `min_group_size: 3` == `available: 3`) — failed the same way as L16 before the fix (released
+  instead of retrying). After landing the rule, re-run fresh: `create_hold(4)` → 409 → **`create_hold(3)` retry** →
+  `hold_0001` (`price_per_unit_paise: 25000`) → `execute(75000)` → SUCCESS → `confirm_booking` → **`BK-0001`
+  CONFIRMED** `amount_paise: 75000` → `release` for the **remaining 45000** → RELEASED. State
+  `{holds: 1, bookings: 1, payments: 1, released_mandates: 1}`. Agent: *"Outcome: Partial win... 3 of your 4 were
+  seated... Booking Reference: BK-0001... Amount Charged: ₹750.00. The remaining amount of the mandate has been
+  released."* **Pass**, full chain, first live test after the fix.
+
 | L07 | cancel after the mandate exists, before pooling | **fail** | `create_mandate {amount_value: 120000}` created the mandate, then *"actually I want to cancel now, please"* → the agent said *"Your request to cancel has been noted. I will cancel the process immediately"* — **but no `pinelabs.release` call**, and state `mandates: 1, released_mandates: 0`: the ₹1,200 reservation is left ACTIVE (05:10) |
 
 **L07's gap is not (only) the missing tool, and the fix is now live.** It was first run after granting `release` to
@@ -142,10 +169,8 @@ Both scenarios (`no_inventory`, `partial_group`) were disarmed with `{"scenario"
 carry that prompt fix: it appends an explicit rule — *"RELEASING LOSERS IS MANDATORY, AND IT COMES BEFORE YOUR
 REPLY… for every bid that is not a confirmed booking you MUST call release with the mandate id, in this same run,
 before you write anything to the user"*. **L12 passes on it** (row above): the same 409, then the release call with
-the right mandate id and `released_mandates: 1`. L16's re-run lost its window — the pass-through flapped down between
-the two attempts (up at 04:33:44, down by 04:35:48) and every `draw` arrived with null arguments regardless of
-phrasing. Re-run L16 against that agent when the pass-through is up; the check is `released_mandates: 1` plus a
-`pinelabs.release` line in the mock's log.
+the right mandate id and `released_mandates: 1`. L16's re-run lost its window that attempt, but a later one
+(10:37, against the consolidated `Kirro Allocator` below) succeeded — see the L15/L16 section above.
 
 **Consolidated since.** `Kirro Allocator v2` was retired and deleted; the original `Kirro Allocator` (`5591e57a`,
 the one the workflow and the declare agent both reference) now carries the loser-release rule directly, landed via
