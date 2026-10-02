@@ -743,11 +743,10 @@ and refreshable"* even though the connector is green.
 - `prompt_amendments` accepts a PATCH (200) but stores nothing, in any shape tried.
 - `POST /api/v1/agents/{id}/clone` → **403 `Missing scope: agenticorg:admin`**.
 
-So a live prompt fix needs an admin-scoped account. This is what still stands between us and a complete declare
-flow: the agent calls `create_mandate` but **never calls `declare_interest`**, yet tells the user *"you are now in the
-pool"*. The approval `context.tool_calls` for that turn lists only `create_mandate`, so it is prompt-following, not a
-schema rejection — the fix is step 10 of `agent-spec.md` §3 (already rewritten to demand the call and to forbid
-claiming pool entry without it), and it needs an agent clone to land.
+So a live prompt fix needs an admin-scoped account. The prompt the agent does run (the corrected one, transcribed
+into `agent-spec.md` §3) has since been verified to work: the agent does call `declare_interest`, and when its
+arguments arrive it produces a correct pool entry (§11). What the locked prompt costs is the ability to fix the
+remaining behaviour — see §11's closing paragraph — from this account.
 
 **Cleanup owed:** `mcp_kirro_all` through `_v18` are superseded by `_v19` — the agents link only the newest. The
 tenant also holds four functionally identical declare agents, all `active`: `Kirro` (`455907ea`), `Kirro Declare v2`
