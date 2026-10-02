@@ -26,6 +26,7 @@ from livekit.agents import (
     WorkerOptions,
     cli,
 )
+from livekit.agents.utils import shortuuid
 from livekit.plugins import silero
 from livekit.plugins.gnani import STT as GnaniSTT
 from livekit.plugins.gnani import TTS as GnaniTTS
@@ -34,8 +35,13 @@ from logging_.redact import redact_text
 from voice_bridge.agenticorg import AgentChatError
 from voice_bridge.agenticorg_llm import AgenticOrgChat, build_llm
 from voice_bridge.config import VoiceConfig
+from voice_bridge.conversation_log import CallLogger, ConversationLogHandler
 
 log = logging.getLogger("voice_bridge.agent")
+
+# The topic the worker sends its own call id on, for the portal to display. A text stream, like
+# LiveKit's own `lk.transcription`, so the browser reads it with the same mechanism.
+CALL_ID_TOPIC = "kirro.call_id"
 
 # The agent decides everything and its own prompt lives on AgenticOrg; these instructions only stop
 # the pipeline's LLM stage from inventing a persona of its own between STT and the agent's answer.
@@ -51,7 +57,7 @@ INSTRUCTIONS = (
 GREETING_OPENER = "Hi"
 
 
-def build_session(config: VoiceConfig) -> AgentSession:
+def build_session(config: VoiceConfig, call_id: str | None = None) -> AgentSession:
     """The voice pipeline: Gnani in, the AgenticOrg agent in the middle, Gnani out."""
     config.export_plugin_env()
     return AgentSession(
@@ -70,6 +76,7 @@ def build_session(config: VoiceConfig) -> AgentSession:
             password=config.agenticorg_password,
             agent_id=config.agent_id,
             timeout_s=config.request_timeout_s,
+            call_id=call_id,
         ),
         tts=GnaniTTS(
             voice=config.voice,
@@ -84,46 +91,55 @@ def build_session(config: VoiceConfig) -> AgentSession:
     )
 
 
-async def greet_caller(llm: AgenticOrgChat, say: Callable[[str], object]) -> None:
+async def greet_caller(
+    llm: AgenticOrgChat, say: Callable[[str], object], call_log: logging.LoggerAdapter | None = None
+) -> None:
     """Speak the real AgenticOrg agent's own opening line before the caller says anything.
 
     `say` is `AgentSession.say`, taken as a callable rather than the session itself so this can be
     tested without building a real voice pipeline.
     """
+    logger = call_log or log
     try:
         greeting = await llm.ask(GREETING_OPENER)
     except AgentChatError as exc:
-        log.warning("greeting turn failed, starting silent: %s", exc)
+        logger.warning("greeting turn failed, starting silent: %s", exc)
         greeting = ""
     if greeting:
-        log.info("spoke opening greeting: %s", redact_text(greeting))
+        logger.info("spoke opening greeting: %s", redact_text(greeting))
         say(greeting)
     else:
-        log.warning("no greeting to speak, call starts silent")
+        logger.warning("no greeting to speak, call starts silent")
 
 
-def _on_pipeline_error(event: ErrorEvent) -> None:
+def on_pipeline_error(call_log: logging.LoggerAdapter) -> Callable[[ErrorEvent], None]:
     """Every STT/LLM/TTS failure the pipeline sees, in one line instead of a vendored traceback.
 
     This is what would have made the Gnani TTS outage (`docs/testing.md`, "We are facing technical
     difficulties") immediately visible as a single clear line instead of something only found by
     reading through `_tts_inference_task` tracebacks after the fact.
     """
-    error = event.error
-    log.error(
-        "pipeline error",
-        extra={
-            "stage": error.type,
-            "label": error.label,
-            "recoverable": error.recoverable,
-            "error": repr(error.error),
-        },
-    )
+
+    def handler(event: ErrorEvent) -> None:
+        error = event.error
+        call_log.error(
+            "pipeline error",
+            extra={
+                "stage": error.type,
+                "label": error.label,
+                "recoverable": error.recoverable,
+                "error": repr(error.error),
+            },
+        )
+
+    return handler
 
 
-def _on_session_close(started_at: float, room_name: str) -> Callable[[CloseEvent], None]:
+def on_session_close(
+    call_log: logging.LoggerAdapter, started_at: float, room_name: str
+) -> Callable[[CloseEvent], None]:
     def handler(event: CloseEvent) -> None:
-        log.info(
+        call_log.info(
             "voice session ended",
             extra={
                 "room": room_name,
@@ -139,25 +155,39 @@ def _on_session_close(started_at: float, room_name: str) -> Callable[[CloseEvent
 async def entrypoint(ctx: JobContext) -> None:
     config = VoiceConfig.from_env()
     await ctx.connect()
+    # One id per call, minted here rather than reused from the room name: the portal keeps one room
+    # per viewer, so the same room is every call that viewer makes. Everything logged for this call
+    # carries it, and `ConversationLogHandler` files those lines under `<log_dir>/<call_id>.jsonl`.
+    call_id = shortuuid("call_")
+    call_log = CallLogger(log, {"call_id": call_id})
     started_at = time.monotonic()
     # Built per job, so each call gets its own AgenticOrg conversation. Sharing one would leak the
     # previous caller's declaration into the next one.
-    session = build_session(config)
-    session.on("error", _on_pipeline_error)
-    session.on("close", _on_session_close(started_at, ctx.room.name))
+    session = build_session(config, call_id=call_id)
+    session.on("error", on_pipeline_error(call_log))
+    session.on("close", on_session_close(call_log, started_at, ctx.room.name))
     await session.start(
         agent=Agent(instructions=INSTRUCTIONS),
         room=ctx.room,
     )
-    log.info("voice session started in room %s", ctx.room.name)
+    call_log.info("voice session started", extra={"room": ctx.room.name})
+
+    # Tell the portal which call this is, so the id it shows is the one the logs are filed under.
+    try:
+        await ctx.room.local_participant.send_text(call_id, topic=CALL_ID_TOPIC)
+    except Exception as exc:  # noqa: BLE001 - a missing badge must never break the call itself
+        call_log.warning("could not publish the call id to the room: %s", exc)
 
     llm = session.llm
     assert isinstance(llm, AgenticOrgChat)
-    await greet_caller(llm, session.say)
+    await greet_caller(llm, session.say, call_log)
 
 
 def main() -> None:
     config = VoiceConfig.from_env()
+    # Every call writes its own file beside the pod's stdout log, so a conversation can be pulled up
+    # by id after `kubectl logs` has rolled the line away (the directory is a PVC in k8s/pvc.yaml).
+    logging.getLogger("voice_bridge").addHandler(ConversationLogHandler(config.log_dir))
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,

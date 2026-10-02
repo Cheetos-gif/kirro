@@ -161,8 +161,9 @@ spec:
 # The voice bridge (ADR-017): a LiveKit agent worker that joins the room and runs Gnani
 # speech-to-text and text-to-speech around the AgenticOrg agent.
 #
-# replicas: 1 because the worker drives one shared AgenticOrg login whose chat history is a single
-# flat thread (ADR-016), so calls must not be processed concurrently.
+# replicas: 1 because every call shares one AgenticOrg login, and whether the platform tolerates
+# two concurrent `thread_id`s under it is still unverified (ADR-017 §7). The conversation log PVC is
+# ReadWriteOnce for the same reason.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -183,6 +184,8 @@ spec:
         runAsNonRoot: true
         runAsUser: 10001
         runAsGroup: 10001
+        # Makes the freshly provisioned local-path volume writable by uid 10001 (same as the mock).
+        fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
       affinity:
@@ -228,8 +231,15 @@ spec:
             - name: AGENTICORG_PASSWORD
               valueFrom:
                 secretKeyRef: { name: kirro-voice, key: AGENTICORG_PASSWORD }
+            # One JSONL file per call, on the PVC: a conversation has to be findable by its id long
+            # after the pod that ran it is gone.
+            - name: VOICE_LOG_DIR
+              value: /app/data/logs
           ports:
             - containerPort: 8082
+          volumeMounts:
+            - name: logs
+              mountPath: /app/data
           readinessProbe:
             httpGet: { path: /, port: 8082 }
             initialDelaySeconds: 5
@@ -243,3 +253,7 @@ spec:
             # pressure, and dropping a live call to reclaim 586Mi is not a trade worth making.
             requests: { cpu: 300m, memory: 512Mi }
             limits: { cpu: 2000m, memory: 1Gi }
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: kirro-voice-logs

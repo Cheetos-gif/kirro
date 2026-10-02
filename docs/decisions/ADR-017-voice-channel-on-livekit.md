@@ -76,6 +76,13 @@ Replace the custom relay with the standard stack on both sides.
 - LiveKit keeps a local transcript for captions. That transcript is a display detail — it is not a
   second decision log, and nothing reads it back (ADR-011's "the brain lives on AgenticOrg" is
   untouched).
+- **Each call gets an id and its own durable log.** The worker mints `call_<12 hex>` per job (the room name
+  cannot serve: the portal keeps one room per viewer, so one room is many calls), tags every log line it emits
+  with it, and `ConversationLogHandler` files those lines into `<VOICE_LOG_DIR>/<call_id>.jsonl` — the mock's
+  `logs/<run_id>.jsonl` convention. The directory is the `kirro-voice-logs` PVC, since the worker is otherwise
+  stateless and a rollout takes `kubectl logs` with it. `/talk` displays the same id (the worker sends it on the
+  `kirro.call_id` text stream), so a reported problem names the file it is in. This is an operational log, not a
+  decision log: the decisions and the Audit Log remain AgenticOrg's (ADR-011).
 
 ## Verification
 

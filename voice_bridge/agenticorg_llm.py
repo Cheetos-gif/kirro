@@ -123,7 +123,9 @@ class AgenticOrgChat(LLM):
         )
 
 
-def build_llm(*, base_url: str, email: str, password: str, agent_id: str, timeout_s: float) -> AgenticOrgChat:
+def build_llm(
+    *, base_url: str, email: str, password: str, agent_id: str, timeout_s: float, call_id: str | None = None
+) -> AgenticOrgChat:
     """Wire an `AgenticOrgChat` to a fresh HTTP client."""
     return AgenticOrgChat(
         client=AgentChat(
@@ -132,6 +134,7 @@ def build_llm(*, base_url: str, email: str, password: str, agent_id: str, timeou
             password=password,
             agent_id=agent_id,
             timeout_s=timeout_s,
+            call_id=call_id,
         )
     )
 

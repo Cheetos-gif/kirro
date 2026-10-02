@@ -55,6 +55,7 @@ class VoiceConfig:
     livekit_api_secret: str
     health_port: int
     request_timeout_s: float
+    log_dir: str
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "VoiceConfig":
@@ -75,6 +76,9 @@ class VoiceConfig:
             livekit_api_secret=_require(e, "LIVEKIT_API_SECRET"),
             health_port=int(e.get("VOICE_HEALTH_PORT") or DEFAULT_HEALTH_PORT),
             request_timeout_s=float(e.get("VOICE_AGENT_TIMEOUT_S") or 180.0),
+            # One JSONL file per call (ADR-017 §logging): same convention as the mock's
+            # `logs/mock/<run_id>.jsonl` (MOCK_LOG_DIR).
+            log_dir=(e.get("VOICE_LOG_DIR") or "logs/voice").strip(),
         )
 
     def export_plugin_env(self) -> None:

@@ -44,6 +44,7 @@ def _config(**overrides: Any) -> VoiceConfig:
         livekit_api_secret="devsecret",
         health_port=8082,
         request_timeout_s=30.0,
+        log_dir="/tmp/kirro-voice-test-logs",
     )
     base.update(overrides)
     return VoiceConfig(**base)
@@ -344,7 +345,8 @@ def test_pipeline_error_is_logged_as_one_structured_line(caplog: pytest.LogCaptu
     from livekit.agents import ErrorEvent
     from livekit.agents.tts import TTSError
 
-    from voice_bridge.agent import _on_pipeline_error
+    from voice_bridge.agent import on_pipeline_error
+    from voice_bridge.conversation_log import CallLogger
 
     error = TTSError(
         timestamp=0.0,
@@ -355,12 +357,13 @@ def test_pipeline_error_is_logged_as_one_structured_line(caplog: pytest.LogCaptu
     event = ErrorEvent(error=error, source=error)
 
     with caplog.at_level(logging_module.ERROR, logger="voice_bridge.agent"):
-        _on_pipeline_error(event)
+        on_pipeline_error(CallLogger(logging_module.getLogger("voice_bridge.agent"), {"call_id": "call_x"}))(event)
 
     record = next(r for r in caplog.records if r.message == "pipeline error")
     assert record.stage == "tts_error"
     assert record.label == "gnani-tts"
     assert record.recoverable is False
+    assert record.call_id == "call_x"
 
 
 def test_session_close_is_logged_with_reason_and_duration(caplog: pytest.LogCaptureFixture) -> None:
@@ -369,10 +372,15 @@ def test_session_close_is_logged_with_reason_and_duration(caplog: pytest.LogCapt
 
     from livekit.agents import CloseEvent, CloseReason
 
-    from voice_bridge.agent import _on_session_close
+    from voice_bridge.agent import on_session_close
+    from voice_bridge.conversation_log import CallLogger
 
     started_at = time.monotonic() - 5
-    handler = _on_session_close(started_at, "kirro-upayanm3-gmail-com")
+    handler = on_session_close(
+        CallLogger(logging_module.getLogger("voice_bridge.agent"), {"call_id": "call_x"}),
+        started_at,
+        "kirro-upayanm3-gmail-com",
+    )
 
     with caplog.at_level(logging_module.INFO, logger="voice_bridge.agent"):
         handler(CloseEvent(reason=CloseReason.PARTICIPANT_DISCONNECTED))
@@ -382,3 +390,80 @@ def test_session_close_is_logged_with_reason_and_duration(caplog: pytest.LogCapt
     assert record.reason == "participant_disconnected"
     assert record.duration_s >= 5
     assert record.error is None
+    assert record.call_id == "call_x"
+
+
+# --- per-call conversation log -------------------------------------------------------------------
+
+
+def test_conversation_log_writes_one_file_per_call(tmp_path: Any) -> None:
+    """Each call's lines land in its own file, keyed by the call_id on the record."""
+    import json
+    import logging as logging_module
+
+    from voice_bridge.conversation_log import ConversationLogHandler
+
+    handler = ConversationLogHandler(tmp_path)
+    logger = logging_module.getLogger("voice_bridge.test.conversation")
+    logger.addHandler(handler)
+    logger.setLevel(logging_module.INFO)
+    try:
+        logger.info("agenticorg turn", extra={"call_id": "call_a", "turn": 1, "query": "hi"})
+        logger.info("agenticorg turn", extra={"call_id": "call_b", "turn": 1, "query": "hello"})
+        logger.info("no call id, must be dropped")
+    finally:
+        logger.removeHandler(handler)
+
+    entries_a = [json.loads(line) for line in (tmp_path / "call_a.jsonl").read_text().splitlines()]
+    entries_b = [json.loads(line) for line in (tmp_path / "call_b.jsonl").read_text().splitlines()]
+    assert len(entries_a) == 1 and entries_a[0]["query"] == "hi"
+    assert len(entries_b) == 1 and entries_b[0]["query"] == "hello"
+    # the record without a call_id does not invent a file for itself
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["call_a.jsonl", "call_b.jsonl"]
+
+
+def test_call_logger_merges_its_fields_with_the_call_sites(tmp_path: Any) -> None:
+    """The stdlib adapter would drop `turn`; ours must keep both it and `call_id`."""
+    import json
+    import logging as logging_module
+
+    from voice_bridge.conversation_log import CallLogger, ConversationLogHandler
+
+    handler = ConversationLogHandler(tmp_path)
+    logger = logging_module.getLogger("voice_bridge.test.merge")
+    logger.addHandler(handler)
+    logger.setLevel(logging_module.INFO)
+    try:
+        CallLogger(logger, {"call_id": "call_m"}).info("agenticorg turn", extra={"turn": 7, "latency_ms": 12})
+    finally:
+        logger.removeHandler(handler)
+
+    entry = json.loads((tmp_path / "call_m.jsonl").read_text().splitlines()[0])
+    assert entry["call_id"] == "call_m"
+    assert entry["turn"] == 7
+    assert entry["latency_ms"] == 12
+
+
+def test_agent_chat_tags_every_turn_with_the_call_id(caplog: pytest.LogCaptureFixture) -> None:
+    """A call's own turns are filed under its id, which is what makes a call findable later."""
+    import logging as logging_module
+
+    platform = _Platform(answer="Hello!")
+    chat = AgentChat(
+        base_url="https://agenticorg.example",
+        email="bridge@example.com",
+        password="secret",
+        agent_id="agent-1",
+        client=httpx.AsyncClient(
+            base_url="https://agenticorg.example", transport=httpx.MockTransport(platform.handler)
+        ),
+        call_id="call_z",
+    )
+
+    with caplog.at_level(logging_module.INFO, logger="voice_bridge.agenticorg"):
+        reply = _run(chat.ask("hello"))
+
+    assert reply == "Hello!"
+    record = next(r for r in caplog.records if r.message == "agenticorg turn")
+    assert record.call_id == "call_z"
+    _run(chat.aclose())

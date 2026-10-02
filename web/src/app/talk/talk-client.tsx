@@ -7,6 +7,7 @@ import {
   RoomAudioRenderer,
   useConnectionState,
   useLocalParticipant,
+  useRoomContext,
   useTranscriptions,
   useVoiceAssistant,
   VoiceAssistantControlBar,
@@ -14,12 +15,16 @@ import {
 import '@livekit/components-styles';
 import type { ReceivedChatMessage } from '@livekit/components-react';
 import { ConnectionState } from 'livekit-client';
+import type { TextStreamReader } from 'livekit-client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export type TranscriptLine = { key: string; mine: boolean; text: string; at: number };
+
+/** The worker's own topic for the per-call id (voice_bridge/agent.py: CALL_ID_TOPIC). */
+const CALL_ID_TOPIC = 'kirro.call_id';
 
 const STATE_LABEL: Record<string, string> = {
   initializing: 'Connecting…',
@@ -65,7 +70,7 @@ export function mergeTurn(lines: TranscriptLine[], turn: TranscriptLine): Transc
  * Inside the room. LiveKit owns the transcript, the turn state, the visualiser and the controls;
  * this only maps its messages into the shape the page keeps for copying.
  */
-function Call({ onTurn }: { onTurn: (line: TranscriptLine) => void }) {
+function Call({ onTurn, onCallId }: { onTurn: (line: TranscriptLine) => void; onCallId: (id: string) => void }) {
   const { state, audioTrack } = useVoiceAssistant();
   const connection = useConnectionState();
   // `useTranscriptions` rather than `useSessionMessages`: the latter is beta and returns nothing
@@ -73,6 +78,20 @@ function Call({ onTurn }: { onTurn: (line: TranscriptLine) => void }) {
   // empty transcript with every message dropped.
   const transcriptions = useTranscriptions();
   const { localParticipant } = useLocalParticipant();
+  const room = useRoomContext();
+
+  // The worker mints one id per call and sends it on `kirro.call_id`, so the id shown here is the
+  // one its conversation log is filed under.
+  useEffect(() => {
+    const handler = (reader: TextStreamReader) => {
+      void reader.readAll().then(id => {
+        const trimmed = id.trim();
+        if (trimmed) onCallId(trimmed);
+      });
+    };
+    room.registerTextStreamHandler(CALL_ID_TOPIC, handler);
+    return () => room.unregisterTextStreamHandler(CALL_ID_TOPIC);
+  }, [room, onCallId]);
 
   useEffect(() => {
     for (const line of transcriptions) {
@@ -118,6 +137,7 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
   const [lines, setLines] = useState<TranscriptLine[]>([]);
   const [copied, setCopied] = useState(false);
   const [startedAt, setStartedAt] = useState<Date | null>(null);
+  const [callId, setCallId] = useState<string | null>(null);
   const scrollBox = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -128,12 +148,17 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
     setLines(previous => mergeTurn(previous, line));
   }, []);
 
+  const onCallId = useCallback((id: string) => {
+    setCallId(id);
+  }, []);
+
   const start = useCallback(async () => {
     setConnecting(true);
     setError(null);
     // A new call is a new conversation, so the log starts empty too.
     setLines([]);
     setCopied(false);
+    setCallId(null);
     setStartedAt(new Date());
     try {
       const response = await fetch('/api/voice/token', { method: 'POST' });
@@ -192,7 +217,7 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
             className="flex flex-col gap-4"
           >
             <RoomAudioRenderer />
-            <Call onTurn={onTurn} />
+            <Call onTurn={onTurn} onCallId={onCallId} />
             <Button variant="outline" className="w-fit" onClick={stop}>
               End call
             </Button>
@@ -212,9 +237,19 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
 
         <section className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
-              Transcript{lines.length ? ` · ${lines.length} turns` : ''}
-            </h2>
+            <div className="flex min-w-0 items-center gap-2">
+              <h2 className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
+                Transcript{lines.length ? ` · ${lines.length} turns` : ''}
+              </h2>
+              {callId ? (
+                <span
+                  className="truncate font-mono text-xs text-muted-foreground"
+                  title={`Conversation id: ${callId} — quote it when reporting a problem with this call.`}
+                >
+                  {callId}
+                </span>
+              ) : null}
+            </div>
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="xs" onClick={copy} disabled={!lines.length}>
                 {copied ? 'Copied' : 'Copy'}

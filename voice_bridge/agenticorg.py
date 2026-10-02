@@ -19,6 +19,7 @@ import time
 import httpx
 
 from logging_.redact import redact_text
+from voice_bridge.conversation_log import CallLogger
 
 log = logging.getLogger("voice_bridge.agenticorg")
 
@@ -42,6 +43,7 @@ class AgentChat:
         agent_id: str,
         timeout_s: float = 180.0,
         client: httpx.AsyncClient | None = None,
+        call_id: str | None = None,
     ) -> None:
         self._email = email
         self._password = password
@@ -58,6 +60,9 @@ class AgentChat:
         self._thread_id: str | None = None
         # For log correlation only ("turn 3 failed") — never sent to the platform.
         self._turn = 0
+        # `call_id` tags every line this instance logs, so `ConversationLogHandler` can file it
+        # under that call's own `<call_id>.jsonl` regardless of which class did the logging.
+        self._log = CallLogger(log, {"call_id": call_id} if call_id else {})
 
     @property
     def thread_id(self) -> str | None:
@@ -88,13 +93,13 @@ class AgentChat:
             "/api/v1/auth/login", json={"email": self._email, "password": self._password}
         )
         if response.status_code != 200:
-            log.error(
+            self._log.error(
                 "agenticorg login failed",
                 extra={"status": response.status_code, "body": redact_text(response.text[:200])},
             )
             raise AgentChatError(f"AgenticOrg login failed: {response.status_code} {response.text[:200]}")
         self._logged_in = True
-        log.info("agenticorg session established for %s", self._email)
+        self._log.info("agenticorg session established for %s", self._email)
 
     async def ask(self, text: str) -> str:
         """Send one user turn, return the agent's reply text.
@@ -109,12 +114,12 @@ class AgentChat:
                 await self.login()
             reply, status, thread = await self._post(text)
             if status in (401, 403):
-                log.info("agenticorg session expired; re-authenticating", extra={"turn": turn})
+                self._log.info("agenticorg session expired; re-authenticating", extra={"turn": turn})
                 await self.login()
                 reply, status, thread = await self._post(text)
             latency_ms = round((time.monotonic() - started) * 1000)
             if status != 200:
-                log.error(
+                self._log.error(
                     "agenticorg turn failed",
                     extra={
                         "turn": turn,
@@ -127,7 +132,7 @@ class AgentChat:
                 raise AgentChatError(f"chat/query failed: {status} {reply[:200]}")
             if thread:
                 self._thread_id = thread
-            log.info(
+            self._log.info(
                 "agenticorg turn",
                 extra={
                     "turn": turn,

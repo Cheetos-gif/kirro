@@ -14,3 +14,23 @@ spec:
   resources:
     requests:
       storage: 1Gi
+---
+# Voice conversation logs (ADR-017 §logging): one JSONL file per call, named by the call id the
+# portal shows. The worker itself keeps no state, but a call's own log has to outlive the pod's
+# stdout retention — the image tag is `latest` with imagePullPolicy: Always, so every rollout
+# replaces the pod and `kubectl logs` for a call is gone with it.
+#
+# RWO for the same reason as the mock's volume: one worker pod writes it, and `replicas: 1` is what
+# keeps it that way.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kirro-voice-logs
+  namespace: kirro
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi

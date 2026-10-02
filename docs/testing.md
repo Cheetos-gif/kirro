@@ -398,6 +398,40 @@ agent speak and had a cue to answer. Covered by
 `tests/test_voice_bridge.py::test_greet_caller_speaks_the_agents_own_opening_line` and
 `::test_greet_caller_stays_silent_if_agenticorg_is_unreachable`.
 
+**Per-call id and conversation log (2026-10-03).** Debugging the two incidents above meant grepping raw
+`kubectl logs` and writing throwaway repro scripts, because nothing tied a call's turns together and the pod's
+stdout is all there was. Two additions:
+
+- **One id per call.** `entrypoint()` mints `call_<12 hex>` (`livekit.agents.utils.shortuuid`) and threads it
+  through a `LoggerAdapter`, so every line a call logs carries `call_id`. Not the room name: the portal keeps one
+  room per viewer (`kirro-<email-slug>`), so the same room is *every* call that viewer makes.
+
+- **One file per call.** `ConversationLogHandler` (`voice_bridge/conversation_log.py`) is a plain `logging.Handler`
+  that demuxes records by that field into `<VOICE_LOG_DIR>/<call_id>.jsonl` — the same convention as the mock's
+  `logs/mock/<run_id>.jsonl`. `voice_bridge/agent.py` attaches it to the `voice_bridge` logger in `main()`, so both
+  this repo's own lines and the LLM adapter's per-turn lines land in the same file. Each line is the record's
+  message plus every `extra` field (turn number, `thread_id` before/after, `latency_ms`, redacted query/answer,
+  pipeline errors, close reason and duration). Records without a `call_id` (worker startup) are ignored — this is
+  a per-conversation log, not a replacement for stdout.
+
+  Note the stdlib `LoggerAdapter` default `process()` *replaces* the call site's `extra` with the adapter's, which
+  would have silently dropped every field; `CallLogger` merges instead.
+
+- **The portal shows it.** The worker sends the id on the `kirro.call_id` text-stream topic; `/talk` reads it with
+  `registerTextStreamHandler` and renders it next to the transcript heading, so the id a user quotes when reporting
+  a problem is the id their conversation was filed under.
+
+- **Durability.** The worker keeps no state, but its log directory is the `kirro-voice-logs` PVC
+  (`k8s/pvc.yaml`), because the image tag is `latest` with `imagePullPolicy: Always`: every rollout replaces the
+  pod and `kubectl logs` for a call goes with it.
+
+Reading a past call: `kubectl exec deploy/kirro-voice -n kirro -- cat /app/data/logs/<call_id>.jsonl`. The
+user's own speech is transcribed by Gnani and arrives as the `query` field of each turn — there is no separate
+audio recording.
+
+Tests: `test_conversation_log_writes_one_file_per_call`,
+`test_call_logger_merges_its_fields_with_the_call_sites`, `test_agent_chat_tags_every_turn_with_the_call_id`.
+
 ## Failure cases to test by hand once credentials exist
 
 Outbound call blocked by handset spam filter; Gnani silence/interruption timeouts; real Hinglish transcription of
