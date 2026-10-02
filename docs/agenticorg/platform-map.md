@@ -780,9 +780,12 @@ What was tried, and what it ruled out:
    parameter optional produced our own guard firing instead. Neither changes what the model emits.
 1. **Argument naming.** Declaring `amount_value`/`amount`/`amount_paise`/`amountValue`… and `release_id`/`releaseId`/
    `event`/`date` made no difference: the argument object was empty before the call, so no alias could match it.
-1. **A lean, required-argument surface** (`get_release(release_id)`, `declare_interest(release_id, group_size, min_group_size, max_price_paise)`, short descriptions, no aliases) — the most recent state, and it still arrives
-   empty. `create_mandate`, whose description names exactly one obvious argument, is the only call ever seen with
-   populated arguments, so the shape of the schema is at most a contributing factor.
+1. **A lean, required-argument surface** (`get_release(release_id)`, `declare_interest(release_id, group_size, min_group_size, max_price_paise)`, short descriptions, no aliases) — and when that produced a *platform-side*
+   rejection for the missing required parameter, an empty lookup was made to answer with the candidates instead
+   (`get_release("")` returns the releases) and the bid's `release_id` was made optional for the same reason: an
+   empty call must reach us to be answered usefully. It reaches us — still empty. `create_mandate`, whose
+   description names exactly one obvious argument, is the only call ever seen with populated arguments, so the
+   shape of the schema is at most a contributing factor.
 
 **Consequence for the demo:** the pool entry is the one step the agent cannot complete, and it reports that failure
 honestly rather than claiming success (which is the correct behaviour, and it is a safety invariant working as
