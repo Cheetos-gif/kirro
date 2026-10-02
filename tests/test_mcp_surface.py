@@ -210,12 +210,15 @@ def test_aggregate_surface_serves_every_tool(mcp_base):
 
 def test_mandate_tools_accept_the_amount_alias(mcp_base):
     """Live, the platform validated our schema and the model had not supplied `amount_value`, which surfaced as
-    "The amount value is missing". Both argument names must work, and omitting both must return a clean 400 rather
-    than a platform-side validation error."""
+    "The amount value is missing". Every shape a model plausibly emits must work - the `amount` alias, a nested
+    `{"value": ...}` object, and a numeric string - and omitting everything must be a clean 400 that echoes what
+    actually arrived instead of a platform-side validation error."""
 
     async def go():
         async with session(f"{mcp_base}/pinelabs/mcp") as s:
             by_alias = payload(await s.call_tool("create_mandate", {"amount": 123400}))
+            nested = payload(await s.call_tool("create_mandate", {"amount_value": {"value": 5500}}))
+            as_string = payload(await s.call_tool("create_mandate", {"amount_value": "7000"}))
             missing = payload(await s.call_tool("create_mandate", {}))
             charged = payload(
                 await s.call_tool(
@@ -223,9 +226,12 @@ def test_mandate_tools_accept_the_amount_alias(mcp_base):
                     {"authorization_id": by_alias["body"]["authorizationId"], "amount": 1000},
                 )
             )
-            return by_alias, missing, charged
+            return by_alias, nested, as_string, missing, charged
 
-    by_alias, missing, charged = asyncio.run(go())
+    by_alias, nested, as_string, missing, charged = asyncio.run(go())
     assert by_alias["status_code"] == 200 and by_alias["body"]["amount"]["value"] == 123400
+    assert nested["status_code"] == 200 and nested["body"]["amount"]["value"] == 5500
+    assert as_string["status_code"] == 200 and as_string["body"]["amount"]["value"] == 7000
     assert missing["status_code"] == 400 and missing["body"]["error"]["code"] == "BAD_REQUEST"
+    assert "amount_value=None" in missing["body"]["error"]["message"]
     assert charged["status_code"] == 200 and charged["body"]["status"] == "SUCCESS"

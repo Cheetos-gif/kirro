@@ -192,6 +192,46 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         )
 
 
+def _coerce_amount(value: Any) -> int | None:
+    """Models emit the amount as an int, a numeric string, or a `{"value": N}` object; the argument name varies
+    too. Normalise all of those to an int (paise), returning None when nothing usable was given."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, dict):
+        for key in ("value", "amount", "amount_value", "amount_paise"):
+            if key in value:
+                return _coerce_amount(value[key])
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        digits = value.strip().replace(",", "")
+        if digits.isdigit():
+            return int(digits)
+    return None
+
+
+def _amount_or_error(*candidates: Any) -> tuple[int | None, dict | None]:
+    """First usable amount wins. On failure the error echoes exactly what arrived, so the model's argument
+    shape is visible in the agent's reply instead of only in a platform-side validation message."""
+    for candidate in candidates:
+        coerced = _coerce_amount(candidate)
+        if coerced is not None:
+            return coerced, None
+    received = ", ".join(
+        f"{name}={value!r}" for name, value in zip(("amount_value", "amount"), candidates, strict=False)
+    )
+    return None, {
+        "status_code": 400,
+        "body": {
+            "error": {
+                "code": "BAD_REQUEST",
+                "message": f"amount_value (paise) is required; received {received}",
+            }
+        },
+    }
+
+
 def _pinelabs(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 
     @mcp.tool(
@@ -201,25 +241,22 @@ def _pinelabs(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         )
     )
     async def create_mandate(
-        amount_value: int | None = None,
-        amount: int | None = None,
+        amount_value: Any = None,
+        amount: Any = None,
         currency: str = "INR",
         run_id: str = DEFAULT_RUN,
         idempotency_key: str | None = None,
     ) -> dict:
-        value = amount_value if amount_value is not None else amount
-        if value is None:
-            return {
-                "status_code": 400,
-                "body": {"error": {"code": "BAD_REQUEST", "message": "amount_value is required, in paise"}},
-            }
+        value, error = _amount_or_error(amount_value, amount)
+        if error is not None:
+            return error
         return await _call(
             client,
             "POST",
             "/pinelabs/mandates",
             run_id=run_id,
             idem=idempotency_key,
-            json={"amount": {"value": int(value), "currency": currency}},
+            json={"amount": {"value": value, "currency": currency}},
         )
 
     @mcp.tool(description="Read the remaining authorised balance for a mandate.")
@@ -234,24 +271,21 @@ def _pinelabs(mcp: MCPServer, client: httpx.AsyncClient) -> None:
     )
     async def execute(
         authorization_id: str,
-        amount_value: int | None = None,
-        amount: int | None = None,
+        amount_value: Any = None,
+        amount: Any = None,
         run_id: str = DEFAULT_RUN,
         idempotency_key: str | None = None,
     ) -> dict:
-        value = amount_value if amount_value is not None else amount
-        if value is None:
-            return {
-                "status_code": 400,
-                "body": {"error": {"code": "BAD_REQUEST", "message": "amount_value is required, in paise"}},
-            }
+        value, error = _amount_or_error(amount_value, amount)
+        if error is not None:
+            return error
         return await _call(
             client,
             "POST",
             f"/pinelabs/mandates/{authorization_id}/execute",
             run_id=run_id,
             idem=idempotency_key,
-            json={"amount": {"value": int(value)}},
+            json={"amount": {"value": value}},
         )
 
     @mcp.tool(description="Release the mandate's unused reserved amount.")
