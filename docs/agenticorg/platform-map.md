@@ -749,4 +749,50 @@ pool"*. The approval `context.tool_calls` for that turn lists only `create_manda
 schema rejection — the fix is step 10 of `agent-spec.md` §3 (already rewritten to demand the call and to forbid
 claiming pool entry without it), and it needs an agent clone to land.
 
-**Cleanup owed:** `mcp_kirro_all`, `_v2` and `_v3` are superseded by `_v4`; the agent links only `_v4` now.
+**Cleanup owed:** `mcp_kirro_all`, `_v2` … `_v8` are superseded by `_v9`; the agent links only the newest.
+
+## 11. Open blocker: the model does not populate tool arguments reliably
+
+With §10 fixed, the calls reach the mock — but the arguments do not. `mock_server` now logs every MCP tool
+invocation with the arguments as received (`target: "mcp.<tool>"` in the same per-run JSONL as the REST routes).
+That log is unambiguous:
+
+```
+2026-10-02T01:22:24Z mcp.create_mandate  -> {"amount_value": 120000}   # correct, Rs 1,200 in paise
+2026-10-02T01:22:48Z mcp.declare_interest -> {}                        # no arguments at all
+2026-10-02T01:22:51Z mcp.declare_interest -> {}
+2026-10-02T01:28:20Z mcp.create_mandate   -> {}                        # the same tool, also empty
+```
+
+So the agent calls `declare_interest` (and sometimes `get_release`, and sometimes `create_mandate`) with an empty
+argument object, while the same model sends `{"amount_value": 120000}` on other turns. The platform records these as
+`status: success`, so its record cannot distinguish "the tool refused" from "the arguments were empty" — only our
+log can.
+
+What was tried, and what it ruled out:
+
+1. **Signature strictness.** A strict signature produced *"The amount value is missing"* from the platform; every
+   parameter optional produced our own guard firing instead. Neither changes what the model emits.
+1. **Argument naming.** Declaring `amount_value`/`amount`/`amount_paise`/`amountValue`… and `release_id`/`releaseId`/
+   `event`/`date` made no difference: the argument object was empty before the call, so no alias could match it.
+1. **A lean, required-argument surface** (`get_release(release_id)`, `declare_interest(release_id, group_size, min_group_size, max_price_paise)`, short descriptions, no aliases) — the most recent state, and it still arrives
+   empty. `create_mandate`, whose description names exactly one obvious argument, is the only call ever seen with
+   populated arguments, so the shape of the schema is at most a contributing factor.
+
+**Consequence for the demo:** the pool entry is the one step the agent cannot complete, and it reports that failure
+honestly rather than claiming success (which is the correct behaviour, and it is a safety invariant working as
+designed). Everything downstream of the pool — the Workflow's draw, hold and capture — therefore has nothing to
+allocate unless the pool is seeded another way.
+
+**This is not fixable from this repo.** The values in question (group size, ceiling, which release) are conversation
+facts only the agent holds, and the mock cannot invent them. The two real paths are:
+
+1. Ask the platform why a tool call arrives with an empty argument object on a turn where the same model populates
+   arguments for another tool. This is the one question worth putting to them.
+1. Change the agent: a different model, or a prompt that spells out the tool call with its arguments. Both need
+   **`agenticorg:admin`** — prompts are locked on active agents, `prompt_amendments` stores nothing, and
+   `POST /agents/{id}/clone` returns 403 `Missing scope: agenticorg:admin` for this account.
+
+For a dry run in the meantime, the pool can be seeded through the mock's own REST route
+(`POST /venue/releases/{release_id}/declarations`), which is the same code path the tool calls — the declare step
+then exercises the Workflow, hold, capture and confirmation legs end to end.

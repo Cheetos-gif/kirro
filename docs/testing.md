@@ -71,6 +71,11 @@ Deeper platform behaviour behind each of these is in `docs/agenticorg/platform-m
 Connector schema changes do not propagate on redeploy: the registered connector caches the discovered tools, so each
 change needs a new connector record plus a relink and a health check, or the agent refuses to run.
 
+| case                           | symptom                                                                           | cause found                                                                                                                                 | change made                                                                                                                                                   |
+| ------------------------------ | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| L05 (pool entry never happens) | agent reports a failed bid; the mock receives no `venue.declare_interest` request | the model sent the tool call with an **empty argument object** — the platform records it as `success`, so only the mock's own log showed it | `mock_server` now logs every MCP invocation with the arguments received (`target: "mcp.<tool>"`), and the log is the evidence quoted in `platform-map.md` §11 |
+| L05 (same, after every fix)    | unchanged after alias, coercion, date-fallback and lean-surface changes           | not fixable from this repo: the missing values are conversation facts only the agent holds                                                  | documented as an open blocker; needs `agenticorg:admin` to change the agent, or a platform-side answer                                                        |
+
 ## Failure cases to test by hand once credentials exist
 
 Outbound call blocked by handset spam filter; Gnani silence/interruption timeouts; real Hinglish transcription of
