@@ -365,6 +365,39 @@ never spoken — the transcript shows the text, the caller hears silence. That i
 already works: the reply text still reaches the caller through the transcript. A second TTS provider behind
 LiveKit's `FallbackAdapter` is the real fix and is not configured.
 
+**"No matter how much I talk it can't hear me anymore" — Gnani's 60s idle-session close, fixed
+2026-10-02.** Reported live, mid-call. Production logs for that call:
+
+```
+voice session started in room kirro-upayanm3-gmail-com
+  (61s pass with no caller speech)
+ERROR  Gnani STT stream error: Session closed: no speech segment received for 60 seconds.
+WARNING STT stream ended on an unrecoverable error, recreating
+  (41s pass with no agent reply)
+INFO  closing agent session due to participant disconnect
+```
+
+Gnani's streaming STT hard-closes the session after 60 continuous seconds with no detected speech —
+vendor behaviour, not configurable from this side. `livekit-agents` recreates the stream
+automatically after a 0.5s backoff (`voice/audio_recognition.py::_stt_pump`, vendored); two clean
+repros (fresh room, synthesized speech, no other traffic) confirmed recovery works and the agent
+answered correctly a few seconds after the same 60s+ idle trip, so the stream recreation itself is
+not the bug.
+
+The actual gap: the agent never spoke first (`voice_bridge/agent.py` had no greeting), so a caller
+who doesn't know to start talking sits in silence and the idle clock runs out before they ever say a
+word — which is exactly what the timestamps above show (the error landed 61s after the room opened,
+before any caller speech was logged).
+
+Fix: `entrypoint()` now calls `greet_caller()`, which sends a synthetic opener (`"Hi"`) through the
+real AgenticOrg agent and speaks its actual reply (`session.say`) before the caller has said
+anything — confirmed live to return a genuine, agent-authored greeting
+(`"Hello! What would you like to book today?"`), not fabricated text, and it seeds `thread_id` before
+the caller's first real turn. No call can now reach 60s of silence before the caller has heard the
+agent speak and had a cue to answer. Covered by
+`tests/test_voice_bridge.py::test_greet_caller_speaks_the_agents_own_opening_line` and
+`::test_greet_caller_stays_silent_if_agenticorg_is_unreachable`.
+
 ## Failure cases to test by hand once credentials exist
 
 Outbound call blocked by handset spam filter; Gnani silence/interruption timeouts; real Hinglish transcription of

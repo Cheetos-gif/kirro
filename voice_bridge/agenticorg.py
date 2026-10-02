@@ -4,10 +4,10 @@ The platform's own SDK authenticates with an API key, but API keys are `agentico
 (`/api/v1/org/api-keys` answers `403 Missing scope`, `docs/agenticorg/platform-map.md`). The only
 reachable path is the one the dashboard's own chat panel uses: sign in with an email and password
 for a cookie session, then POST the message to `/api/v1/chat/query`.
-
-That session is therefore shared by every call the bridge places, and the platform's chat history is
-one flat thread per (user, agent) — no conversation id. The bridge serializes calls for this reason
-(see `relay.py` and ADR-016).
+That session is therefore shared by every call the bridge places. Conversations are keyed by
+`thread_id` (ADR-017): the platform's own chat panel sends the last reply's `thread_id` back on each
+turn, and a turn sent without one starts a brand-new conversation. `AgentChat` tracks it per
+instance, which is per call (`voice_bridge/agent.py` builds one `AgentChat` per job).
 """
 
 from __future__ import annotations

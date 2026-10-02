@@ -14,13 +14,15 @@ booking decision stays with the agent on AgenticOrg (ADR-011).
 from __future__ import annotations
 
 import logging
+from typing import Callable
 
 from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli
 from livekit.plugins import silero
 from livekit.plugins.gnani import STT as GnaniSTT
 from livekit.plugins.gnani import TTS as GnaniTTS
 
-from voice_bridge.agenticorg_llm import build_llm
+from voice_bridge.agenticorg import AgentChatError
+from voice_bridge.agenticorg_llm import AgenticOrgChat, build_llm
 from voice_bridge.config import VoiceConfig
 
 log = logging.getLogger("voice_bridge.agent")
@@ -31,6 +33,12 @@ INSTRUCTIONS = (
     "You are a relay. Answer strictly with what the booking agent returns; never add advice, "
     "never invent availability, prices, or confirmation."
 )
+
+# Sent once, before the caller has said anything, so the real AgenticOrg agent's own opening line
+# plays immediately. A caller who doesn't know to speak first sits in silence, and Gnani's streaming
+# STT hard-closes its session after 60s with no detected speech (vendor behaviour, not configurable
+# here) — greeting first means no call ever reaches that idle clock before the caller's first turn.
+GREETING_OPENER = "Hi"
 
 
 def build_session(config: VoiceConfig) -> AgentSession:
@@ -66,6 +74,21 @@ def build_session(config: VoiceConfig) -> AgentSession:
     )
 
 
+async def greet_caller(llm: AgenticOrgChat, say: Callable[[str], object]) -> None:
+    """Speak the real AgenticOrg agent's own opening line before the caller says anything.
+
+    `say` is `AgentSession.say`, taken as a callable rather than the session itself so this can be
+    tested without building a real voice pipeline.
+    """
+    try:
+        greeting = await llm.ask(GREETING_OPENER)
+    except AgentChatError as exc:
+        log.warning("greeting turn failed, starting silent: %s", exc)
+        greeting = ""
+    if greeting:
+        say(greeting)
+
+
 async def entrypoint(ctx: JobContext) -> None:
     config = VoiceConfig.from_env()
     await ctx.connect()
@@ -77,6 +100,10 @@ async def entrypoint(ctx: JobContext) -> None:
         room=ctx.room,
     )
     log.info("voice session started in room %s", ctx.room.name)
+
+    llm = session.llm
+    assert isinstance(llm, AgenticOrgChat)
+    await greet_caller(llm, session.say)
 
 
 def main() -> None:

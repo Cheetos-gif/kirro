@@ -287,3 +287,34 @@ def test_the_session_wires_gnani_speech_around_the_agent() -> None:
     stt_ok, tts_ok, llm_ok, sample_rate = _run(build())
     assert stt_ok and tts_ok and llm_ok
     assert sample_rate == 16000
+
+
+def test_greet_caller_speaks_the_agents_own_opening_line() -> None:
+    """The agent speaks first, and what it says is AgenticOrg's real reply, not invented text."""
+    from voice_bridge.agent import GREETING_OPENER, greet_caller
+
+    platform = _Platform(answer="Hello! What would you like to book today?")
+    llm = AgenticOrgChat(client=platform.chat())
+    spoken: list[str] = []
+
+    _run(greet_caller(llm, spoken.append))
+
+    assert spoken == ["Hello! What would you like to book today?"]
+    assert platform.queries[0]["body"]["query"] == GREETING_OPENER
+    # the greeting is turn one, so it must not carry a thread_id yet
+    assert "thread_id" not in platform.queries[0]["body"]
+    _run(llm.aclose())
+
+
+def test_greet_caller_stays_silent_if_agenticorg_is_unreachable() -> None:
+    """A failed greeting must not crash the call; the caller can still speak first instead."""
+    from voice_bridge.agent import greet_caller
+
+    platform = _Platform(fail_query=True)
+    llm = AgenticOrgChat(client=platform.chat())
+    spoken: list[str] = []
+
+    _run(greet_caller(llm, spoken.append))
+
+    assert spoken == []
+    _run(llm.aclose())
