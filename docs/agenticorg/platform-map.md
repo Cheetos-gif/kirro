@@ -760,14 +760,19 @@ That log is unambiguous:
 ```
 2026-10-02T01:22:24Z mcp.create_mandate  -> {"amount_value": 120000}   # correct, Rs 1,200 in paise
 2026-10-02T01:22:48Z mcp.declare_interest -> {}                        # no arguments at all
-2026-10-02T01:22:51Z mcp.declare_interest -> {}
-2026-10-02T01:28:20Z mcp.create_mandate   -> {}                        # the same tool, also empty
+2026-10-02T01:39:04Z mcp.create_mandate  -> {"amount_value": 120000}   # correct again
+2026-10-02T01:39:09Z mcp.get_release      -> {"release_id": ""}         # the names arrive, the values do not
+2026-10-02T01:39:12Z mcp.declare_interest -> {"release_id": "", "group_size": 0, "min_group_size": 0,
+                                              "max_price_paise": 0, "acceptable_slot_ids": ""}
 ```
 
-So the agent calls `declare_interest` (and sometimes `get_release`, and sometimes `create_mandate`) with an empty
-argument object, while the same model sends `{"amount_value": 120000}` on other turns. The platform records these as
-`status: success`, so its record cannot distinguish "the tool refused" from "the arguments were empty" — only our
-log can.
+The last two lines are the sharpest form of it: the model produces the call with every parameter **named but
+empty** (or zero). It knows the schema; the values the user gave it — four people, Rs 300, badminton, tomorrow —
+never reach the tool. `create_mandate` is the one call that arrives populated, and it does so consistently.
+
+So the agent calls `get_release`/`declare_interest` with no usable arguments while the platform records the call as
+`status: success`. Its record cannot distinguish "the tool refused" from "the arguments were empty" — only our log
+can.
 
 What was tried, and what it ruled out:
 
