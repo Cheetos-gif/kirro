@@ -751,7 +751,45 @@ claiming pool entry without it), and it needs an agent clone to land.
 
 **Cleanup owed:** `mcp_kirro_all`, `_v2` … `_v8` are superseded by `_v9`; the agent links only the newest.
 
-## 11. Open blocker: the model does not populate tool arguments reliably
+## 11. RESOLVED: the tool arguments arrive once the parameters are untyped
+
+**Cause, verified 2026-10-02:** the platform appears to prefill a tool call's arguments from the **JSON-schema
+defaults**, so a parameter declared `release_id: str = ""` / `group_size: int = 0` arrives **empty or zero** no
+matter what the model chose, while a parameter declared `amount_value: Any = None` — no type, no concrete default —
+carries the model's value through. That is exactly the split observed for hours: `create_mandate` was the only tool
+that ever arrived populated, and it was the only one whose parameters were untyped.
+
+Making `list_releases`, `get_release` and `declare_interest` match that shape (lean parameter list, `Any = None`, no
+annotations) fixed it end to end, without touching the agent, whose prompt is locked:
+
+```
+02:05:13 mcp.get_release     -> {"release_id": null}                       # still starts empty
+02:05:16 mcp.declare_interest-> {"release_id": null, "group_size": null, …} # guard answers with the candidates
+02:05:20 mcp.declare_interest-> {"release_id": "rel_badminton_sat", "group_size": null, …}
+02:05:24 mcp.declare_interest-> {"release_id": "rel_badminton_sat", "group_size": 4,
+                                 "min_group_size": 2, "max_price_paise": 30000}   # DECLARED
+```
+
+The model converges over three attempts because each guard returns a useful error naming what is missing and, for the
+release, the candidates themselves. The resulting pool entry is real and correctly valued:
+
+```json
+{"declaration_id": "decl_default_rel_badminton_sat",
+ "acceptable_slot_ids": ["bd_0700", "bd_0800", "bd_1800"],
+ "group_size": 4, "min_group_size": 2, "max_price_paise": 30000, "status": "DECLARED"}
+```
+
+`acceptable_slot_ids` is filled by the mock from the release's own slots — the model never supplied it — which is the
+documented fallback doing its job rather than the bid being dropped.
+
+**Consequence:** the declare leg now completes through the real agent: conversation → mandate (correct paise) → pool
+entry. Everything downstream (draw, hold, capture, confirm) is exercised by the Workflow, which is the one piece that
+still does not execute (§12).
+
+### History: how it looked while it was broken
+
+With typed parameters the same calls arrived as follows, and the platform recorded them as `status: success` — its
+record cannot distinguish "the tool refused" from "the arguments were empty", so only our own log could:
 
 With §10 fixed, the calls reach the mock — but the arguments do not. `mock_server` now logs every MCP tool
 invocation with the arguments as received (`target: "mcp.<tool>"` in the same per-run JSONL as the REST routes).
@@ -787,23 +825,15 @@ What was tried, and what it ruled out:
    description names exactly one obvious argument, is the only call ever seen with populated arguments, so the
    shape of the schema is at most a contributing factor.
 
-**Consequence for the demo:** the pool entry is the one step the agent cannot complete, and it reports that failure
-honestly rather than claiming success (which is the correct behaviour, and it is a safety invariant working as
-designed). Everything downstream of the pool — the Workflow's draw, hold and capture — therefore has nothing to
-allocate unless the pool is seeded another way.
+**The question still worth putting to the platform:** why does a tool call's arguments get prefilled from the
+JSON-schema defaults? A parameter annotated with a concrete default silently discards whatever the model chose, and
+the platform records the call as `status: success`, so nothing in its own records shows the loss — only the
+connector's log can. Our workaround is a schema with no annotated defaults; theirs would be to pass through what the
+model produced.
 
-**This is not fixable from this repo.** The values in question (group size, ceiling, which release) are conversation
-facts only the agent holds, and the mock cannot invent them. The two real paths are:
-
-1. Ask the platform why a tool call arrives with an empty argument object on a turn where the same model populates
-   arguments for another tool. This is the one question worth putting to them.
-1. Change the agent: a different model, or a prompt that spells out the tool call with its arguments. Both need
-   **`agenticorg:admin`** — prompts are locked on active agents, `prompt_amendments` stores nothing, and
-   `POST /agents/{id}/clone` returns 403 `Missing scope: agenticorg:admin` for this account.
-
-For a dry run in the meantime, the pool can be seeded through the mock's own REST route
-(`POST /venue/releases/{release_id}/declarations`), which is the same code path the tool calls — the declare step
-then exercises the Workflow, hold, capture and confirmation legs end to end.
+**Kept as a fallback:** the pool can also be seeded through the mock's own REST route
+(`POST /venue/releases/{release_id}/declarations`) — the same code path the tool calls use — which is useful for
+exercising the Workflow without a conversation.
 
 ## 12. The Window Allocation Workflow: what is broken, what is proven
 
