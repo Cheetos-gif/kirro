@@ -147,12 +147,13 @@ both calls' `venue.hold` responses carry the **same `expires_at`**, confirming t
 two `create_hold` calls, satisfying `evals.md`'s assertion. Full transcripts (both attempts) in
 `docs/agenticorg/conversations/2026-10-02-1057z-allocator-l14.md`.
 
-**L09 (duplicate declare_interest), attempted 11:00–11:02 — inconclusive.** `create_mandate` succeeded, but
-`get_release` arrived with every id field wrong (`release_id` null, the `releaseId` alias holding a date string,
-`release` holding free text) — the argument pass-through issue again, manifesting differently this time. Never
-reached a first successful `declare_interest`, let alone a duplicate, so the idempotency property itself is
-untested. The agent reported the failure honestly rather than guessing or claiming success. Full transcript in
-`docs/agenticorg/conversations/2026-10-02-1100z-declare-l09.md`; re-run needed when the pass-through cooperates.
+**L09 (duplicate declare_interest), two attempts 11:00–11:09 — both inconclusive.** `create_mandate` succeeded
+both times, but `get_release` arrived with a different wrong shape each time — null fields, then a date string in
+the `releaseId` alias, then a free-text event name in all three id fields at once — never the real
+`rel_badminton_sat`. Never reached a first successful `declare_interest`, let alone a duplicate, so the
+idempotency property itself stays untested. The agent reported the failure honestly both times rather than
+guessing or claiming success. Full transcripts in `docs/agenticorg/conversations/2026-10-02-1100z-declare-l09.md`
+and `...-l09-attempt2.md`; re-run needed when the pass-through cooperates for this tool specifically.
 
 | L07 | cancel after the mandate exists, before pooling | **fail** | `create_mandate {amount_value: 120000}` created the mandate, then *"actually I want to cancel now, please"* → the agent said *"Your request to cancel has been noted. I will cancel the process immediately"* — **but no `pinelabs.release` call**, and state `mandates: 1, released_mandates: 0`: the ₹1,200 reservation is left ACTIVE (05:10) |
 
