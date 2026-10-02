@@ -60,13 +60,23 @@ flag (can live on the venue-inventory mock, since it already tracks per-release 
 
 ## 3. Idempotency
 
-- The draw itself only runs once per `release_id` (§1/§7).
-- Every mandate/hold/booking call reuses the idempotency-key discipline the removed oracle's store used
-  (`sha256(declaration_id|stage|scope)`) — if the Workflow re-runs a step after a partial failure, it must not
-  double-charge or double-hold. This needs an idempotency key field on each of the 3 budgeted mock endpoints'
-  write operations, generated the same way.
-- If the Workflow itself crashes/restarts mid-run (brief's "agent restart/resume" test case), re-entry must be safe
-  per-bid: check whether a winner already has a `hold_id`/`payment_id`/`booking_ref` before repeating a step.
+**Verified live 2026-10-02** (`platform-map.md` §12): the mock honours the `Idempotency-Key` header on every write —
+two `POST /venue/releases/{id}/holds` sent with one key returned the same `hold_0001`, two `POST /pinelabs/mandates`
+with one key returned the same `auth_0001`, and the state held exactly one of each. The draw is separately
+deterministic: two identical `POST /allocator/draw` calls returned byte-identical results and the same seed, so a
+duplicate draw cannot change an allocation. No new mock work is needed for this section — it is a requirement on
+what the deployed Workflow sends.
+
+- **Every hold, capture and booking call must carry a stable idempotency key per
+  `(release_id, declaration_id, stage)`.** "Stable" means derived from those identifiers, **not** from the run id or
+  a timestamp: a key that changes per run turns every re-run into a fresh set of side effects, which is exactly the
+  double-charge this section exists to prevent. The removed oracle's `sha256(declaration_id|stage|scope)` is the
+  right shape.
+- The draw runs once per `release_id` (§1/§7). Because it is a pure function of `(release, window, bids)`, a
+  duplicate draw is harmless; the side effects are where the key matters.
+- Re-entry after a crash/restart (the brief's "agent restart/resume" case) is safe per bid if each step checks for
+  an existing `hold_id`/`payment_id`/`booking_ref` before repeating — with a stable key, the repeat returns the
+  original result instead of creating a second one.
 
 ## 4. Failure handling this Workflow owns
 

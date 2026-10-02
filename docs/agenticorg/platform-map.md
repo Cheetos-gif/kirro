@@ -804,3 +804,53 @@ facts only the agent holds, and the mock cannot invent them. The two real paths 
 For a dry run in the meantime, the pool can be seeded through the mock's own REST route
 (`POST /venue/releases/{release_id}/declarations`), which is the same code path the tool calls — the declare step
 then exercises the Workflow, hold, capture and confirmation legs end to end.
+
+## 12. The Window Allocation Workflow: what is broken, what is proven
+
+The deployed workflow **`f22042ff` ("Kirro Window Allocation", 7 steps, `trigger_type: manual`)** reports
+**`Pipeline Status: Failed`** on every run, and its steps never reach the mock — no `venue.*` request appears in any
+run log, and the run produces **no Audit Log events at all**.
+
+What was found and fixed:
+
+1. Every step runs as `agent_type: kirro_allocator`. The tenant has exactly one such agent — **`Kirro Allocator`
+   (`5591e57a`)** — and it was bound to the *superseded* connector `mcp_kirro_all`, granted ten `mcp_kirro_all__*`
+   tools, had a **0-length system prompt**, and sat in **`shadow`** maturity with 0 samples.
+1. It is now re-linked to the current aggregate connector (`mcp_kirro_all_v10`, healthy, 18 tools) with the eleven
+   tools its steps call (`draw`, `create_hold`, `get_hold`, `release_hold`, `confirm_booking`, `execute`, `release`,
+   `refund`, `list_releases`, `list_pool_entries`, `get_release`). The run still fails, identically and silently.
+1. Step 7 is bound to **`Agent: undefined`** in the builder — its definition is `type: notify`, `channel: whatsapp`,
+   with no `agent_type` — so the pipeline contains at least one step that cannot run as configured.
+
+`GET /workflow-runs/{id}` and `GET /workflows/{id}/runs` both require OAuth (401), so the run's own error is not
+readable from this account; `POST /workflows/{id}/run` does work and returns a run id.
+
+**The trigger cannot be changed from this account.** `PATCH`/`PUT` and `POST …/schedule` on the workflow all return
+401, and `/dashboard/report-schedules` returns 403 with the reason stated outright:
+
+> Your current role can't view /dashboard/report-schedules. YOUR ROLE: developer. REQUIRED ROLES: admin | cfo | cmo.
+> RBAC is enforced server-side.
+
+### Per-release idempotency is proven at the mock, which is what the Workflow needs
+
+Verified live 2026-10-02 against `https://api-kirro.upayan.dev` (runs `dryrun_a`, `dryrun_c`):
+
+| property                                              | evidence                                                                                                                                                                              |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The draw is deterministic per (release, window, bids) | two identical `POST /allocator/draw` calls returned byte-identical results and the same seed `ae20c6d2…`                                                                              |
+| Side effects dedupe under a stable key                | two `POST …/holds` with one `Idempotency-Key` returned the same `hold_0001`; two `POST /pinelabs/mandates` returned the same `auth_0001`; state held exactly one hold and one mandate |
+
+So a re-run of the Workflow is a no-op **provided the deployed steps send a stable idempotency key per release** on
+the hold/mandate/capture calls; the mock honours the key today. That is the requirement to state in
+`workflow-spec.md` when the Workflow is (re)built with admin access.
+
+### The rest of the chain works end to end (mock-level dry run)
+
+Two consecutive live runs, same public mock:
+
+- **Happy path** — `hold` → `mandate ACTIVE 100000p` → `execute SUCCESS (pay_0001)` → booking **`BK-0001` CONFIRMED**;
+  state `{active_holds: 1, bookings: 1, payments: 1}`.
+- **Payment declined** — scenario `payment_failure`, then `execute` → **`status: FAILED, reason: BANK_DECLINED`**;
+  booking attempt → **402 `PAYMENT_REQUIRED`** (the venue refuses to confirm without a captured payment); after the
+  engine's reversal (`release_hold`, `release` mandate) the state reads
+  `{active_holds: 0, bookings: 0, payments: 0, released_mandates: 1}` and the hold reports `released`.
