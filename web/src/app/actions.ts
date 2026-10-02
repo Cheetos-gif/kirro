@@ -63,7 +63,7 @@ export async function declareAction(_prev: ActionState, formData: FormData): Pro
     revalidatePath('/dashboard');
     return {
       ok: true,
-      message: `You are in the draw (${result.declaration_id}). The result shows on your bookings page.`,
+      message: `Entered. Reference ${result.declaration_id}. The draw runs when the window closes.`,
     };
   } catch (error) {
     return { ok: false, message: messageOf(error) };

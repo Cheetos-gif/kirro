@@ -1,10 +1,9 @@
 import { notFound } from 'next/navigation';
 
 import { SignInButton } from '@/components/auth-buttons';
-import { TalkToKirro } from '@/components/talk-to-kirro';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 import type { Viewer } from '@/lib/auth/roles';
 import { currentViewer } from '@/lib/auth/roles';
 import * as api from '@/lib/kirro/api';
@@ -27,19 +26,15 @@ async function ActionPanel({
 }) {
   if (!viewer) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Sign in to take part</CardTitle>
-          <CardDescription>
-            {mode === 'fair_draw'
-              ? 'We need an account so the draw result reaches you.'
-              : 'We need an account so the booking is yours.'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <SignInButton />
-        </CardContent>
-      </Card>
+      <div className="flex flex-col gap-2">
+        <p className="text-sm font-medium">Sign in to continue</p>
+        <p className="text-sm text-muted-foreground">
+          {mode === 'fair_draw'
+            ? 'Sign in so we know whose entry this is.'
+            : 'Sign in so the booking is yours.'}
+        </p>
+        <SignInButton />
+      </div>
     );
   }
   return mode === 'instant_buy' ? (
@@ -82,7 +77,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-10">
       <header className="mb-6">
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">{event.name}</h1>
+        <h1 className="font-heading text-3xl font-semibold tracking-tight">{event.name}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {event.fulfilment === 'physical' ? 'Posted to you' : 'Digital tickets'}
         </p>
@@ -92,13 +87,21 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
         {releases.map(release => (
           <Card key={release.release_id}>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <span>{release.release_id}</span>
-                <Badge variant={release.allocation_mode === 'fair_draw' ? 'default' : 'secondary'}>
-                  {release.allocation_mode === 'fair_draw' ? 'Draw' : 'Buy now'}
-                </Badge>
+              <CardTitle className="flex items-center gap-3 font-mono text-sm font-normal">
+                <span
+                  className={
+                    release.allocation_mode === 'fair_draw'
+                      ? 'tracking-wide text-kirro'
+                      : 'tracking-wide text-muted-foreground'
+                  }
+                >
+                  {release.allocation_mode === 'fair_draw' ? 'DRAW' : 'BUY NOW'}
+                </span>
+                <span className="font-sans text-foreground">
+                  {release.allocation_mode === 'fair_draw' ? 'Draw runs' : 'On sale from'}{' '}
+                  {formatDateTime(release.opens_at)}
+                </span>
               </CardTitle>
-              <CardDescription>Opens {formatDateTime(release.opens_at)}</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <ul className="flex flex-col gap-2 text-sm">
@@ -114,7 +117,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
                       </span>
                     </span>
                     <span className="text-right whitespace-nowrap">
-                      {formatPaise(slot.price_per_person_paise)}
+                      {slot.capacity > 0 ? formatPaise(slot.price_per_person_paise) : 'Sold out'}
                       <span className="block text-xs text-muted-foreground">
                         {slot.capacity} left
                       </span>
@@ -122,15 +125,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
                   </li>
                 ))}
               </ul>
-              {release.allocation_mode === 'fair_draw' ? (
-                <Alert>
-                  <AlertTitle>This one goes to a draw</AlertTitle>
-                  <AlertDescription>
-                    Add your name and the draw decides who gets the seats. Joining early does not
-                    improve your chances.
-                  </AlertDescription>
-                </Alert>
-              ) : null}
+              <Separator />
               <ActionPanel
                 releaseId={release.release_id}
                 mode={release.allocation_mode}
@@ -146,8 +141,6 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
             <AlertDescription>This event has no release open at the moment.</AlertDescription>
           </Alert>
         ) : null}
-
-        <TalkToKirro />
       </div>
     </main>
   );
