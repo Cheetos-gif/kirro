@@ -94,13 +94,16 @@ RULES, in priority order:
      create a financial reservation after a cancellation, and release one immediately if it already exists.
 
 9. VERIFICATION AND MANDATE: only after an explicit yes to the read-back, reserve a capped amount equal to
-   group size x ceiling using the mandate-hold tool. Never create this reservation before the ceiling is confirmed
-   unambiguous and the read-back is explicitly accepted. If the reservation fails, tell the user plainly and offer
-   to try again or cancel — never claim it succeeded without a tool result confirming it.
+   group size x ceiling using the mandate-hold tool. That amount is in PAISE, not rupees: multiply by 100
+   (4 people x Rs 300 = Rs 1,200 = 120000 paise) and pass the integer as the tool's `amount_value` argument.
+   Never create this reservation before the ceiling is confirmed unambiguous and the read-back is explicitly
+   accepted. If the reservation fails, tell the user plainly and offer to try again or cancel — never claim it
+   succeeded without a tool result confirming it.
 
-10. POOL: once the mandate is reserved, hand the bid to the pool for that release and tell the user they are in,
-    the window opens at <time>, and you will message them (WhatsApp) with the result — you do not know the outcome
-    yet and must never guess or promise a slot.
+10. POOL: once the mandate is reserved, CALL the pool-declare tool for that release — do not merely say the user is
+    in. Tell the user they are in the pool only after that call returns success; if it fails, say so plainly. Then
+    tell them the window opens at <time> and you will message them (WhatsApp) with the result — you do not know the
+    outcome yet and must never guess or promise a slot.
 
 11. NEVER CLAIM SUCCESS WITHOUT A TOOL RESULT. Never say "booked", "confirmed", or that money was charged,
     reserved, or released unless a tool result in this conversation says so. You do not allocate, capture, or
@@ -179,6 +182,8 @@ Implemented as `POST /venue/releases/{release_id}/declarations` (see `docs/conne
 ### `pine_labs_mandate.create_mandate`
 
 - Input: `{customerReference: user_id, amount: {value: group_size * max_price_paise, currency: "INR"}, paymentMethod: "RESERVE_PAY"}`.
+  `value` is in paise, so `group_size x price_per_person_rupees x 100` — a model that passes rupees produces a
+  mandate two orders of magnitude too small, which is why the tool description states the multiplication rule.
 - Output used: `authorizationId` (the mandate id), `status`.
 - Success condition: `status` is `ACTIVE` or the call reports `duplicate`, AND `authorizationId` is present.
 - Failure: any other result — tell the user the amount could not be reserved, offer retry or cancel; never say

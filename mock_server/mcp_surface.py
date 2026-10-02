@@ -145,7 +145,13 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
             json={"hold_id": hold_id, "payment_id": payment_id},
         )
 
-    @mcp.tool(description="Declare interest: write a bid into a release's pool.")
+    @mcp.tool(
+        description=(
+            "Enter the user's bid into a release's declared-interest pool. Call get_release first to obtain the "
+            "release's slot ids for acceptable_slot_ids. You must call this to pool a bid: never tell the user they "
+            "are in the pool unless this call has returned success."
+        )
+    )
     async def declare_interest(
         release_id: str,
         declaration_id: str,
@@ -219,7 +225,7 @@ def _amount_or_error(*candidates: Any) -> tuple[int | None, dict | None]:
         if coerced is not None:
             return coerced, None
     received = ", ".join(
-        f"{name}={value!r}" for name, value in zip(("amount_value", "amount"), candidates, strict=False)
+        f"{name}={value!r}" for name, value in zip(("amount_value", "amount", "amount_paise"), candidates, strict=False)
     )
     return None, {
         "status_code": 400,
@@ -236,18 +242,20 @@ def _pinelabs(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 
     @mcp.tool(
         description=(
-            "Reserve (authorise) an amount on the customer's mandate. Give the amount in paise as the integer "
-            "argument `amount_value` (the alias `amount` is also accepted), e.g. amount_value=120000 for Rs 1,200."
+            "Reserve (authorise) the total amount on the customer's mandate. The amount is in PAISE, not rupees: "
+            "amount_paise = group size x price per person in rupees x 100. Example: 4 people at Rs 300 each is "
+            "Rs 1,200 = 120000 paise. Pass that integer as `amount_value` (aliases `amount_paise`, `amount`)."
         )
     )
     async def create_mandate(
         amount_value: Any = None,
         amount: Any = None,
+        amount_paise: Any = None,
         currency: str = "INR",
         run_id: str = DEFAULT_RUN,
         idempotency_key: str | None = None,
     ) -> dict:
-        value, error = _amount_or_error(amount_value, amount)
+        value, error = _amount_or_error(amount_value, amount, amount_paise)
         if error is not None:
             return error
         return await _call(
@@ -265,18 +273,19 @@ def _pinelabs(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 
     @mcp.tool(
         description=(
-            "Capture (charge) an amount against an active mandate. Give the amount in paise as the integer "
-            "argument `amount_value` (the alias `amount` is also accepted), e.g. amount_value=120000 for Rs 1,200."
+            "Capture (charge) an amount against an active mandate. The amount is in PAISE, not rupees: for "
+            "Rs 1,200 pass 120000. Pass that integer as `amount_value` (aliases `amount_paise`, `amount`)."
         )
     )
     async def execute(
         authorization_id: str,
         amount_value: Any = None,
         amount: Any = None,
+        amount_paise: Any = None,
         run_id: str = DEFAULT_RUN,
         idempotency_key: str | None = None,
     ) -> dict:
-        value, error = _amount_or_error(amount_value, amount)
+        value, error = _amount_or_error(amount_value, amount, amount_paise)
         if error is not None:
             return error
         return await _call(
