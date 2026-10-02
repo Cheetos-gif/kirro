@@ -782,11 +782,43 @@ release, the candidates themselves. The resulting pool entry is real and correct
 `acceptable_slot_ids` is filled by the mock from the release's own slots — the model never supplied it — which is the
 documented fallback doing its job rather than the bid being dropped.
 
-**Consequence:** the declare leg now completes through the real agent: conversation → mandate (correct paise) → pool
-entry. Everything downstream (draw, hold, capture, confirm) is exercised by the Workflow, which is the one piece that
-still does not execute (§12).
+**Consequence:** the declare leg completes through the real agent when the model populates the call — verified
+pool entries carry the conversation's values:
 
-### History: how it looked while it was broken
+```json
+{"declaration_id": "decl_default_rel_badminton_sat",
+ "acceptable_slot_ids": ["bd_0700", "bd_0800", "bd_1800"],
+ "group_size": 4, "min_group_size": 2, "max_price_paise": 30000, "status": "DECLARED"}
+```
+
+**Parameter count matters too.** The two verifiably good bids were made against a **five**-parameter
+`declare_interest`; every failure afterwards came after the signature grew to seven to carry `mandate_id` and
+`user_contact`. Those two are redundant — the mock attaches the run's most recent mandate itself and the pool entry
+has no separate contact — so the signature went back to five, and the tool now asks only for what it cannot work
+out.
+
+**What the mock resolves on the agent's behalf.** Every one of these exists because the model reliably declines to
+supply something it demonstrably knows, and each is documented in the code where it lives:
+
+| argument the model omits         | what the mock does instead                                                                   |
+| -------------------------------- | -------------------------------------------------------------------------------------------- |
+| the amount's unit                | states the paise rule with a worked example in the description (values then arrive as paise) |
+| `release_id` for the pool lookup | resolves to the one release whose pool holds bids; otherwise refuses and lists them          |
+| `release_id` for the draw        | resolves from the bids, since a declaration belongs to exactly one release's pool            |
+| the release's slot ids           | bids for the release's own slots                                                             |
+| the mandate id on the bid        | attaches the run's most recently created mandate                                             |
+| a date that matches nothing      | falls back to whatever the event matched (weekday arithmetic is a known model weakness)      |
+| an empty `get_release` call      | answers with the candidate releases rather than refusing                                     |
+
+None of these invent a business fact: each resolves an ambiguity from state the mock already holds, and each
+refuses with a useful message when it cannot.
+
+**What does not work, and is not ours to fix:** the emission is not deterministic. In longer conversations the model
+sometimes sends an entirely empty call — and once claimed pool entry with no `declare_interest` call at all, which
+`agent-spec.md` §3 step 10 forbids. The agent's `llm_config` (`sliding_16k`, `temperature 0.1`) is immutable through
+the API, so the conversation length cannot be traded for reliability from this account.
+
+**The question still worth putting to the platform:** why does a tool call's arguments get prefilled from the
 
 With typed parameters the same calls arrived as follows, and the platform recorded them as `status: success` — its
 record cannot distinguish "the tool refused" from "the arguments were empty", so only our own log could:
@@ -814,6 +846,8 @@ can.
 
 What was tried, and what it ruled out:
 
+### History: what was tried while the arguments were dropped
+
 1. **Signature strictness.** A strict signature produced *"The amount value is missing"* from the platform; every
    parameter optional produced our own guard firing instead. Neither changes what the model emits.
 1. **Argument naming.** Declaring `amount_value`/`amount`/`amount_paise`/`amountValue`… and `release_id`/`releaseId`/
@@ -822,8 +856,8 @@ What was tried, and what it ruled out:
    rejection for the missing required parameter, an empty lookup was made to answer with the candidates instead
    (`get_release("")` returns the releases) and the bid's `release_id` was made optional for the same reason: an
    empty call must reach us to be answered usefully. It reaches us — still empty. `create_mandate`, whose
-   description names exactly one obvious argument, is the only call ever seen with populated arguments, so the
-   shape of the schema is at most a contributing factor.
+   description names exactly one obvious argument, is the only call ever seen with populated arguments — which is
+   what pointed at the schema rather than the model, and is what untyping every parameter then confirmed.
 
 **The question still worth putting to the platform:** why does a tool call's arguments get prefilled from the
 JSON-schema defaults? A parameter annotated with a concrete default silently discards whatever the model chose, and
@@ -927,6 +961,22 @@ Two consecutive live runs, same public mock:
   booking attempt → **402 `PAYMENT_REQUIRED`** (the venue refuses to confirm without a captured payment); after the
   engine's reversal (`release_hold`, `release` mandate) the state reads
   `{active_holds: 0, bookings: 0, payments: 0, released_mandates: 1}` and the hold reports `released`.
+
+### The allocate leg runs through the real agent too
+
+With the pool holding one bid, driving the allocator agent by chat (it had been promoted to `active`) produced a
+complete allocation up to the capture, each step visible in the mock's log:
+
+| step           | evidence                                                                                                           |
+| -------------- | ------------------------------------------------------------------------------------------------------------------ |
+| pool + release | `list_pool_entries` and `get_release`, both with the release id                                                    |
+| draw           | `allocator.draw` → `{"slot_id": "bd_0700", "group_size_allocated": 4, "status": "ALLOCATED", "seed": "ae20c6d2…"}` |
+| hold           | `venue.hold` → `hold_0001`, quantity 4, `price_per_unit_paise 25000`                                               |
+| hold verified  | `venue.hold_get` → `status: "active"`                                                                              |
+| then           | it stopped honestly: the bid it was given carries no mandate to capture against                                    |
+
+That last line is now covered by the mandate fallback (§11), so a repeat run with a bid in the pool has everything
+the capture needs. The chain is bounded only by the model's own argument emission, not by the mock.
 
 One caveat when re-checking those states: `POST /__admin/reset` clears one run when its **body** carries `run_id`, and
 **all** state when it does not (`docs/connectors.md`) — it reads the body, not `X-Run-Id`. A later global reset
