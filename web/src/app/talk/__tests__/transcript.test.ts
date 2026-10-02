@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { transcriptAsText } from '@/app/talk/talk-client';
+import { mergeTurn, transcriptAsText, type TranscriptLine } from '@/app/talk/talk-client';
 
 /**
  * The copy/download format is the thing a person pastes elsewhere, so its shape is worth pinning:
@@ -8,12 +8,14 @@ import { transcriptAsText } from '@/app/talk/talk-client';
  * known.
  */
 describe('transcriptAsText', () => {
+  const line = (key: string, mine: boolean, text: string): TranscriptLine => ({ key, mine, text });
+
   it('prefixes each turn with its speaker, in order', () => {
     const text = transcriptAsText(
       [
-        { mine: true, text: 'I want a tennis court on Saturday' },
-        { mine: false, text: 'Which date do you want?' },
-        { mine: true, text: 'the 3rd of October' },
+        line('me|1', true, 'I want a tennis court on Saturday'),
+        line('them|2', false, 'Which date do you want?'),
+        line('me|3', true, 'the 3rd of October'),
       ],
       null,
     );
@@ -25,16 +27,59 @@ describe('transcriptAsText', () => {
   });
 
   it('omits the header when the call start is unknown', () => {
-    expect(transcriptAsText([{ mine: false, text: 'hello' }], null).startsWith('KIRRO:')).toBe(true);
+    expect(transcriptAsText([line('them|1', false, 'hello')], null).startsWith('KIRRO:')).toBe(true);
   });
 
   it('dates the transcript when the start is known', () => {
-    const text = transcriptAsText([{ mine: true, text: 'hi' }], new Date('2026-10-03T09:15:00Z'));
+    const text = transcriptAsText([line('me|1', true, 'hi')], new Date('2026-10-03T09:15:00Z'));
     expect(text).toContain('KIRRO voice transcript —');
     expect(text.endsWith('You: hi\n')).toBe(true);
   });
 
   it('is newline-terminated so a paste does not run into the next line', () => {
-    expect(transcriptAsText([{ mine: true, text: 'hi' }], null).endsWith('\n')).toBe(true);
+    expect(transcriptAsText([line('me|1', true, 'hi')], null).endsWith('\n')).toBe(true);
+  });
+});
+
+/**
+ * The bug this exists for: LiveKit streams a sentence as it grows, and appending each revision
+ * turned one utterance into a column of near-identical lines.
+ */
+describe('mergeTurn', () => {
+  const line = (key: string, mine: boolean, text: string): TranscriptLine => ({ key, mine, text });
+
+  it('rewrites a growing segment in place instead of appending a line per revision', () => {
+    let lines: TranscriptLine[] = [];
+    for (const text of ['Hello!', 'Hello! How', 'Hello! How can', 'Hello! How can I assist you today with your booking needs?']) {
+      lines = mergeTurn(lines, line('them|seg-1', false, text));
+    }
+    expect(lines).toHaveLength(1);
+    expect(lines[0].text).toBe('Hello! How can I assist you today with your booking needs?');
+  });
+
+  it('appends a genuinely new segment', () => {
+    let lines = mergeTurn([], line('me|seg-1', true, 'tennis court'));
+    lines = mergeTurn(lines, line('them|seg-2', false, 'Which date?'));
+    expect(lines.map(l => l.text)).toEqual(['tennis court', 'Which date?']);
+  });
+
+  it('keeps order when an earlier segment is revised after a later one arrived', () => {
+    let lines = mergeTurn([], line('me|seg-1', true, 'I want a court'));
+    lines = mergeTurn(lines, line('them|seg-2', false, 'Which date?'));
+    lines = mergeTurn(lines, line('me|seg-1', true, 'I want a tennis court on Saturday'));
+    expect(lines.map(l => l.text)).toEqual(['I want a tennis court on Saturday', 'Which date?']);
+  });
+
+  it('treats a prefix growth from the same speaker as one utterance when there is no segment id', () => {
+    let lines = mergeTurn([], line('them|stream-1', false, 'Hello! How'));
+    lines = mergeTurn(lines, line('them|stream-2', false, 'Hello! How can I'));
+    expect(lines).toHaveLength(1);
+    expect(lines[0].text).toBe('Hello! How can I');
+  });
+
+  it('does not merge a different speaker, even on an identical prefix', () => {
+    let lines = mergeTurn([], line('me|1', true, 'yes'));
+    lines = mergeTurn(lines, line('them|2', false, 'yes please'));
+    expect(lines).toHaveLength(2);
   });
 });

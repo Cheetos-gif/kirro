@@ -16,7 +16,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
-export type TranscriptLine = { mine: boolean; text: string };
+export type TranscriptLine = { key: string; mine: boolean; text: string };
 
 const STATE_LABEL: Record<string, string> = {
   initializing: 'Connecting…',
@@ -33,6 +33,32 @@ export function transcriptAsText(lines: TranscriptLine[], startedAt: Date | null
 }
 
 /**
+ * Fold one incoming segment into the log, in place.
+ *
+ * LiveKit does not hand over a finished sentence: it re-emits the same utterance as it grows
+ * ("Hello!", "Hello! How", "Hello! How can", …). Appending each revision — the obvious reading —
+ * produced a transcript of twelve near-identical lines for one sentence. So a revision **replaces**
+ * the line it belongs to, and only a new segment appends.
+ */
+export function mergeTurn(lines: TranscriptLine[], turn: TranscriptLine): TranscriptLine[] {
+  const index = lines.findIndex(line => line.key === turn.key);
+  if (index !== -1) {
+    const next = [...lines];
+    next[index] = { ...next[index], text: turn.text };
+    return next;
+  }
+  // Fallback for a stream that carries no segment id (each revision a new id): the previous line
+  // from the same speaker growing by prefix is the same utterance, not a second one.
+  const last = lines[lines.length - 1];
+  if (last && last.mine === turn.mine && last.text && turn.text.startsWith(last.text)) {
+    const next = [...lines];
+    next[next.length - 1] = { ...last, text: turn.text };
+    return next;
+  }
+  return [...lines, turn];
+}
+
+/**
  * Inside the room: publishes the microphone, renders the visualiser, and reports each finished turn
  * up to the parent so the transcript outlives the call.
  */
@@ -41,16 +67,14 @@ function Call({ onTurn }: { onTurn: (line: TranscriptLine) => void }) {
   const connection = useConnectionState();
   const transcriptions = useTranscriptions();
   const { localParticipant } = useLocalParticipant();
-  // LiveKit re-emits the same segment as it is revised; this keys what has already been forwarded.
-  const forwarded = useRef(new Set<string>());
 
   useEffect(() => {
     for (const line of transcriptions) {
       const mine = line.participantInfo.identity === localParticipant.identity;
-      const key = `${mine ? 'me' : 'them'}|${line.text}`;
-      if (forwarded.current.has(key)) continue;
-      forwarded.current.add(key);
-      onTurn({ mine, text: line.text });
+      // One utterance keeps one identity across its revisions: the transcription stream carries
+      // `lk.segment_id`, and the stream id is the fallback.
+      const segment = line.streamInfo.attributes?.['lk.segment_id'] ?? line.streamInfo.id;
+      onTurn({ key: `${mine ? 'me' : 'them'}|${segment}`, mine, text: line.text });
     }
   }, [transcriptions, localParticipant.identity, onTurn]);
 
@@ -90,11 +114,7 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
   }, [lines]);
 
   const onTurn = useCallback((line: TranscriptLine) => {
-    setLines(previous =>
-      previous.length && previous[previous.length - 1].text === line.text && previous[previous.length - 1].mine === line.mine
-        ? previous
-        : [...previous, line],
-    );
+    setLines(previous => mergeTurn(previous, line));
   }, []);
 
   const start = useCallback(async () => {
