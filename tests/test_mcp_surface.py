@@ -206,3 +206,26 @@ def test_aggregate_surface_serves_every_tool(mcp_base):
         "draw",
         "track",
     } <= set(names)
+
+
+def test_mandate_tools_accept_the_amount_alias(mcp_base):
+    """Live, the platform validated our schema and the model had not supplied `amount_value`, which surfaced as
+    "The amount value is missing". Both argument names must work, and omitting both must return a clean 400 rather
+    than a platform-side validation error."""
+
+    async def go():
+        async with session(f"{mcp_base}/pinelabs/mcp") as s:
+            by_alias = payload(await s.call_tool("create_mandate", {"amount": 123400}))
+            missing = payload(await s.call_tool("create_mandate", {}))
+            charged = payload(
+                await s.call_tool(
+                    "execute",
+                    {"authorization_id": by_alias["body"]["authorizationId"], "amount": 1000},
+                )
+            )
+            return by_alias, missing, charged
+
+    by_alias, missing, charged = asyncio.run(go())
+    assert by_alias["status_code"] == 200 and by_alias["body"]["amount"]["value"] == 123400
+    assert missing["status_code"] == 400 and missing["body"]["error"]["code"] == "BAD_REQUEST"
+    assert charged["status_code"] == 200 and charged["body"]["status"] == "SUCCESS"

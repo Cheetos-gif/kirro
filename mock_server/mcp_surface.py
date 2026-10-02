@@ -194,34 +194,64 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 
 def _pinelabs(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 
-    @mcp.tool(description="Reserve (authorise) an amount on the customer's mandate.")
+    @mcp.tool(
+        description=(
+            "Reserve (authorise) an amount on the customer's mandate. Give the amount in paise as the integer "
+            "argument `amount_value` (the alias `amount` is also accepted), e.g. amount_value=120000 for Rs 1,200."
+        )
+    )
     async def create_mandate(
-        amount_value: int, currency: str = "INR", run_id: str = DEFAULT_RUN, idempotency_key: str | None = None
+        amount_value: int | None = None,
+        amount: int | None = None,
+        currency: str = "INR",
+        run_id: str = DEFAULT_RUN,
+        idempotency_key: str | None = None,
     ) -> dict:
+        value = amount_value if amount_value is not None else amount
+        if value is None:
+            return {
+                "status_code": 400,
+                "body": {"error": {"code": "BAD_REQUEST", "message": "amount_value is required, in paise"}},
+            }
         return await _call(
             client,
             "POST",
             "/pinelabs/mandates",
             run_id=run_id,
             idem=idempotency_key,
-            json={"amount": {"value": amount_value, "currency": currency}},
+            json={"amount": {"value": int(value), "currency": currency}},
         )
 
     @mcp.tool(description="Read the remaining authorised balance for a mandate.")
     async def get_mandate_balance(authorization_id: str, run_id: str = DEFAULT_RUN) -> dict:
         return await _call(client, "GET", f"/pinelabs/mandates/{authorization_id}/balance", run_id=run_id)
 
-    @mcp.tool(description="Capture (charge) against an active mandate.")
+    @mcp.tool(
+        description=(
+            "Capture (charge) an amount against an active mandate. Give the amount in paise as the integer "
+            "argument `amount_value` (the alias `amount` is also accepted), e.g. amount_value=120000 for Rs 1,200."
+        )
+    )
     async def execute(
-        authorization_id: str, amount_value: int, run_id: str = DEFAULT_RUN, idempotency_key: str | None = None
+        authorization_id: str,
+        amount_value: int | None = None,
+        amount: int | None = None,
+        run_id: str = DEFAULT_RUN,
+        idempotency_key: str | None = None,
     ) -> dict:
+        value = amount_value if amount_value is not None else amount
+        if value is None:
+            return {
+                "status_code": 400,
+                "body": {"error": {"code": "BAD_REQUEST", "message": "amount_value is required, in paise"}},
+            }
         return await _call(
             client,
             "POST",
             f"/pinelabs/mandates/{authorization_id}/execute",
             run_id=run_id,
             idem=idempotency_key,
-            json={"amount": {"value": amount_value}},
+            json={"amount": {"value": int(value)}},
         )
 
     @mcp.tool(description="Release the mandate's unused reserved amount.")
