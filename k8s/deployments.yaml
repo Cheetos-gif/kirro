@@ -83,15 +83,18 @@ spec:
 # The WebRTC room server (ADR-017). LiveKit is open source and self-hosted: no per-minute cost and
 # no third-party account.
 #
-# hostNetwork is deliberate. WebRTC media cannot travel through an Ingress — only the signalling
-# WebSocket on 7880 can — so the server binds the node's own ports for media. That means this pod
-# needs the node's public IP and three ports open on the host firewall:
+# **Not hostNetwork, deliberately.** The obvious way to give a WebRTC server its media ports is
+# `hostNetwork: true`, and it does not work here: namespace `kirro` enforces Pod Security
+# `baseline`, which forbids host namespaces and hostPorts — and relaxing that to `privileged` to
+# suit one pod would hand the permission to every workload in the namespace. Instead the media
+# ports are published by a `LoadBalancer` Service (`kirro-livekit-media`), which k3s's ServiceLB
+# binds on the node itself; that is the same mechanism Traefik already uses for 80/443 on this
+# cluster. The node ends up listening on the same port numbers the server advertises, which is what
+# ICE requires.
 #
-#   7880/tcp  signalling (also published through the voice-kirro.upayan.dev Ingress)
-#   7881/tcp  WebRTC over TCP (the fallback for networks that block UDP)
-#   7882/udp  WebRTC media (a single muxed port, which is why no 50000-60000 range is needed)
-#
-# A single node runs this, so there is nothing to coordinate between replicas.
+# The media ports must not be reachable through the Ingress — only the signalling WebSocket is, on
+# 443 like every other `*.upayan.dev` host. The node's own ports are opened in the cluster repo's
+# `terraform/firewall.tf` (7880/tcp is deliberately NOT opened: signalling goes through Traefik).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -110,8 +113,6 @@ spec:
       labels:
         app: kirro-livekit
     spec:
-      hostNetwork: true
-      dnsPolicy: ClusterFirstWithHostNet
       priorityClassName: low-priority
       affinity:
         nodeAffinity:
@@ -127,6 +128,10 @@ spec:
           image: livekit/livekit-server:v1.13.7
           imagePullPolicy: IfNotPresent
           args: ["--config-body", "$(LIVEKIT_CONFIG)"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           ports:
             - { name: signalling, containerPort: 7880, protocol: TCP }
             - { name: rtc-tcp, containerPort: 7881, protocol: TCP }
@@ -139,7 +144,8 @@ spec:
             - name: LIVEKIT_KEYS
               valueFrom:
                 secretKeyRef: { name: kirro-voice, key: LIVEKIT_KEYS }
-            # The address the server advertises to clients for media.
+            # The IP the server advertises to clients for media. `status.hostIP` is the node's
+            # address whether or not the pod shares its network namespace.
             - name: NODE_IP
               valueFrom:
                 fieldRef: { fieldPath: status.hostIP }

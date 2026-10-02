@@ -9,8 +9,8 @@ spec:
     - port: 8081
       targetPort: 8081
 ---
-# The room server (ADR-017). Only the signalling port belongs on a Service: WebRTC media bypasses
-# Kubernetes entirely and goes straight to the node's own ports (see deployments.yaml).
+# The room server's signalling port (ADR-017). Reachable through the Ingress on 443 like every other
+# host; this Service is only what Traefik forwards to.
 apiVersion: v1
 kind: Service
 metadata:
@@ -22,3 +22,38 @@ spec:
     - name: signalling
       port: 7880
       targetPort: 7880
+---
+# The WebRTC media ports, published on the node by k3s's ServiceLB.
+#
+# Media cannot travel through an Ingress, so the browser has to reach the node directly — but the
+# server must still advertise the *same* port numbers it binds (ICE has no notion of port
+# translation), which rules out an ordinary NodePort in the 30000-32767 range. A `LoadBalancer`
+# Service is what makes the node listen on 7881 and 7882 verbatim; it is the same mechanism Traefik
+# already uses for 80/443 here, and it keeps the pod free of `hostNetwork`/`hostPort`, which
+# namespace `kirro`'s Pod Security `baseline` forbids.
+#
+# `externalTrafficPolicy: Local` keeps the client's source address visible to the server, which ICE
+# and the caller's own NAT traversal depend on.
+apiVersion: v1
+kind: Service
+metadata:
+  name: kirro-livekit-media
+  annotations:
+    # The voice channel's media ports land on the node itself; the cluster repo's
+    # terraform/firewall.tf opens exactly 7881/tcp and 7882/udp for them, and
+    # inventory/ports.yaml registers the pair.
+    kirro.dev/why: "WebRTC media must bypass the Ingress; see docs/decisions/ADR-017-voice-channel-on-livekit.md"
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector:
+    app: kirro-livekit
+  ports:
+    - name: rtc-tcp
+      port: 7881
+      targetPort: 7881
+      protocol: TCP
+    - name: rtc-udp
+      port: 7882
+      targetPort: 7882
+      protocol: UDP
