@@ -1084,6 +1084,25 @@ call and its arguments, after the previous turn had been refused. The allocator,
 language ("run the full allocation… draw the slots, hold the winner's slot, capture the mandate, confirm the booking")
 and still delivered every argument — so the recovery is the pass-through itself, not the phrasing.
 
+### The payment-declined path runs through the real agents too (verified 2026-10-02 04:08)
+
+Same two agents, a fresh bid, and `POST /__admin/scenario {"scenario": "payment_failure"}` armed out of band. The
+allocator drew and held exactly as in the happy path, and then:
+
+| time (UTC) | call                                  | result                                                                                      |
+| ---------- | ------------------------------------- | ------------------------------------------------------------------------------------------- |
+| 04:08:10   | `execute` `{amount: {value: 100000}}` | **`status: FAILED`, `reason: BANK_DECLINED`** (HTTP 200, as a real failure would be)        |
+| 04:08:14   | `release` (the mandate)               | `RELEASED`, `released_amount 120000` — the **whole** reservation, since nothing was charged |
+| 04:08:14   | `release_hold`                        | `released: true`                                                                            |
+
+Final state: `{active_holds: 0, bookings: 0, payments: 0, released_mandates: 1}` — no booking, no charge, nothing left
+held. The agent's report matched: *"Outcome: Lost — Reason: Payment declined by the bank. The mandate has been
+released, and no charges were made."*
+
+That is `workflow-spec.md` §4's "Capture fails after a winning hold" rule executed by the platform's own agent,
+including the part that matters most for the brief: no false success, and no money left reserved on a loss. The
+scenario was disarmed (`{"scenario": "success"}`) immediately after.
+
 One caveat when re-checking those states: `POST /__admin/reset` clears one run when its **body** carries `run_id`, and
 **all** state when it does not (`docs/connectors.md`) — it reads the body, not `X-Run-Id`. A later global reset
 cleared the runs above, so `GET /__admin/state?run_id=dryrun_a` now reads zero; the log lines cited here persist, and
