@@ -108,11 +108,16 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
             "id such as rel_badminton_sat, or an event name such as badminton."
         )
     )
-    async def get_release(release_id: Any = None, run_id: str = DEFAULT_RUN) -> dict:
-        _record("get_release", run_id, {"release_id": release_id})
-        listing = await _releases(client, run_id, _first_str(release_id), None)
+    async def get_release(
+        release_id: Any = None,
+        releaseId: Any = None,
+        release: Any = None,
+        run_id: str = DEFAULT_RUN,
+    ) -> dict:
+        _record("get_release", run_id, {"release_id": release_id, "releaseId": releaseId, "release": release})
+        listing = await _releases(client, run_id, _first_str(release_id, releaseId, release), None)
         found = listing["body"].get("releases", [])
-        if not _first_str(release_id):
+        if not _first_str(release_id, releaseId, release):
             # Live, the model calls this with no argument at all. The platform rejects a missing *required*
             # parameter before the call reaches us, so an empty lookup answers with the candidates instead —
             # the ids still reach the model, which a platform-side rejection cannot achieve.
@@ -138,6 +143,8 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
     )
     async def create_hold(
         release_id: Any = None,
+        releaseId: Any = None,
+        release: Any = None,
         slot_id: Any = None,
         quantity: Any = None,
         ttl_s: Any = None,
@@ -147,12 +154,19 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         _record(
             "create_hold",
             run_id,
-            {"release_id": release_id, "slot_id": slot_id, "quantity": quantity, "ttl_s": ttl_s},
+            {
+                "release_id": release_id,
+                "releaseId": releaseId,
+                "release": release,
+                "slot_id": slot_id,
+                "quantity": quantity,
+                "ttl_s": ttl_s,
+            },
         )
-        release = _first_str(release_id)
+        release_ref = _first_str(release_id, releaseId, release)
         slot = _first_str(slot_id)
         seats = _first_int(quantity)
-        if release is None or slot is None or seats is None:
+        if release_ref is None or slot is None or seats is None:
             return _bad_request(
                 "release_id, slot_id and quantity are required; received "
                 f"release_id={release_id!r}, slot_id={slot_id!r}, quantity={quantity!r}"
@@ -162,21 +176,26 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         if ttl is not None:
             body["ttl_s"] = ttl
         return await _call(
-            client, "POST", f"/venue/releases/{release}/holds", run_id=run_id, idem=idempotency_key, json=body
+            client, "POST", f"/venue/releases/{release_ref}/holds", run_id=run_id, idem=idempotency_key, json=body
         )
 
     @mcp.tool(description="Check a hold's status (active | released | expired).")
-    async def get_hold(hold_id: Any = None, run_id: str = DEFAULT_RUN) -> dict:
-        _record("get_hold", run_id, {"hold_id": hold_id})
-        hold = _first_str(hold_id)
+    async def get_hold(hold_id: Any = None, holdId: Any = None, run_id: str = DEFAULT_RUN) -> dict:
+        _record("get_hold", run_id, {"hold_id": hold_id, "holdId": holdId})
+        hold = _first_str(hold_id, holdId)
         if hold is None:
             return _bad_request("hold_id is required; take it from the create_hold result")
         return await _call(client, "GET", f"/venue/holds/{hold}", run_id=run_id)
 
     @mcp.tool(description="Release a hold back to inventory.")
-    async def release_hold(hold_id: Any = None, run_id: str = DEFAULT_RUN, idempotency_key: str | None = None) -> dict:
-        _record("release_hold", run_id, {"hold_id": hold_id})
-        hold = _first_str(hold_id)
+    async def release_hold(
+        hold_id: Any = None,
+        holdId: Any = None,
+        run_id: str = DEFAULT_RUN,
+        idempotency_key: str | None = None,
+    ) -> dict:
+        _record("release_hold", run_id, {"hold_id": hold_id, "holdId": holdId})
+        hold = _first_str(hold_id, holdId)
         if hold is None:
             return _bad_request("hold_id is required; take it from the create_hold result")
         return await _call(client, "DELETE", f"/venue/holds/{hold}", run_id=run_id, idem=idempotency_key)
@@ -189,13 +208,19 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
     )
     async def confirm_booking(
         hold_id: Any = None,
+        holdId: Any = None,
         payment_id: Any = None,
+        paymentId: Any = None,
         run_id: str = DEFAULT_RUN,
         idempotency_key: str | None = None,
     ) -> dict:
-        _record("confirm_booking", run_id, {"hold_id": hold_id, "payment_id": payment_id})
-        hold = _first_str(hold_id)
-        payment = _first_str(payment_id)
+        _record(
+            "confirm_booking",
+            run_id,
+            {"hold_id": hold_id, "holdId": holdId, "payment_id": payment_id, "paymentId": paymentId},
+        )
+        hold = _first_str(hold_id, holdId)
+        payment = _first_str(payment_id, paymentId)
         if hold is None or payment is None:
             return _bad_request(
                 f"hold_id and payment_id are required; received hold_id={hold_id!r}, payment_id={payment_id!r}"
@@ -220,6 +245,8 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
     )
     async def declare_interest(
         release_id: Any = None,
+        releaseId: Any = None,
+        release: Any = None,
         group_size: Any = None,
         min_group_size: Any = None,
         max_price_paise: Any = None,
@@ -232,13 +259,15 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
             run_id,
             {
                 "release_id": release_id,
+                "releaseId": releaseId,
+                "release": release,
                 "group_size": group_size,
                 "min_group_size": min_group_size,
                 "max_price_paise": max_price_paise,
                 "acceptable_slot_ids": acceptable_slot_ids,
             },
         )
-        listing = await _releases(client, run_id, _first_str(release_id), None)
+        listing = await _releases(client, run_id, _first_str(release_id, releaseId, release), None)
         found = listing["body"].get("releases", [])
         if len(found) != 1:
             return _bad_request(
@@ -291,10 +320,15 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
             "required: an id such as rel_badminton_sat."
         )
     )
-    async def list_pool_entries(release_id: Any = None, run_id: str = DEFAULT_RUN) -> dict:
-        _record("list_pool_entries", run_id, {"release_id": release_id})
-        release = _first_str(release_id)
-        if release is None:
+    async def list_pool_entries(
+        release_id: Any = None,
+        releaseId: Any = None,
+        release: Any = None,
+        run_id: str = DEFAULT_RUN,
+    ) -> dict:
+        _record("list_pool_entries", run_id, {"release_id": release_id, "releaseId": releaseId, "release": release})
+        ref = _first_str(release_id, releaseId, release)
+        if ref is None:
             # Live, the model calls this with a null release_id every time, even when the refusal names the
             # candidates and the conversation contains the id. A pool that actually holds bids is unambiguous, so
             # resolve to it — a documented mock convenience, like the date fallback in `_releases`. With more than
@@ -314,7 +348,7 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
                 "release_id is required; call list_releases and pass the release_id it returns "
                 f"(pools holding bids: {[pool['release_id'] for pool in pools]})"
             )
-        return await _call(client, "GET", f"/venue/releases/{release}/declarations", run_id=run_id)
+        return await _call(client, "GET", f"/venue/releases/{ref}/declarations", run_id=run_id)
 
     @mcp.tool(
         description=(
@@ -324,14 +358,20 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
     )
     async def cancel_declaration(
         release_id: Any = None,
+        releaseId: Any = None,
+        release: Any = None,
         declaration_id: Any = None,
         run_id: str = DEFAULT_RUN,
         idempotency_key: str | None = None,
     ) -> dict:
-        _record("cancel_declaration", run_id, {"release_id": release_id, "declaration_id": declaration_id})
-        release = _first_str(release_id)
+        _record(
+            "cancel_declaration",
+            run_id,
+            {"release_id": release_id, "releaseId": releaseId, "release": release, "declaration_id": declaration_id},
+        )
+        ref = _first_str(release_id, releaseId, release)
         declaration = _first_str(declaration_id)
-        if release is None or declaration is None:
+        if ref is None or declaration is None:
             return _bad_request(
                 f"release_id and declaration_id are required; received release_id={release_id!r}, "
                 f"declaration_id={declaration_id!r}"
@@ -339,7 +379,7 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         return await _call(
             client,
             "DELETE",
-            f"/venue/releases/{release}/declarations/{declaration}",
+            f"/venue/releases/{ref}/declarations/{declaration}",
             run_id=run_id,
             idem=idempotency_key,
         )
@@ -607,10 +647,13 @@ def _pinelabs(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         )
     )
     async def release(
-        authorization_id: Any = None, run_id: str = DEFAULT_RUN, idempotency_key: str | None = None
+        authorization_id: Any = None,
+        authorizationId: Any = None,
+        run_id: str = DEFAULT_RUN,
+        idempotency_key: str | None = None,
     ) -> dict:
-        _record("release", run_id, {"authorization_id": authorization_id})
-        mandate = _first_str(authorization_id)
+        _record("release", run_id, {"authorization_id": authorization_id, "authorizationId": authorizationId})
+        mandate = _first_str(authorization_id, authorizationId)
         if mandate is None:
             return _bad_request("authorization_id is required; take it from the create_mandate result")
         return await _call(
@@ -628,9 +671,14 @@ def _pinelabs(mcp: MCPServer, client: httpx.AsyncClient) -> None:
             "charge succeeded but the booking could not be confirmed."
         )
     )
-    async def refund(payment_id: Any = None, run_id: str = DEFAULT_RUN, idempotency_key: str | None = None) -> dict:
-        _record("refund", run_id, {"payment_id": payment_id})
-        payment = _first_str(payment_id)
+    async def refund(
+        payment_id: Any = None,
+        paymentId: Any = None,
+        run_id: str = DEFAULT_RUN,
+        idempotency_key: str | None = None,
+    ) -> dict:
+        _record("refund", run_id, {"payment_id": payment_id, "paymentId": paymentId})
+        payment = _first_str(payment_id, paymentId)
         if payment is None:
             return _bad_request("payment_id is required; take it from the execute result")
         return await _call(
@@ -655,6 +703,7 @@ def _allocator(mcp: MCPServer, client: httpx.AsyncClient) -> None:
     )
     async def draw(
         release_id: Any = None,
+        releaseId: Any = None,
         bids: Any = None,
         window_open_iso: Any = None,
         run_id: str = DEFAULT_RUN,
@@ -663,9 +712,9 @@ def _allocator(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         _record(
             "draw",
             run_id,
-            {"release_id": release_id, "bids": bids, "window_open_iso": window_open_iso},
+            {"release_id": release_id, "releaseId": releaseId, "bids": bids, "window_open_iso": window_open_iso},
         )
-        release = _first_str(release_id)
+        release = _first_str(release_id, releaseId)
         entries = _bids(bids)
         if release is None and entries is not None:
             # Same convenience, resolved precisely: a bid names a declaration, and a declaration lives in exactly
