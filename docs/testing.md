@@ -87,6 +87,10 @@ change needs a new connector record plus a relink and a health check, or the age
 
 ## Live eval results through the platform agents (2026-10-02)
 
+Full chat transcripts for every run below, cross-referenced against the mock's log, are in
+`docs/agenticorg/conversations/` (one file per run, see its `README.md` for the convention). This section stays the
+verdict log: pass/fail, the key evidence, and the fix if one was needed.
+
 Agents: `Kirro Declare v4` (`27ec9d3c`) and `Kirro Allocator` (`5591e57a`), both `active`, on connector
 `mcp_kirro_all_v21`. Every verdict below is from the mock's own log plus `GET /__admin/state`.
 
@@ -128,6 +132,27 @@ landing with real arguments through 10:46). Root-caused L15/L16 properly this ti
   `{holds: 1, bookings: 1, payments: 1, released_mandates: 1}`. Agent: *"Outcome: Partial win... 3 of your 4 were
   seated... Booking Reference: BK-0001... Amount Charged: ₹750.00. The remaining amount of the mandate has been
   released."* **Pass**, full chain, first live test after the fix.
+
+**L14 (malformed-then-retry), fixed and passed the same session, 10:57–10:58.** `create_hold` on the mock's
+`malformed` scenario returns HTML 200 but genuinely creates the hold server-side (per `docs/connectors.md`'s
+contract: a malformed or timed-out response means "could not confirm", not failure). First attempt
+(`decl_L14`, no rule yet): the agent treated it as a definite failure and released the mandate — **worse than
+L15/L16's gap**, because the hold itself was left active and orphaned (`active_holds: 1`, nobody confirmed or
+released it; only the TTL would eventually clear it). Landed a second rule on the same allocator, same mechanism:
+*"An unparseable or timed-out response is not a failure — retry the same call once with the same idempotency_key
+before concluding it failed."* Re-run fresh: `create_hold` (malformed) → `create_hold` (retry, same params) →
+both calls' `venue.hold` responses carry the **same `expires_at`**, confirming the mock deduped them to one hold
+(`hold_0001`) even though the model set no explicit `idempotency_key` — → `execute(25000)` SUCCESS →
+`confirm_booking` **BK-0001 CONFIRMED**. State `{holds: 1, bookings: 1, payments: 1}` — exactly one hold despite
+two `create_hold` calls, satisfying `evals.md`'s assertion. Full transcripts (both attempts) in
+`docs/agenticorg/conversations/2026-10-02-1057z-allocator-l14.md`.
+
+**L09 (duplicate declare_interest), attempted 11:00–11:02 — inconclusive.** `create_mandate` succeeded, but
+`get_release` arrived with every id field wrong (`release_id` null, the `releaseId` alias holding a date string,
+`release` holding free text) — the argument pass-through issue again, manifesting differently this time. Never
+reached a first successful `declare_interest`, let alone a duplicate, so the idempotency property itself is
+untested. The agent reported the failure honestly rather than guessing or claiming success. Full transcript in
+`docs/agenticorg/conversations/2026-10-02-1100z-declare-l09.md`; re-run needed when the pass-through cooperates.
 
 | L07 | cancel after the mandate exists, before pooling | **fail** | `create_mandate {amount_value: 120000}` created the mandate, then *"actually I want to cancel now, please"* → the agent said *"Your request to cancel has been noted. I will cancel the process immediately"* — **but no `pinelabs.release` call**, and state `mandates: 1, released_mandates: 0`: the ₹1,200 reservation is left ACTIVE (05:10) |
 
