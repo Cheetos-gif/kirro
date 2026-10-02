@@ -470,13 +470,13 @@ Both halves of the ADR-011 design now exist on the platform.
 
 **`Kirro Allocator`** — created **via API** (no wizard needed): `POST /api/v1/agents` with a brand-new
 `agent_type: "kirro_allocator"` returned 201, so custom agent types do not require the wizard. id
-`7b1f072c-1019-434b-af81-1d66e517611b`, domain `ops`, linked to the single aggregate connector `mcp_kirro_all`, with
+`5591e57a-79f9-4b30-a95e-0b910a467ce3`, domain `ops`, linked to the single aggregate connector `mcp_kirro_all`, with
 **10 tools granted in one PATCH (200)**: `draw`, `create_hold`, `get_hold`, `release_hold`, `confirm_booking`,
 `execute`, `release`, `refund`, `list_releases`, `list_pool_entries`.
 
-**`Kirro Window Allocation`** — `POST /api/v1/workflows` returned 201, id
-`f22042ff-0682-4894-8c9c-cd3d3c835783`, domain `ops`, `trigger_type: manual`, with these steps persisted in
-`definition.steps`:
+**`Kirro Window Allocation`** — `POST /api/v1/workflows` returned 201, domain `ops`, `trigger_type: manual`, with
+these steps persisted in `definition.steps`. (Its id was `f22042ff-0682-4894-8c9c-cd3d3c835783`; it has since been
+**recreated as `0aecf1b9-5a92-4b2a-8f98-30bb3a1b80ae` with a schedule trigger** — see §12 for why and how.)
 
 | #   | name               | agent             | action              |
 | --- | ------------------ | ----------------- | ------------------- |
@@ -818,18 +818,45 @@ What was found and fixed:
    tools, had a **0-length system prompt**, and sat in **`shadow`** maturity with 0 samples.
 1. It is now re-linked to the current aggregate connector (`mcp_kirro_all_v10`, healthy, 18 tools) with the eleven
    tools its steps call (`draw`, `create_hold`, `get_hold`, `release_hold`, `confirm_booking`, `execute`, `release`,
-   `refund`, `list_releases`, `list_pool_entries`, `get_release`). The run still fails, identically and silently.
-1. Step 7 is bound to **`Agent: undefined`** in the builder — its definition is `type: notify`, `channel: whatsapp`,
-   with no `agent_type` — so the pipeline contains at least one step that cannot run as configured.
+   `refund`, `list_releases`, `list_pool_entries`, `get_release`), and it was given a spec-derived prompt
+   (`workflow-spec.md` §2–§4) — it had none at all.
+1. It is now **`active`**: `shadow` maturity was the same gate the declare agents hit, and it turned out not to need
+   an admin at all — chat turns accumulate samples, and this agent cleared the bar in 21 turns at 0.85 accuracy
+   (`POST /agents/{id}/promote` → `{"promoted": true, "from": "shadow", "to": "active"}`). Chatted directly, the
+   agent does drive the mock: `venue.list_declarations` appears once per turn (01:48–01:52).
+1. **The Workflow still fails, and this is the part that is not ours.** A run accepted at 01:54:2x
+   (`POST /workflows/{id}/run` → `{"status": "running"}`) produced **not one call to the mock** — the log's last
+   entry before it is 01:52:53, from step 3's chat — reports `Pipeline Status: Failed`, and writes **no Audit Log
+   event at all**. So the platform's Workflow engine never reaches the agent or its tools, even with every input it
+   controls (agent active, connector healthy, tools granted, payload `{release_id: ...}`) in place.
+1. Step 7 is a **notify** step (`type: notify`, `channel: whatsapp`) rather than an agent-action step, so it carries
+   no `agent_type` and the builder renders it as **`Agent: undefined`**. Whether the engine treats notify steps
+   specially is unverified — no step of any kind has ever executed — and the mock's WhatsApp leg is uncredentialed
+   regardless (`platform-map.md` §6), so this is recorded as a shape to confirm rather than a defect to patch.
 
 `GET /workflow-runs/{id}` and `GET /workflows/{id}/runs` both require OAuth (401), so the run's own error is not
-readable from this account; `POST /workflows/{id}/run` does work and returns a run id.
+readable from this account.
 
-**The trigger cannot be changed from this account.** `PATCH`/`PUT` and `POST …/schedule` on the workflow all return
-401, and `/dashboard/report-schedules` returns 403 with the reason stated outright:
+### The trigger is create-time only — and it works from this account
+
+`PATCH`/`PUT` and `POST …/schedule` on an **existing** workflow all return 401, and `/dashboard/report-schedules`
+returns 403 with the reason stated outright:
 
 > Your current role can't view /dashboard/report-schedules. YOUR ROLE: developer. REQUIRED ROLES: admin | cfo | cmo.
 > RBAC is enforced server-side.
+
+**`POST /api/v1/workflows` is not gated the same way.** It accepts `trigger_type: "schedule"` with
+`trigger_config: {cron}` from this developer account and carries the supplied `definition` over verbatim, so a manual
+workflow can be converted by recreating it (a probe workflow, `0e9f8b59`, confirmed the acceptance and was deleted;
+`DELETE /api/v1/workflows/{id}` also works, 200). The workflow was therefore recreated under the same name:
+
+- id **`0aecf1b9-5a92-4b2a-8f98-30bb3a1b80ae`** (replaces the deleted `f22042ff`),
+- `trigger_type: schedule`, `trigger_config.cron: "5 6 * * *"` — daily 06:05Z, five minutes after the sample
+  releases' `opens_at` of 06:00Z, which is the cadence the domain implies,
+- `is_active: true`, the 7-step definition unchanged, and it is the only workflow in the tenant.
+
+Verified in the builder UI, which now reads **`Trigger | schedule`**, Active, 7 steps. The existing workflow's run
+history is not carried over by a recreate, which cost nothing here — it never had a successful run.
 
 ### Per-release idempotency is proven at the mock, which is what the Workflow needs
 
