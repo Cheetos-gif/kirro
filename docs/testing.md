@@ -332,6 +332,39 @@ The second reply names the court it was told about in the *first* turn — the e
 own transcript disappears with the room), with `Copy` and `Download` as plain `You:`/`KIRRO:` text and a
 timestamped header. The format is pinned by `web/src/app/talk/__tests__/transcript.test.ts`.
 
+**Audio breaking up and calls dropping — CPU throttling, fixed 2026-10-03.** Reported from a real call: "audio
+starting breaking towards the end", then the call ended on its own. The room server's log showed the participant
+closing its own transports (`User Initiated Abort: Close called`) and reconnecting with a new participant id — the
+client recovering from a transport that had stopped carrying audio.
+
+The cause was in the deployment, not the code. The worker's container had a **500m** CPU limit while the pipeline it
+runs (Gnani STT + TTS sockets, the Silero VAD's ONNX model, HTTP to the agent, audio resampling) actually uses about
+**370m**. Measured inside the container:
+
+```
+/sys/fs/cgroup/cpu.stat
+nr_periods 5855
+nr_throttled 1047     # ~18% of scheduling periods
+```
+
+A cgroup freeze is not gradual — the process stops for the rest of the 100ms period — so a buffer being filled when
+it lands is filled late, and the caller hears that as choppy audio. Under enough of them the media transport stalls
+and the client reconnects.
+
+Fixed by sizing from measurement rather than taste: `requests: 300m/512Mi`, `limits: 2000m/1Gi`, and the
+`low-priority` class dropped from both the worker and the room server (`value: -1` is the first thing evicted under
+memory pressure, and the node runs at ~80% memory — dropping a live call to reclaim 586Mi is not a trade worth
+making). Re-measured across a full call afterwards: **1 throttle event in 241 periods**, against 1047 in 5855.
+
+Memory was the second half of the same problem: the worker was using 586Mi of a 768Mi limit (76%), so it now has
+1Gi.
+
+**Still outstanding, vendor-side:** during the same call Gnani's TTS returned `500 "We are facing technical difficulties. Please try again later."` four times in a row at 18:37:20–18:37:43, so the agent's last reply was
+never spoken — the transcript shows the text, the caller hears silence. That is Gnani's backend, not the transport
+(the WebSocket was up; the error body is theirs), and the plugin's own retries were exhausted. The graceful part
+already works: the reply text still reaches the caller through the transcript. A second TTS provider behind
+LiveKit's `FallbackAdapter` is the real fix and is not configured.
+
 ## Failure cases to test by hand once credentials exist
 
 Outbound call blocked by handset spam filter; Gnani silence/interruption timeouts; real Hinglish transcription of
