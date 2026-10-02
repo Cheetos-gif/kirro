@@ -869,7 +869,13 @@ way that correlates:
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------- |
 | 02:05 – 02:34       | arguments arrive — `declare_interest` with the conversation's values, `get_release` and `draw` with their release ids and bids | arrives                                            |
 | 02:40 – 03:51       | every call arrives all-null, across both agents, every schema variant, and several fresh conversations                         | arrives, flapping (one empty call, then the value) |
-| 03:59 → **working** | arguments arrive again, and the whole chain ran on them (§12)                                                                  | arrives                                            |
+| 03:59 – 04:12       | arguments arrive — the whole chain and the declined path ran on them (§12)                                                     | arrives                                            |
+| 04:20 →             | all-null again, on both agents and in fresh conversations; a 2.5-minute quiet period did not restore it                        | arrives                                            |
+
+A fourth row, and it kills the last correlation worth testing: the pass-through does **not** track load on our side. It
+went down twice — once while this session was registering connectors, once while it was doing nothing but waiting —
+and came back once, and a deliberate quiet period before a retry changed nothing. It is simply intermittent, at the
+platform's end, and `create_mandate` keeps working through all of it.
 
 So the schema-side remedies above were all tested inside the broken window, and the "untyped parameters" fix that
 appeared to work at 02:05 was tested inside the first good one. That is why the table's remedies cannot be read as

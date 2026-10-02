@@ -108,6 +108,18 @@ available, and re-running L12/L16 is the check.
 
 Both scenarios (`no_inventory`, `partial_group`) were disarmed with `{"scenario": "success"}` immediately after.
 
+**Re-check pending.** `Kirro Allocator v2` (`0b9bd5f7`, `active`, 20 samples, acc 0.85) was created to carry that
+prompt fix: it appends an explicit rule — *"RELEASING LOSERS IS MANDATORY, AND IT COMES BEFORE YOUR REPLY… for every
+bid that is not a confirmed booking you MUST call release with the mandate id, in this same run, before you write
+anything to the user"*. Its L12/L16 re-check could not be run: the argument pass-through went down again at ~04:20
+(§11's fourth row) and every `draw` arrived with null arguments regardless of the phrasing, so no allocation ran.
+Re-run L12 and L16 against that agent when the pass-through is up; the check is `released_mandates: 1` in
+`GET /__admin/state` and a `pinelabs.release` request in the mock's log.
+
+Note that the workflow and the declare agent still reference the original `Kirro Allocator` (`5591e57a`), whose prompt
+is locked. Until the workflow's step binding is decided (it executes nothing today, §12), having both is harmless, but
+whoever fixes this should end with one allocator agent carrying the release rule.
+
 ## Failure cases to test by hand once credentials exist
 
 Outbound call blocked by handset spam filter; Gnani silence/interruption timeouts; real Hinglish transcription of
