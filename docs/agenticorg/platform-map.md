@@ -749,7 +749,9 @@ pool"*. The approval `context.tool_calls` for that turn lists only `create_manda
 schema rejection — the fix is step 10 of `agent-spec.md` §3 (already rewritten to demand the call and to forbid
 claiming pool entry without it), and it needs an agent clone to land.
 
-**Cleanup owed:** `mcp_kirro_all`, `_v2` … `_v8` are superseded by `_v9`; the agent links only the newest.
+**Cleanup owed:** `mcp_kirro_all` through `_v18` are superseded by `_v19` — the agents link only the newest. The
+tenant also holds four functionally identical declare agents, all `active`: `Kirro` (`455907ea`), `Kirro Declare v2`
+(`29319fb1`), `v3` (`999976b7`) and `v4` (`27ec9d3c`); `v4` is linked to the current connector and is the one to keep.
 
 ## 11. RESOLVED: the tool arguments arrive once the parameters are untyped
 
@@ -813,10 +815,30 @@ supply something it demonstrably knows, and each is documented in the code where
 None of these invent a business fact: each resolves an ambiguity from state the mock already holds, and each
 refuses with a useful message when it cannot.
 
-**What does not work, and is not ours to fix:** the emission is not deterministic. In longer conversations the model
-sometimes sends an entirely empty call — and once claimed pool entry with no `declare_interest` call at all, which
-`agent-spec.md` §3 step 10 forbids. The agent's `llm_config` (`sliding_16k`, `temperature 0.1`) is immutable through
-the API, so the conversation length cannot be traded for reliability from this account.
+**What does not work, and is not ours to fix.** The emission is not deterministic, and it degrades to
+*consistently* empty for the venue tools while never failing for the mandate tool. Every one of these was tried
+against the live platform, each with a deploy and a live conversation:
+
+| tried                                                         | result                                                       |
+| ------------------------------------------------------------- | ------------------------------------------------------------ |
+| typed parameters → untyped (`Any = None`)                     | values arrived for a while (the two good bids), then stopped |
+| aliases (`releaseId`, `event`, `on_date`, …)                  | no change — an empty call has nothing for an alias to match  |
+| a five-parameter signature (back from seven)                  | no change                                                    |
+| a one-sentence description on the model of `create_mandate`'s | no change                                                    |
+| a brand-new agent, created, linked and promoted fresh         | no change — so it is not accumulated agent state             |
+| a fresh, short conversation (five turns)                      | no change                                                    |
+
+`create_mandate` has arrived populated through every one of those schema changes, on every conversation — eight
+parameters, untyped, one-sentence description — so the difference is per-tool on the platform side, and the platform
+records each of these calls as `status: success`. A fresh agent reproduces it, so what to ask the platform is narrow:
+why does one tool's arguments survive while another's arrive null, in the same conversation, from the same model?
+
+It also does not always *try*: on one turn it told the user "You are now entered into the pool" with no
+`declare_interest` call in the log at all, which `agent-spec.md` §3 step 10 forbids. The mock's guards make that
+cheap to detect — the log simply has no invocation — but nothing on our side can make the model place the call.
+
+The agent's `llm_config` (`sliding_16k`, `temperature 0.1`) is immutable through the API, so conversation length
+cannot be traded for reliability from this account either.
 
 **The question still worth putting to the platform:** why does a tool call's arguments get prefilled from the
 
