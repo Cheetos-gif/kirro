@@ -745,8 +745,19 @@ and refreshable"* even though the connector is green.
 
 So a live prompt fix needs an admin-scoped account. The prompt the agent does run (the corrected one, transcribed
 into `agent-spec.md` §3) has since been verified to work: the agent does call `declare_interest`, and when its
-arguments arrive it produces a correct pool entry (§11). What the locked prompt costs is the ability to fix the
-remaining behaviour — see §11's closing paragraph — from this account.
+arguments arrive it produces a correct pool entry (§11).
+
+**Workaround, verified 2026-10-02: the lock does not apply to a *paused* agent.** The cycle is
+
+1. `POST /api/v1/agents/{id}/pause` → 200, status `paused`;
+1. `PATCH /api/v1/agents/{id}` with `system_prompt_text` → **200 `{"updated": true}`** (the 409 is gone);
+1. `POST /api/v1/agents/{id}/resume` → 200, status `active`, with the new prompt in force.
+
+`/resume` only works from `paused` (*"Cannot resume agent in 'shadow' status; must be paused"*), and the lifecycle is
+`active ↔ paused` plus `retire` → `retired`. So an active agent's prompt **is** editable from this account — no admin,
+no clone, no shadow re-promotion — which corrects the conclusion above. Both live agents were fixed this way: the
+declare agent got its cancellation-release rule, and `Kirro Allocator` (the one the workflow names) got the
+loser-release rule, each in one pause/edit/resume cycle.
 
 **Agent lifecycle (verified 2026-10-02):** `DELETE` on an `active` agent returns 409 *"Cannot delete agent in 'active'
 status. Pause or retire the agent first."* — so it is **pause** (200 → `paused`) then **retire** (200 → `retired`) then
