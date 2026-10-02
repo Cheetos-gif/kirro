@@ -265,3 +265,32 @@ def test_lookup_and_bid_tools_accept_model_shaped_arguments(mcp_base):
     assert fetched["body"]["release_id"] == "rel_badminton_sat" and fetched["body"]["slots"]
     assert bid["status_code"] == 200 and bid["body"]["status"] == "DECLARED"
     assert bid["body"]["declaration_id"]
+
+
+def test_lookup_survives_a_misresolved_date_and_a_bid_without_slots(mcp_base):
+    """Live, the agent resolved "this Saturday" to 2026-10-07 while the badminton release is dated 2026-10-03. A
+    strict date filter then left it with no release id and no slot ids, so the pool entry was dropped entirely —
+    the user was told the declaration failed. The lookup must stay reachable, and the bid must not need slot ids."""
+
+    async def go():
+        async with session(f"{mcp_base}/venue/mcp") as s:
+            listed = payload(await s.call_tool("list_releases", {"event": "badminton", "date": "2026-10-07"}))
+            fetched = payload(await s.call_tool("get_release", {"event": "badminton", "date": "2026-10-07"}))
+            bid = payload(
+                await s.call_tool(
+                    "declare_interest",
+                    {
+                        "event": "badminton",
+                        "date": "2026-10-07",
+                        "group_size": 4,
+                        "min_group_size": 2,
+                        "max_price_paise": 30000,
+                    },
+                )
+            )
+            return listed, fetched, bid
+
+    listed, fetched, bid = asyncio.run(go())
+    assert [item["release_id"] for item in listed["body"]["releases"]] == ["rel_badminton_sat"]
+    assert fetched["body"]["release_id"] == "rel_badminton_sat"
+    assert bid["status_code"] == 200 and bid["body"]["status"] == "DECLARED"

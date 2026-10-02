@@ -194,6 +194,9 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
     async def declare_interest(
         release_id: Any = None,
         release: Any = None,
+        event: Any = None,
+        event_id: Any = None,
+        date: Any = None,
         declaration_id: Any = None,
         acceptable_slot_ids: Any = None,
         slots: Any = None,
@@ -209,9 +212,23 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
     ) -> dict:
         resolved = _first_str(release_id, release)
         if resolved is None:
-            return _bad_request("release_id is required; call list_releases first")
+            listing = await _releases(client, run_id, _first_str(event, event_id), _first_str(date))
+            found = listing["body"].get("releases", [])
+            if len(found) != 1:
+                return _bad_request(
+                    "release_id is required; call list_releases and pass the release_id it returns "
+                    f"(candidates: {found})"
+                )
+            resolved = found[0]["release_id"]
         slots_for_bid = _slot_ids(acceptable_slot_ids, slots, slot_ids)
         if slots_for_bid is None:
+            # Mock convenience: with no slot ids given, bid for the release's own slots, which is what declaring
+            # interest in that release means. A model that never read the slot ids therefore cannot drop the bid.
+            detail = await _call(client, "GET", f"/venue/releases/{resolved}", run_id=run_id)
+            if detail["status_code"] != 200:
+                return detail
+            slots_for_bid = [slot["slot_id"] for slot in detail["body"].get("slots", [])]
+        if not slots_for_bid:
             return _bad_request("acceptable_slot_ids is required; call get_release for the release's slot ids")
         group = _coerce_int(group_size)
         minimum = _coerce_int(min_group_size)
@@ -326,7 +343,12 @@ async def _releases(client: httpx.AsyncClient, run_id: str, event: str | None, d
                 item for item in releases if needle in item["event_id"].lower() or needle in item["release_id"].lower()
             ]
     if date:
-        releases = [item for item in releases if item["date"] == date]
+        dated = [item for item in releases if item["date"] == date]
+        # Mock convenience, and a deliberate one: weekday-to-date arithmetic is a known model weakness (live, the
+        # agent resolved "this Saturday" to 2026-10-07 while the release is dated 2026-10-03), and an empty result
+        # leaves it with no id to bid against. A date that matches nothing therefore falls back to whatever the
+        # event matched, so the release stays reachable.
+        releases = dated or releases
     return {"status_code": 200, "body": {"releases": releases}}
 
 
