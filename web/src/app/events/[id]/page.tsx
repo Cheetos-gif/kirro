@@ -48,30 +48,35 @@ async function ActionPanel({
   );
 }
 
+async function loadEvent(id: string) {
+  const events = await api.listEvents();
+  const event = events.find(candidate => candidate.event_id === id);
+  const summaries = event ? await api.listReleases({ event_id: id }) : [];
+  const releases = await Promise.all(summaries.map(summary => api.getRelease(summary.release_id)));
+  return { event, releases };
+}
+
 export default async function EventPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const viewer = await currentViewer();
 
-  let event;
-  let releases;
-  try {
-    const events = await api.listEvents();
-    event = events.find(candidate => candidate.event_id === id);
-    if (!event) notFound();
-    const summaries = await api.listReleases({ event_id: id });
-    releases = await Promise.all(summaries.map(summary => api.getRelease(summary.release_id)));
-  } catch (error) {
+  // notFound() must not run inside this catch: it throws a control-flow signal that a broad catch would eat.
+  const loaded = await loadEvent(id).catch((error: unknown) => ({ error }));
+  if ('error' in loaded) {
     return (
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-16">
         <Alert variant="destructive">
           <AlertTitle>Could not load this event</AlertTitle>
           <AlertDescription>
-            {error instanceof Error ? error.message : 'Mock server unreachable.'}
+            {loaded.error instanceof Error ? loaded.error.message : 'Mock server unreachable.'}
           </AlertDescription>
         </Alert>
       </main>
     );
   }
+
+  const { event, releases } = loaded;
+  if (!event) notFound();
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-10">
