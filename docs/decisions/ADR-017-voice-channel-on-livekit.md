@@ -65,9 +65,14 @@ Replace the custom relay with the standard stack on both sides.
   detector fails its `401` against `agent-gateway.livekit.cloud` and falls back, and turn detection
   runs locally through Silero, whose model ships inside the plugin. No LiveKit account, no LiveKit
   API key beyond the self-hosted pair.
-- The one-call-at-a-time constraint from ADR-016 still holds and is still enforced by `replicas: 1`:
-  the worker drives a single AgenticOrg login whose chat history is one flat thread. LiveKit would
-  happily run concurrent rooms; the bottleneck is AgenticOrg, not the transport.
+- **One call at a time, for a different reason than ADR-016 first gave.** ADR-017 originally repeated that ADR's
+  claim of a shared AgenticOrg thread; corrected 2026-10-03, conversations are per call via `thread_id`
+  (ADR-016's correction has the detail). So the serialization is now about one `AgentChat` instance taking one
+  turn at a time and about an unverified assumption — whether the platform tolerates concurrent threads under a
+  single login — rather than about context leaking between callers. The deployment still runs one worker replica
+  until that is tested.
+- The LiveKit transcript is also surfaced in the portal (`/talk`) as a copyable, downloadable `You:`/`KIRRO:` log
+  that survives the call ending, because the room's own transcript disappears with the room.
 - LiveKit keeps a local transcript for captions. That transcript is a display detail — it is not a
   second decision log, and nothing reads it back (ADR-011's "the brain lives on AgenticOrg" is
   untouched).

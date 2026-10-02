@@ -287,6 +287,51 @@ the page has not been made — it needs a person at a browser to approve the mic
 sysctl in the cluster repo's ansible roles before this carries real traffic, since a small buffer drops media
 packets under load.
 
+**The agent was losing context between turns — diagnosed and fixed 2026-10-03.** Reported symptom, from a real
+call: the agent asked for the event, then the date, then the event again, relearning nothing —
+
+```
+You  i would like to book a tennis court
+You  on friday
+KIRRO Which event or venue are you interested in for Friday?
+```
+
+Root cause: `POST /api/v1/chat/query` takes a **`thread_id`**, and a query sent without one starts a *brand-new
+conversation*. The adapter never sent it, so every utterance reached the agent as the first thing it had ever
+heard. The platform's own chat panel echoes the id back on every turn
+(`assets/ChatPanel-*.js`: `...R ? {thread_id: R} : {}`, storing `r.data.thread_id` from each reply) — the
+contract was sitting in the panel's own code, and `chat/history` being one flat list per `(user, agent)` was a
+red herring: that list is the panel's display log, not what the agent is fed.
+
+Measured before changing anything, same two turns both ways:
+
+|                  | turn 2 reply                                                                     |
+| ---------------- | -------------------------------------------------------------------------------- |
+| no `thread_id`   | "Which event or venue are you interested in booking?" — the tennis court is gone |
+| with `thread_id` | "Which date do you want for the tennis court booking?" — it kept the court       |
+
+Fix: `AgentChat` keeps the `thread_id` its last reply returned and sends it on the next turn
+(`voice_bridge/agenticorg.py`), with `start_new_thread()` for the case that needs a clean slate. A fresh
+`AgentChat` per LiveKit job means one call is one thread, so a later caller cannot inherit an earlier
+declaration.
+
+Verified live against the deployed channel, a two-turn call:
+
+```
+turns: ['I want a tennis court this Saturday morning', 'for four people, 400 per person maximum']
+  [caller] i want a tennis court this saturday morning
+  [agent]  What is the maximum price per person you will pay?
+  [caller] for four people 400 per person maximum
+  [agent]  Which date do you want for the tennis court booking?
+PASS: context carried across turns
+```
+
+The second reply names the court it was told about in the *first* turn — the exact thing that was missing.
+
+**Transcript copy.** `/talk` now renders the transcript above the room, so it survives the call ending (the room's
+own transcript disappears with the room), with `Copy` and `Download` as plain `You:`/`KIRRO:` text and a
+timestamped header. The format is pinned by `web/src/app/talk/__tests__/transcript.test.ts`.
+
 ## Failure cases to test by hand once credentials exist
 
 Outbound call blocked by handset spam filter; Gnani silence/interruption timeouts; real Hinglish transcription of

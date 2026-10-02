@@ -492,15 +492,28 @@ a profile, deployment and browser studio session has not been tried.
 generic 401, yet `/api/v1/org/api-keys` returns `403 Missing scope: agenticorg:admin`. API keys (needed by the
 `agenticorg` SDK, `Authorization: Bearer <key>`) are admin-only, and `/dashboard/settings` is admin-only.
 
-**How the chat panel drives the agent** (captured live): `POST /api/v1/chat/query {"query": "...", "agent_id": "<uuid>"}` with the session cookie, then `GET /api/v1/chat/history?agent_id=<uuid>`. The history is one flat
-thread per (user, agent) with no conversation id (326 messages on `Kirro Declare v4`), so each new message continues
-every earlier conversation. A 65%-confidence reply was delivered without an approval hold. The SDK's alternative is
+**How the chat panel drives the agent** (captured live): `POST /api/v1/chat/query {"query": "...", "agent_id": "<uuid>", "thread_id": "<id>"}` with the session cookie, then `GET /api/v1/chat/history?agent_id=<uuid>`.
+
+**`thread_id` is the conversation, and omitting it is how an agent forgets everything.** Each `chat/query`
+response carries a `thread_id` (observed format `chat:<uuid>`), and the platform's own chat panel echoes it back
+on every subsequent turn — `assets/ChatPanel-*.js`: `...R ? {thread_id: R} : {}`, storing `r.data.thread_id` from
+each reply. A query sent **without** it starts a brand-new thread, so the agent has no idea what was just said.
+Measured directly, the same two turns both ways:
+
+|                  | turn 2's reply                                                                               |
+| ---------------- | -------------------------------------------------------------------------------------------- |
+| no `thread_id`   | "Which event or venue are you interested in booking?" — the tennis court from turn 1 is gone |
+| with `thread_id` | "Which date do you want for the tennis court booking?" — it kept the court                   |
+
+`GET /chat/history` is a different thing: the panel's display log, one flat list per `(user, agent)` with no
+thread ids in it (326 messages on `Kirro Declare v4`). That list is not what the agent is fed; the thread is. The
+voice bridge sends the newest user turn plus its current `thread_id` (`voice_bridge/agenticorg.py`), and one call
+is one thread. A 65%-confidence reply was delivered without an approval hold. The SDK's alternative is
 `POST /api/v1/agents/{id}/run {"action", "inputs", "context"}`, which is stateless; it has not been tried for
 multi-turn chat.
 
-**Net effect:** no user can currently call "Kirro Declare". A Gnani-powered phone call without admin needs a bridge
-outside AgenticOrg (Twilio media stream → Vachana STT → `chat/query` or `agents/{id}/run` → Vachana TTS). That is new
-infrastructure and needs an ADR (`AGENTS.md`).
+**Net effect:** the browser voice channel (ADR-017) is the live path; a platform-native phone call still needs
+admin.
 
 ### Resolved: **one untrusted custom connector per agent** — and the fix
 

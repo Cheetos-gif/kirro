@@ -88,11 +88,17 @@ email/password, then `POST /api/v1/chat/query {"query": "...", "agent_id": "<uui
 voice bridge does this itself — signs in once, keeps the session, re-authenticates if it expires — rather than a
 human keeping a browser tab open.
 
-**Known limitation, carried over from the chat-panel findings and unresolved by this ADR:** `chat/history` is one
-flat thread per `(user, agent)` pair with no conversation id. Every call the bridge places continues the same
-thread as every other call under that login. The bridge therefore serializes calls — one active call at a time,
-queue or reject a second — until AgenticOrg exposes a per-conversation chat endpoint or a dedicated login per call
-becomes available. This is a real product constraint for a multi-user demo, not just an implementation detail.
+**Conversations are per call, via `thread_id` — corrected 2026-10-03.** This ADR originally claimed that
+`chat/history` is one flat thread with no conversation id, and that every call therefore continued the same
+conversation. That was wrong about the thing that matters: `chat/query` takes a **`thread_id`** and each response
+returns one, which is how the platform's own chat panel keeps a conversation together
+(`docs/agenticorg/platform-map.md`, "How the chat panel drives the agent"). Sending the query without it starts a
+fresh thread — so the original bridge, which never sent one, gave the agent amnesia between every turn. The bridge
+now carries the id (`voice_bridge/agenticorg.py`), and a fresh `AgentChat` per call means a fresh thread per call.
+
+Consequence: the one-call-at-a-time rule was never about context isolation after all — it is about a single
+`AgentChat` instance serializing its own turns. Whether the platform tolerates two concurrent threads under one
+login is **not verified**, so the deployment still runs one worker replica.
 
 ## Consequences
 
