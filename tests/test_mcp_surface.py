@@ -360,6 +360,40 @@ def test_draw_accepts_bids_as_a_json_string(mcp_base):
     assert as_string["body"]["results"][0]["status"] == "ALLOCATED"
 
 
+def test_pool_and_draw_resolve_their_release_from_the_bids(mcp_base):
+    """Live, the model calls list_pool_entries — and then draw — with a null release_id, however often the refusal
+    names the candidates and whatever the conversation says, so the pool never reached the allocator. The mock
+    resolves the release from data it already holds: the pool that actually has bids, and for the draw the release
+    whose pool holds the named declarations."""
+
+    async def go():
+        async with session(f"{mcp_base}/venue/mcp") as s:
+            await s.call_tool(
+                "declare_interest",
+                {"release_id": "rel_badminton_sat", "group_size": 4, "min_group_size": 2, "max_price_paise": 30000},
+            )
+            pool = payload(await s.call_tool("list_pool_entries", {}))
+        async with session(f"{mcp_base}/allocator/mcp") as s:
+            bids = [
+                {
+                    "declaration_id": entry["declaration_id"],
+                    "user_id": "u1",
+                    "acceptable_slot_ids": entry["acceptable_slot_ids"],
+                    "group_size": entry["group_size"],
+                    "min_group_size": entry["min_group_size"],
+                    "max_price_paise": entry["max_price_paise"],
+                }
+                for entry in pool["body"]["declarations"]
+            ]
+            drawn = payload(await s.call_tool("draw", {"bids": bids}))
+            return pool, drawn
+
+    pool, drawn = asyncio.run(go())
+    assert pool["status_code"] == 200 and pool["body"]["release_id"] == "rel_badminton_sat"
+    assert drawn["status_code"] == 200 and drawn["body"]["release_id"] == "rel_badminton_sat"
+    assert drawn["body"]["results"][0]["status"] == "ALLOCATED"
+
+
 def test_every_tool_invocation_is_logged_with_the_arguments_received(mcp_server):
     """A guard that answers inside the tool used to leave no trace at all, so a call the platform made and we
     rejected was indistinguishable from one it never sent. The arguments as received must land in the run log."""

@@ -297,11 +297,24 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         _record("list_pool_entries", run_id, {"release_id": release_id})
         release = _first_str(release_id)
         if release is None:
+            # Live, the model calls this with a null release_id every time, even when the refusal names the
+            # candidates and the conversation contains the id. A pool that actually holds bids is unambiguous, so
+            # resolve to it — a documented mock convenience, like the date fallback in `_releases`. With more than
+            # one non-empty pool, or none, the refusal stands and lists what it found.
+            pools = []
             listing = await _releases(client, run_id, None, None)
-            candidates = listing["body"].get("releases", [])
+            for candidate in listing["body"].get("releases", []):
+                pool = await _call(
+                    client, "GET", f"/venue/releases/{candidate['release_id']}/declarations", run_id=run_id
+                )
+                entries = pool["body"].get("declarations", [])
+                if entries:
+                    pools.append({"release_id": candidate["release_id"], "declarations": entries})
+            if len(pools) == 1:
+                return {"status_code": 200, "body": pools[0]}
             return _bad_request(
                 "release_id is required; call list_releases and pass the release_id it returns "
-                f"(candidates: {candidates})"
+                f"(pools holding bids: {[pool['release_id'] for pool in pools]})"
             )
         return await _call(client, "GET", f"/venue/releases/{release}/declarations", run_id=run_id)
 
@@ -647,6 +660,19 @@ def _allocator(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         )
         release = _first_str(release_id)
         entries = _bids(bids)
+        if release is None and entries is not None:
+            # Same convenience, resolved precisely: a bid names a declaration, and a declaration lives in exactly
+            # one release's pool, so the release is identifiable from the bids the model copied off the pool.
+            listing = await _releases(client, run_id, None, None)
+            wanted = {entry.get("declaration_id") for entry in entries}
+            for candidate in listing["body"].get("releases", []):
+                pool = await _call(
+                    client, "GET", f"/venue/releases/{candidate['release_id']}/declarations", run_id=run_id
+                )
+                held = {entry.get("declaration_id") for entry in pool["body"].get("declarations", [])}
+                if wanted & held:
+                    release = candidate["release_id"]
+                    break
         if release is None or entries is None:
             return _bad_request(
                 "release_id and bids (the pool entries) are required; received "
