@@ -48,7 +48,8 @@ connector-side validation in these mocks (e.g. an `execute` against a mandate th
 ```
 mock_server/app.py     FastAPI mock. create_app(log_dir) factory; routes below; admin surface under /__admin/*
 mock_server/state.py   per-run state in SQLite (ADR-013): holds, bookings, mandates, payments, declarations,
-                       idempotency ledger, capacity/counters; scenario table + request log; catalogue from fixtures/
+                       organisers, events, releases, idempotency ledger, capacity/counters; scenario table +
+                       request log; fixtures/catalogue.json is seed data for a fresh run (ADR-015)
 allocator/engine.py    DIFD: pure deterministic allocation over (slots, bids, release_id, window_open)
 allocator/fairness.py  weighted-permutation fairness
 allocator/schemas.py   allocation request/result models
@@ -65,7 +66,8 @@ docs/                  agenticorg/ (spec + platform-map.md, the AgenticOrg site/
 Mock routes, by surface:
 
 - `/health`
-- `/venue/*` — catalogue, releases, holds, bookings, declared-interest declarations (the declare pool)
+- `/venue/*` — catalogue, releases, holds, bookings, declared-interest declarations (the declare pool),
+  organisers, organiser-created events/releases, and instant buy (ADR-015)
 - `/pinelabs/*` — mandates create/balance/execute/release, refunds
 - `/allocator/draw` — the DIFD draw
 - `/delhivery/*` — pincode serviceability, order create, package tracking

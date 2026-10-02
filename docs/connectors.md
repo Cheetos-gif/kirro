@@ -31,9 +31,11 @@ hold/release, DIFD allocator; Delhivery mocked in addition, not counted against 
 `mock_server/` serves the four AgenticOrg-facing surfaces (ADR-010/011), each wrapped in `serve()` so scenarios,
 idempotency and request logging work:
 
-- **Venue inventory + hold + declare pool** (capability 1 of 3): `GET /venue/catalogue`, `GET /venue/releases`,
-  `GET /venue/releases/{release_id}`, `POST /venue/releases/{release_id}/holds`, `GET|DELETE /venue/holds/{id}`,
-  `POST /venue/bookings`, and the declare-interest pool below.
+- **Venue inventory + hold + declare pool** (capability 1 of 3): `GET /venue/catalogue` (optional
+  `organiser_id`/`status` filters), `GET /venue/releases`, `GET /venue/releases/{release_id}`,
+  `POST /venue/releases/{release_id}/holds`, `GET|DELETE /venue/holds/{id}`, `POST /venue/bookings`, the
+  declare-interest pool below, and the portal-facing organisers/events/releases surface (see the next
+  subsection).
 - **Pine Labs mandate** (capability 2 of 3): `POST /pinelabs/mandates`, `GET /pinelabs/mandates/{id}/balance`,
   `POST /pinelabs/mandates/{id}/execute`, `POST /pinelabs/mandates/{id}/release`,
   `POST /pinelabs/payments/{id}/refund`.
@@ -53,6 +55,39 @@ it). Keyed per run by `release_id → declaration_id → bid`:
 - `GET /venue/releases/{release_id}/declarations` — returns `{release_id, declarations: [...]}`, every entry carrying
   its declared fields plus `status: "DECLARED"` (this is the Workflow's `list_pool_entries`).
 - `DELETE /venue/releases/{release_id}/declarations/{declaration_id}` — removes the entry, 404 `NOT_FOUND` if absent.
+
+### Organisers, events and releases (ADR-015)
+
+The venue portal's write surface. Events and releases used to be a static read of `catalogue.json`; they are now
+durable store documents (`mock_server/state.py`), and `catalogue.json` is seed data loaded into a fresh run only.
+Each event carries an `organiser_id` and a `status` (`draft`|`published`); each release carries an
+`allocation_mode` (`fair_draw`|`instant_buy`, default `fair_draw`), surfaced on `GET /venue/releases` and
+`GET /venue/releases/{release_id}`.
+
+- `GET /venue/organisers?status=` — `{organisers: [...]}`, each `{organiser_id, name, contact, status, requested_by}`.
+- `POST /venue/organisers` — self-serve request; body `{name, contact, requested_by}` (all non-empty strings).
+  Creates the organiser with `status: "pending"` → 400 `BAD_REQUEST` otherwise.
+- `POST /venue/organisers/{id}/approve` — flips `status` to `"approved"`; unknown id → 404 `NOT_FOUND`. No auth
+  layer in the mock (same trust model as `/__admin/*`): the portal's own admin check gates who may call it.
+- `POST /venue/events` — body `{name, organiser_id, aliases?, generic_aliases?, fulfilment?, status?}`. The
+  organiser must exist (404 `NOT_FOUND`) and be approved (403 `ORGANISER_NOT_APPROVED`). New event is
+  `status: "draft"` unless `status` is given.
+- `PATCH /venue/events/{id}` — partial update of `name|aliases|generic_aliases|fulfilment|status`; any other key →
+  400 `BAD_REQUEST`; unknown id → 404.
+- `POST /venue/releases` — body `{event_id, date, opens_at, slots: [{slot_id?, label, starts_at, capacity, price_per_person_paise}], allocation_mode?}`. Unknown event → 404; invalid mode/empty slots/non-positive
+  capacity or price → 400. `slot_id` is generated when omitted.
+- `POST /venue/releases/{id}/buy` — **instant_buy only.** One call: checks capacity, creates the hold, captures
+  `quantity x price_per_person_paise` against the `mandate_id` in the body, confirms the booking. Returns
+  `{release_id, slot_id, quantity, hold_id, payment_id, booking_ref, status: "CONFIRMED", amount_paise}`. A
+  `fair_draw` release is refused **server-side** with 409 `FAIR_DRAW_REQUIRED` — the only way to take one is the
+  declared-interest chain (declare → draw → hold → capture → confirm), so no caller can bypass the draw. Unknown
+  release/mandate → 404, bad slot/quantity or missing `mandate_id` → 400, sold out / over capacity → 409, underfunded
+  mandate → 402 `INSUFFICIENT_BALANCE`, a failed capture → 402 `PAYMENT_FAILED` (the hold is released in every
+  refusal path, so a refused buy leaves no capacity held and no charge).
+
+These are portal-facing writes, not agent-facing: they are deliberately **not** mirrored on the MCP surface
+(`mock_server/mcp_surface.py`), which exists only for the AgenticOrg agent — exposing create/approve/buy tools there
+would grant the agent privileges `docs/agenticorg/agent-spec.md` withholds. The portal calls these over REST.
 
 ### DIFD draw
 
@@ -79,7 +114,8 @@ on. Transport is stateless streamable HTTP.
 | **all four**      | **`/all/mcp`**   | **all 18 above** — use this one for AgenticOrg: it scopes at most one untrusted custom connector per agent (see `docs/agenticorg/platform-map.md`), so the agent links a single connector and can still be granted every tool it needs |
 
 Tools call the same routes **in process**, so validation, the idempotency ledger, the state store and the request
-log are shared rather than reimplemented. Every tool takes an optional `run_id` (sent as `X-Run-Id`; defaults to
+log are shared rather than reimplemented. The ADR-015 organisers/events/releases/buy routes above are the one
+deliberate exception: they are portal-only and are not exposed as MCP tools. Every tool takes an optional `run_id` (sent as `X-Run-Id`; defaults to
 `default`, which the Declare Agent and the Workflow therefore share) and every write tool takes an optional
 `idempotency_key` (sent as `Idempotency-Key`). Scenario control (`/__admin/*`) is harness-only and is **not**
 reachable from MCP.
@@ -87,7 +123,8 @@ reachable from MCP.
 ### State and durability
 
 State is durable in SQLite (ADR-013) at `MOCK_DB_PATH` — in the cluster `/app/data/mock.db` on a PVC — so the
-declare-interest pool, holds, mandates, payments and the idempotency ledger survive a pod restart. This matters
+declare-interest pool, holds, mandates, payments, the idempotency ledger and the ADR-015 events/releases/organisers
+survive a pod restart. This matters
 because the Declare Agent writes a bid now and the Window Allocation Workflow reads it later, and every deploy
 restarts the pod.
 
@@ -162,7 +199,7 @@ Set with `POST /__admin/scenario {"run_id", "target", "scenario" | "sequence", "
 requests carry only `X-Run-Id` (correlation), `X-Request-Id`, `Idempotency-Key`. Scenarios: success, no_inventory,
 insufficient_balance, timeout (default 12 s), malformed (HTML with 200, request still processed), duplicate (409
 DUPLICATE_REQUEST on a replayed key), booking_expired, payment_failure, partial_group (capacity 3), upstream_500,
-delayed (default 4 s). Targets: `venue.list_releases|release|hold|hold_get|hold_release|booking|declare_interest| list_declarations|cancel_declaration`, `allocator.draw`,
+delayed (default 4 s). Targets: `venue.list_releases|release|hold|hold_get|hold_release|booking|declare_interest|list_declarations|cancel_declaration|list_organisers|create_organiser|approve_organiser|create_event|update_event|create_release|buy`, `allocator.draw`,
 `pinelabs.create_mandate|balance|execute|release|refund` (the budgeted mandate mock, distinct from the native,
 real `pinelabs_plural` connector), `delhivery.serviceability|create|track`, `*`.
 A sequence pops one scenario per call; the last sticks. `options: {"inject_label": true}` appends a prompt-injection

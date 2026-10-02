@@ -317,6 +317,12 @@ class RunState:
         self.payments = PTable(store, run_id, "payments")
         self.shipments = PTable(store, run_id, "shipments")
         self.declarations = PTable(store, run_id, "declarations")
+        # Events/releases moved here from the static catalogue fixture (ADR-015): they are now mutable
+        # domain state a portal can create, so they live in the same durable store as everything else.
+        # `MockState.catalogue` remains the seed source for a fresh run and the pincode table.
+        self.organisers = PTable(store, run_id, "organisers")
+        self.events = PTable(store, run_id, "events")
+        self.releases = PTable(store, run_id, "releases")
         self.used_capacity = IntTable(store, run_id, "capacity")
         self.counters = IntTable(store, run_id, "counters")
         self.idem = Idem(store, run_id)
@@ -342,7 +348,30 @@ class MockState:
         state = self.runs.get(run_id)
         if state is None:
             state = self.runs[run_id] = RunState(self.store, run_id)
+            self._seed_domain(state)
         return state
+
+    def _seed_domain(self, state: RunState) -> None:
+        """Seed a fresh run's event/release tables from the catalogue fixture.
+
+        `catalogue.json` is seed data only now (ADR-015): on a brand-new run the store is empty and gets the
+        fixture's four events and four releases; a run that already has rows (including after a pod restart,
+        since the store is durable per ADR-013) is left alone.
+        """
+        if len(state.events) or len(state.releases) or len(state.organisers):
+            return
+        # One owner for the fixture events, so every seeded release has a real organiser_id behind it.
+        state.organisers["org_seed"] = {
+            "organiser_id": "org_seed",
+            "name": "KIRRO seed venues",
+            "contact": "seed@kirro.mock",
+            "status": "approved",
+            "requested_by": None,
+        }
+        for event in self.catalogue["events"]:
+            state.events[event["event_id"]] = {**event, "organiser_id": "org_seed", "status": "published"}
+        for release in self.catalogue["releases"]:
+            state.releases[release["release_id"]] = {**release, "allocation_mode": "fair_draw"}
 
     def reset(self, run_id: str | None = None) -> None:
         if run_id:

@@ -46,6 +46,31 @@ def _parse_iso(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
+def money(value: int) -> dict:
+    return {"value": value, "currency": "INR"}
+
+
+def capture(run: RunState, auth_id: str, amount: Any, sc: str) -> tuple[int, dict]:
+    """Capture `amount` paise against an active mandate.
+
+    Shared by `pinelabs.execute` and the one-shot `venue buy`, so instant_buy takes the exact same
+    payment path (and the same scenario behaviour) as the fair-draw chain's capture step.
+    """
+    mandate = run.mandates.get(auth_id)
+    if not mandate or mandate["status"] != "ACTIVE":
+        return err(404, "NOT_FOUND", "active authorization not found")
+    if not isinstance(amount, int) or amount <= 0:
+        return err(400, "BAD_REQUEST", "amount.value must be positive integer paise")
+    if sc == "insufficient_balance" or amount > mandate["balance"]:
+        return err(402, "INSUFFICIENT_BALANCE", "authorized balance is lower than the charge")
+    pid = run.next_id("pay")
+    if sc == "payment_failure":
+        return 200, {"payment_id": pid, "status": "FAILED", "reason": "BANK_DECLINED", "amount": money(amount)}
+    mandate["balance"] -= amount
+    run.payments[pid] = {"status": "SUCCESS", "amount": amount, "auth": auth_id, "refunded": False}
+    return 200, {"payment_id": pid, "status": "SUCCESS", "receipt_id": f"rcpt_{pid}", "amount": money(amount)}
+
+
 def create_app(log_dir: str | None = None) -> FastAPI:
     # MCP servers are built after the app exists (their tools call it in-process via
     # ASGITransport); the holder lets this lifespan start their session managers without a
@@ -169,11 +194,23 @@ def create_app(log_dir: str | None = None) -> FastAPI:
             "refunds": sum(1 for p in r.payments.values() if p.get("refunded")),
             "released_mandates": sum(1 for m in r.mandates.values() if m["status"] == "RELEASED"),
             "shipments": len(r.shipments),
+            # Portal/admin views (ADR-015): domain counts plus money actually kept vs. given back. This is the
+            # harness-facing endpoint, so the admin page can read totals without a business route for it.
+            "organisers": len(r.organisers),
+            "pending_organisers": sum(1 for o in r.organisers.values() if o["status"] == "pending"),
+            "events": len(r.events),
+            "releases": len(r.releases),
+            "declarations": sum(len(pool) for pool in r.declarations.values()),
+            "captured_paise": sum(
+                p["amount"] for p in r.payments.values() if p["status"] == "SUCCESS" and not p.get("refunded")
+            ),
+            "refunded_paise": sum(p["amount"] for p in r.payments.values() if p.get("refunded")),
         }
 
     # ------------------------------------------------------------------ venue (capability A, MOCK REQUIRED)
-    def find_release(rel_id: str) -> dict | None:
-        return next((r for r in st.catalogue["releases"] if r["release_id"] == rel_id), None)
+    def find_release(run: RunState, rel_id: str) -> dict | None:
+        # Events/releases are store documents now (ADR-015), not a static fixture read.
+        return run.releases.get(rel_id)
 
     def slot_view(run: RunState, sc: str, s: dict) -> dict:
         cap = s["capacity"] - run.used_capacity[s["slot_id"]]
@@ -185,16 +222,32 @@ def create_app(log_dir: str | None = None) -> FastAPI:
         return {**s, "capacity": max(cap, 0), "label": label}
 
     @app.get("/venue/catalogue")
-    def catalogue():
-        return {"events": st.catalogue["events"]}
+    def catalogue(request: Request):
+        run = st.run(request.headers.get("x-run-id", "default"))
+        q = request.query_params
+        # Optional filters let the portal ask for one organiser's events or only published ones without a
+        # second endpoint; unfiltered, this is exactly the agent-facing catalogue it always was.
+        events = [
+            dict(e)
+            for e in run.events.values()
+            if (not q.get("organiser_id") or e.get("organiser_id") == q["organiser_id"])
+            and (not q.get("status") or e.get("status") == q["status"])
+        ]
+        return {"events": events}
 
     @app.get("/venue/releases")
     async def list_releases(request: Request):
         def h(sc: str, body: dict, run: RunState):
             q = request.query_params
             out = [
-                {"release_id": r["release_id"], "event_id": r["event_id"], "date": r["date"], "opens_at": r["opens_at"]}
-                for r in st.catalogue["releases"]
+                {
+                    "release_id": r["release_id"],
+                    "event_id": r["event_id"],
+                    "date": r["date"],
+                    "opens_at": r["opens_at"],
+                    "allocation_mode": r.get("allocation_mode", "fair_draw"),
+                }
+                for r in run.releases.values()
                 if (not q.get("event_id") or r["event_id"] == q["event_id"])
                 and (not q.get("date") or r["date"] == q["date"])
             ]
@@ -205,13 +258,14 @@ def create_app(log_dir: str | None = None) -> FastAPI:
     @app.get("/venue/releases/{release_id}")
     async def get_release(release_id: str, request: Request):
         def h(sc: str, body: dict, run: RunState):
-            r = find_release(release_id)
+            r = find_release(run, release_id)
             if not r:
                 return err(404, "NOT_FOUND", "release not found")
             return 200, {
                 "release_id": r["release_id"],
                 "event_id": r["event_id"],
                 "opens_at": r["opens_at"],
+                "allocation_mode": r.get("allocation_mode", "fair_draw"),
                 "slots": [slot_view(run, sc, s) for s in r["slots"]],
             }
 
@@ -220,7 +274,7 @@ def create_app(log_dir: str | None = None) -> FastAPI:
     @app.post("/venue/releases/{release_id}/holds")
     async def create_hold(release_id: str, request: Request):
         def h(sc: str, body: dict, run: RunState):
-            r = find_release(release_id)
+            r = find_release(run, release_id)
             slot = next((s for s in (r or {}).get("slots", []) if s["slot_id"] == body.get("slot_id")), None)
             qty = body.get("quantity")
             if not r or not slot or not isinstance(qty, int) or qty < 1:
@@ -307,7 +361,7 @@ def create_app(log_dir: str | None = None) -> FastAPI:
     @app.post("/venue/releases/{release_id}/declarations")
     async def declare_interest(release_id: str, request: Request):
         def h(sc: str, body: dict, run: RunState):
-            if not find_release(release_id):
+            if not find_release(run, release_id):
                 return err(404, "NOT_FOUND", "release not found")
             for f in ("group_size", "min_group_size", "max_price_paise"):
                 if not isinstance(body.get(f), int) or body[f] < 0:
@@ -326,7 +380,7 @@ def create_app(log_dir: str | None = None) -> FastAPI:
     @app.get("/venue/releases/{release_id}/declarations")
     async def list_declarations(release_id: str, request: Request):
         def h(sc: str, body: dict, run: RunState):
-            if not find_release(release_id):
+            if not find_release(run, release_id):
                 return err(404, "NOT_FOUND", "release not found")
             entries = [
                 b for b in run.declarations.get(release_id, {}).values() if b.get("status", "DECLARED") == "DECLARED"
@@ -346,10 +400,229 @@ def create_app(log_dir: str | None = None) -> FastAPI:
 
         return await serve(request, "venue.cancel_declaration", h, body={})
 
-    # ------------------------------------------------------------------ Pine Labs mock (shapes: MOCK)
-    def money(v: int) -> dict:
-        return {"value": v, "currency": "INR"}
+    # ------------------------------------------- organisers, events, releases (ADR-015, web portal)
+    # Portal-facing writes, not agent-facing: deliberately NOT mirrored on the MCP surface
+    # (mock_server/mcp_surface.py), which exists only for the AgenticOrg agent. Giving the agent
+    # create/approve/buy tools would hand it privileges docs/agenticorg/agent-spec.md withholds.
+    EVENT_STATUSES = ("draft", "published")
+    ALLOCATION_MODES = ("fair_draw", "instant_buy")
 
+    def find_organiser(run: RunState, organiser_id: object) -> dict | None:
+        if not isinstance(organiser_id, str):
+            return None
+        return run.organisers.get(organiser_id)
+
+    def slot_from_body(run: RunState, raw: object, index: int) -> tuple[dict | None, tuple[int, dict] | None]:
+        if not isinstance(raw, dict):
+            return None, err(400, "BAD_REQUEST", f"slot {index} must be an object")
+        label, starts_at = raw.get("label"), raw.get("starts_at")
+        cap, price = raw.get("capacity"), raw.get("price_per_person_paise")
+        if not isinstance(label, str) or not label:
+            return None, err(400, "BAD_REQUEST", f"slot {index} label is required")
+        if not isinstance(starts_at, str) or not starts_at:
+            return None, err(400, "BAD_REQUEST", f"slot {index} starts_at is required")
+        if not isinstance(cap, int) or cap < 1:
+            return None, err(400, "BAD_REQUEST", f"slot {index} capacity must be a positive integer")
+        if not isinstance(price, int) or price < 1:
+            return None, err(400, "BAD_REQUEST", f"slot {index} price_per_person_paise must be a positive integer")
+        slot_id = raw.get("slot_id") or run.next_id("slot")
+        if not isinstance(slot_id, str) or not slot_id:
+            return None, err(400, "BAD_REQUEST", f"slot {index} slot_id must be a non-empty string")
+        return {
+            "slot_id": slot_id,
+            "label": label,
+            "starts_at": starts_at,
+            "capacity": cap,
+            "price_per_person_paise": price,
+        }, None
+
+    @app.get("/venue/organisers")
+    async def list_organisers(request: Request):
+        def h(sc: str, body: dict, run: RunState):
+            status = request.query_params.get("status")
+            return 200, {
+                "organisers": [dict(o) for o in run.organisers.values() if not status or o["status"] == status]
+            }
+
+        return await serve(request, "venue.list_organisers", h, body={})
+
+    @app.post("/venue/organisers")
+    async def create_organiser(request: Request):
+        def h(sc: str, body: dict, run: RunState):
+            for f in ("name", "contact", "requested_by"):
+                if not isinstance(body.get(f), str) or not body[f].strip():
+                    return err(400, "BAD_REQUEST", f"{f} must be a non-empty string")
+            oid = run.next_id("org")
+            run.organisers[oid] = {
+                "organiser_id": oid,
+                "name": body["name"].strip(),
+                "contact": body["contact"].strip(),
+                "requested_by": body["requested_by"].strip(),
+                "status": "pending",
+            }
+            return 200, dict(run.organisers[oid])
+
+        return await serve(request, "venue.create_organiser", h)
+
+    @app.post("/venue/organisers/{organiser_id}/approve")
+    async def approve_organiser(organiser_id: str, request: Request):
+        def h(sc: str, body: dict, run: RunState):
+            org = run.organisers.get(organiser_id)
+            if not org:
+                return err(404, "NOT_FOUND", "organiser not found")
+            org["status"] = "approved"
+            return 200, dict(org)
+
+        return await serve(request, "venue.approve_organiser", h)
+
+    @app.post("/venue/events")
+    async def create_event(request: Request):
+        def h(sc: str, body: dict, run: RunState):
+            name = body.get("name")
+            if not isinstance(name, str) or not name.strip():
+                return err(400, "BAD_REQUEST", "name must be a non-empty string")
+            org = find_organiser(run, body.get("organiser_id"))
+            if not org:
+                return err(404, "NOT_FOUND", "organiser not found")
+            if org["status"] != "approved":
+                return err(403, "ORGANISER_NOT_APPROVED", "organiser must be approved before creating events")
+            status = body.get("status", "draft")
+            if status not in EVENT_STATUSES:
+                return err(400, "BAD_REQUEST", "status must be draft or published")
+            event_id = run.next_id("ev")
+            run.events[event_id] = {
+                "event_id": event_id,
+                "name": name.strip(),
+                "aliases": body.get("aliases") or [],
+                "generic_aliases": body.get("generic_aliases") or [],
+                "fulfilment": body.get("fulfilment", "digital"),
+                "organiser_id": org["organiser_id"],
+                "status": status,
+            }
+            return 200, dict(run.events[event_id])
+
+        return await serve(request, "venue.create_event", h)
+
+    @app.patch("/venue/events/{event_id}")
+    async def update_event(event_id: str, request: Request):
+        def h(sc: str, body: dict, run: RunState):
+            event = run.events.get(event_id)
+            if not event:
+                return err(404, "NOT_FOUND", "event not found")
+            allowed = ("name", "aliases", "generic_aliases", "fulfilment", "status")
+            unknown = sorted(k for k in body if k not in allowed)
+            if unknown:
+                return err(400, "BAD_REQUEST", f"cannot update: {', '.join(unknown)}")
+            if "name" in body and (not isinstance(body["name"], str) or not body["name"].strip()):
+                return err(400, "BAD_REQUEST", "name must be a non-empty string")
+            if "status" in body and body["status"] not in EVENT_STATUSES:
+                return err(400, "BAD_REQUEST", "status must be draft or published")
+            for key, value in body.items():
+                event[key] = value.strip() if key == "name" else value
+            return 200, dict(event)
+
+        return await serve(request, "venue.update_event", h)
+
+    @app.post("/venue/releases")
+    async def create_release(request: Request):
+        def h(sc: str, body: dict, run: RunState):
+            event_id = body.get("event_id")
+            if not isinstance(event_id, str) or not run.events.get(event_id):
+                return err(404, "NOT_FOUND", "event not found")
+            date, opens_at = body.get("date"), body.get("opens_at")
+            if not isinstance(date, str) or not date:
+                return err(400, "BAD_REQUEST", "date is required")
+            if not isinstance(opens_at, str) or not opens_at:
+                return err(400, "BAD_REQUEST", "opens_at is required")
+            mode = body.get("allocation_mode", "fair_draw")
+            if mode not in ALLOCATION_MODES:
+                return err(400, "BAD_REQUEST", "allocation_mode must be fair_draw or instant_buy")
+            raw_slots = body.get("slots")
+            if not isinstance(raw_slots, list) or not raw_slots:
+                return err(400, "BAD_REQUEST", "slots must be a non-empty list")
+            slots: list[dict] = []
+            for i, raw in enumerate(raw_slots):
+                slot, problem = slot_from_body(run, raw, i)
+                if problem is not None:
+                    return problem
+                slots.append(slot)
+            rid = run.next_id("rel")
+            run.releases[rid] = {
+                "release_id": rid,
+                "event_id": event_id,
+                "date": date,
+                "opens_at": opens_at,
+                "allocation_mode": mode,
+                "slots": slots,
+            }
+            return 200, dict(run.releases[rid])
+
+        return await serve(request, "venue.create_release", h)
+
+    @app.post("/venue/releases/{release_id}/buy")
+    async def buy_release(release_id: str, request: Request):
+        """Instant buy: hold -> capture -> confirm in one call, for instant_buy releases only.
+
+        A fair_draw release is refused with 409 here, not by the caller: that release's only path is the
+        declared-interest chain (declare -> draw -> hold -> capture -> confirm), so no frontend can bypass
+        the draw by calling this endpoint.
+        """
+
+        def h(sc: str, body: dict, run: RunState):
+            r = find_release(run, release_id)
+            if not r:
+                return err(404, "NOT_FOUND", "release not found")
+            if r.get("allocation_mode") != "instant_buy":
+                return err(409, "FAIR_DRAW_REQUIRED", "release allocates by fair draw; declare interest instead")
+            slot = next((s for s in r["slots"] if s["slot_id"] == body.get("slot_id")), None)
+            qty = body.get("quantity")
+            auth = body.get("mandate_id") or body.get("authorization_id")
+            if not slot or not isinstance(qty, int) or qty < 1:
+                return err(400, "BAD_REQUEST", "unknown slot or invalid quantity")
+            if not isinstance(auth, str) or not auth or not run.mandates.get(auth):
+                return err(404, "NOT_FOUND", "active authorization not found")
+            if sc == "no_inventory":
+                return err(409, "SOLD_OUT", "slot has no remaining inventory")
+            avail = slot_view(run, "partial_group" if sc == "partial_group" else "success", slot)["capacity"]
+            if qty > avail:
+                return err(409, "INSUFFICIENT_CAPACITY", "not enough remaining inventory", {"available": avail})
+            amount = qty * slot["price_per_person_paise"]
+            hid = run.next_id("hold")
+            run.used_capacity[slot["slot_id"]] += qty
+            run.holds[hid] = {
+                "slot_id": slot["slot_id"],
+                "quantity": qty,
+                "released": False,
+                "expires": _iso(_now() + timedelta(seconds=1 if sc == "booking_expired" else 600)),
+                "force_expired": sc == "booking_expired",
+            }
+            status, pay = capture(run, auth, amount, sc)
+            if status != 200 or pay.get("status") != "SUCCESS":
+                run.holds[hid]["released"] = True
+                run.used_capacity[slot["slot_id"]] -= qty
+                # payment_failure comes back as HTTP 200 with status FAILED from the capture path; for a
+                # one-shot buy that is a failed purchase, not a successful response.
+                return err(402, "PAYMENT_FAILED", "payment did not succeed") if status == 200 else (status, pay)
+            if hold_status(run.holds[hid]) != "active":
+                run.holds[hid]["released"] = True
+                run.used_capacity[slot["slot_id"]] -= qty
+                return err(410, "HOLD_EXPIRED", "hold is no longer active")
+            ref = run.next_id("BK").replace("_", "-")
+            run.bookings[ref] = {"hold_id": hid, "payment_id": pay["payment_id"]}
+            return 200, {
+                "release_id": release_id,
+                "slot_id": slot["slot_id"],
+                "quantity": qty,
+                "hold_id": hid,
+                "payment_id": pay["payment_id"],
+                "booking_ref": ref,
+                "status": "CONFIRMED",
+                "amount_paise": amount,
+            }
+
+        return await serve(request, "venue.buy", h)
+
+    # ------------------------------------------------------------------ Pine Labs mock (shapes: MOCK)
     @app.post("/pinelabs/mandates")
     async def create_mandate(request: Request):
         def h(sc: str, body: dict, run: RunState):
@@ -377,20 +650,7 @@ def create_app(log_dir: str | None = None) -> FastAPI:
     @app.post("/pinelabs/mandates/{auth_id}/execute")
     async def execute(auth_id: str, request: Request):
         def h(sc: str, body: dict, run: RunState):
-            m = run.mandates.get(auth_id)
-            amt = (body.get("amount") or {}).get("value")
-            if not m or m["status"] != "ACTIVE":
-                return err(404, "NOT_FOUND", "active authorization not found")
-            if not isinstance(amt, int) or amt <= 0:
-                return err(400, "BAD_REQUEST", "amount.value must be positive integer paise")
-            if sc == "insufficient_balance" or amt > m["balance"]:
-                return err(402, "INSUFFICIENT_BALANCE", "authorized balance is lower than the charge")
-            pid = run.next_id("pay")
-            if sc == "payment_failure":
-                return 200, {"payment_id": pid, "status": "FAILED", "reason": "BANK_DECLINED", "amount": money(amt)}
-            m["balance"] -= amt
-            run.payments[pid] = {"status": "SUCCESS", "amount": amt, "auth": auth_id, "refunded": False}
-            return 200, {"payment_id": pid, "status": "SUCCESS", "receipt_id": f"rcpt_{pid}", "amount": money(amt)}
+            return capture(run, auth_id, (body.get("amount") or {}).get("value"), sc)
 
         return await serve(request, "pinelabs.execute", h)
 
@@ -421,7 +681,7 @@ def create_app(log_dir: str | None = None) -> FastAPI:
     @app.post("/allocator/draw")
     async def allocator_draw(request: Request):
         def h(sc: str, body: dict, run: RunState):
-            rel = find_release(body.get("release_id", ""))
+            rel = find_release(run, body.get("release_id", ""))
             if not rel:
                 return err(404, "NOT_FOUND", "release not found")
             slots = [

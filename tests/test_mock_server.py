@@ -73,6 +73,7 @@ def test_movie_release_is_bookable(mock_client):
             "event_id": "ev_movie",
             "date": "2026-10-03",
             "opens_at": "2026-10-02T06:00:00Z",
+            "allocation_mode": "fair_draw",
         }
     ]
     a = mock_client.post(
@@ -314,3 +315,236 @@ def test_declare_pool_rejects_bad_bid(mock_client, over):
 
 def test_gnani_route_is_gone(mock_client):
     assert mock_client.post("/gnani/extract", json={"transcript": "x"}, headers=H()).status_code == 404
+
+
+# ---------------------------------------------------------------------- organisers / events / releases
+# The portal-facing surface added by ADR-015 (docs/web-portal/plan.md). Same serve() wrapper as every other
+# route, so scenarios/idempotency/logging apply with no new pattern.
+
+
+def organiser_body(**over):
+    return {"name": "Court Co", "contact": "+91-9000000001", "requested_by": "org@example.com"} | over
+
+
+def event_body(organiser_id="org_seed", **over):
+    return {"name": "New League", "organiser_id": organiser_id, "status": "published"} | over
+
+
+def instant_release_body(event_id="ev_badminton", **over):
+    return {
+        "event_id": event_id,
+        "date": "2026-11-01",
+        "opens_at": "2026-10-25T06:00:00Z",
+        "allocation_mode": "instant_buy",
+        "slots": [
+            {
+                "slot_id": "ib_a",
+                "label": "Court A, 10:00",
+                "starts_at": "2026-11-01T10:00:00Z",
+                "capacity": 4,
+                "price_per_person_paise": 20000,
+            }
+        ],
+    } | over
+
+
+def new_mandate(mock_client, value):
+    return mock_client.post(
+        "/pinelabs/mandates", json={"amount": {"value": value, "currency": "INR"}}, headers=H(key="m")
+    ).json()["authorizationId"]
+
+
+def test_organiser_request_lists_pending_then_approval_clears_it(mock_client):
+    created = mock_client.post("/venue/organisers", json=organiser_body(), headers=H(key="o1"))
+    assert created.status_code == 200
+    org = created.json()
+    assert org["organiser_id"] == "org_0001" and org["status"] == "pending" and org["requested_by"] == "org@example.com"
+
+    pending = mock_client.get("/venue/organisers", params={"status": "pending"}, headers=H()).json()["organisers"]
+    assert [o["organiser_id"] for o in pending] == ["org_0001"]
+
+    approved = mock_client.post("/venue/organisers/org_0001/approve", headers=H(key="a1"))
+    assert approved.status_code == 200 and approved.json()["status"] == "approved"
+    assert mock_client.get("/venue/organisers", params={"status": "pending"}, headers=H()).json()["organisers"] == []
+    assert mock_client.post("/venue/organisers/org_nope/approve", headers=H()).status_code == 404
+
+
+@pytest.mark.parametrize("over", [{"name": ""}, {"contact": None}, {"requested_by": "  "}])
+def test_organiser_request_rejects_missing_fields(mock_client, over):
+    r = mock_client.post("/venue/organisers", json=organiser_body(**over), headers=H())
+    assert r.status_code == 400 and r.json()["error"]["code"] == "BAD_REQUEST"
+
+
+def test_event_creation_requires_an_approved_organiser(mock_client):
+    pending = mock_client.post("/venue/organisers", json=organiser_body(), headers=H()).json()
+    blocked = mock_client.post("/venue/events", json=event_body(pending["organiser_id"]), headers=H())
+    assert blocked.status_code == 403 and blocked.json()["error"]["code"] == "ORGANISER_NOT_APPROVED"
+
+    mock_client.post(f"/venue/organisers/{pending['organiser_id']}/approve", headers=H())
+    created = mock_client.post("/venue/events", json=event_body(pending["organiser_id"]), headers=H(key="e1"))
+    assert created.status_code == 200
+    event = created.json()
+    assert event["event_id"] == "ev_0001" and event["organiser_id"] == pending["organiser_id"]
+    assert event["status"] == "published" and event["fulfilment"] == "digital"
+
+
+def test_event_creation_rejects_unknown_organiser_and_bad_body(mock_client):
+    assert mock_client.post("/venue/events", json=event_body("org_nope"), headers=H()).status_code == 404
+    missing_name = mock_client.post("/venue/events", json={"organiser_id": "org_seed"}, headers=H())
+    assert missing_name.status_code == 400 and missing_name.json()["error"]["code"] == "BAD_REQUEST"
+    bad_status = mock_client.post("/venue/events", json=event_body(status="live"), headers=H())
+    assert bad_status.status_code == 400
+
+
+def test_event_patch_updates_only_allowed_fields(mock_client):
+    ok = mock_client.patch("/venue/events/ev_badminton", json={"status": "draft", "name": "Renamed"}, headers=H())
+    assert ok.status_code == 200 and ok.json()["status"] == "draft" and ok.json()["name"] == "Renamed"
+    assert (
+        mock_client.get("/venue/catalogue", params={"status": "draft"}, headers=H()).json()["events"][0]["event_id"]
+        == "ev_badminton"
+    )
+
+    assert mock_client.patch("/venue/events/ev_nope", json={"name": "x"}, headers=H()).status_code == 404
+    bad_status = mock_client.patch("/venue/events/ev_badminton", json={"status": "live"}, headers=H())
+    assert bad_status.status_code == 400
+    immutable = mock_client.patch("/venue/events/ev_badminton", json={"event_id": "ev_x"}, headers=H())
+    assert immutable.status_code == 400 and "event_id" in immutable.json()["error"]["message"]
+
+
+def test_release_creation_defaults_to_fair_draw_and_generates_slot_ids(mock_client):
+    body = instant_release_body()
+    del body["allocation_mode"]
+    del body["slots"][0]["slot_id"]
+    created = mock_client.post("/venue/releases", json=body, headers=H(key="r1"))
+    assert created.status_code == 200
+    release = created.json()
+    assert release["release_id"] == "rel_0001" and release["allocation_mode"] == "fair_draw"
+    assert release["slots"][0]["slot_id"] == "slot_0001"
+    assert mock_client.get("/venue/releases/rel_0001", headers=H()).json()["allocation_mode"] == "fair_draw"
+
+
+@pytest.mark.parametrize(
+    "over,status,code",
+    [
+        ({"event_id": "ev_nope"}, 404, "NOT_FOUND"),
+        ({"allocation_mode": "auction"}, 400, "BAD_REQUEST"),
+        ({"slots": []}, 400, "BAD_REQUEST"),
+        (
+            {
+                "slots": [
+                    {"label": "x", "starts_at": "2026-11-01T10:00:00Z", "capacity": 0, "price_per_person_paise": 1}
+                ]
+            },
+            400,
+            "BAD_REQUEST",
+        ),
+    ],
+)
+def test_release_creation_rejects_bad_body(mock_client, over, status, code):
+    r = mock_client.post("/venue/releases", json=instant_release_body(**over), headers=H())
+    assert r.status_code == status and r.json()["error"]["code"] == code
+
+
+def test_instant_buy_holds_captures_and_confirms_in_one_call(mock_client):
+    release = mock_client.post("/venue/releases", json=instant_release_body(), headers=H(key="r1")).json()
+    auth = new_mandate(mock_client, 100000)
+    bought = mock_client.post(
+        f"/venue/releases/{release['release_id']}/buy",
+        json={"slot_id": "ib_a", "quantity": 2, "mandate_id": auth},
+        headers=H(key="b1"),
+    )
+    assert bought.status_code == 200
+    body = bought.json()
+    assert body["status"] == "CONFIRMED" and body["booking_ref"] == "BK-0001" and body["amount_paise"] == 40000
+    # The hold is active, two of four seats are gone, and the mandate kept the rest.
+    assert mock_client.get(f"/venue/holds/{body['hold_id']}", headers=H()).json()["status"] == "active"
+    slots = mock_client.get(f"/venue/releases/{release['release_id']}", headers=H()).json()["slots"]
+    assert slots[0]["capacity"] == 2
+    assert mock_client.get(f"/pinelabs/mandates/{auth}/balance", headers=H()).json()["balance"]["value"] == 60000
+    state = mock_client.get("/__admin/state", params={"run_id": "r"}).json()
+    assert state["bookings"] == 1 and state["captured_paise"] == 40000
+
+
+def test_instant_buy_replays_an_idempotency_key(mock_client):
+    release = mock_client.post("/venue/releases", json=instant_release_body(), headers=H(key="r1")).json()
+    auth = new_mandate(mock_client, 100000)
+    payload = {"slot_id": "ib_a", "quantity": 1, "mandate_id": auth}
+    first = mock_client.post(f"/venue/releases/{release['release_id']}/buy", json=payload, headers=H(key="same"))
+    second = mock_client.post(f"/venue/releases/{release['release_id']}/buy", json=payload, headers=H(key="same"))
+    assert first.json() == second.json()
+    assert mock_client.get("/__admin/state", params={"run_id": "r"}).json()["bookings"] == 1
+
+
+def test_buy_refuses_a_fair_draw_release_server_side(mock_client):
+    """The fairness chain cannot be bypassed by calling the wrong endpoint: /buy itself returns 409."""
+    r = mock_client.post(
+        "/venue/releases/rel_badminton_sat/buy",
+        json={"slot_id": "bd_0700", "quantity": 1, "mandate_id": new_mandate(mock_client, 100000)},
+        headers=H(),
+    )
+    assert r.status_code == 409 and r.json()["error"]["code"] == "FAIR_DRAW_REQUIRED"
+    assert mock_client.get("/__admin/state", params={"run_id": "r"}).json()["bookings"] == 0
+
+
+def test_buy_validates_capacity_and_payment(mock_client):
+    release = mock_client.post(
+        "/venue/releases",
+        json=instant_release_body(
+            slots=[
+                {
+                    "slot_id": "ib_a",
+                    "label": "Court A",
+                    "starts_at": "2026-11-01T10:00:00Z",
+                    "capacity": 1,
+                    "price_per_person_paise": 20000,
+                }
+            ]
+        ),
+        headers=H(key="r1"),
+    ).json()
+    path = f"/venue/releases/{release['release_id']}/buy"
+    small = new_mandate(mock_client, 10000)
+
+    unknown_release = mock_client.post(
+        "/venue/releases/rel_nope/buy", json={"slot_id": "ib_a", "quantity": 1, "mandate_id": small}, headers=H()
+    )
+    assert unknown_release.status_code == 404
+    bad_slot = mock_client.post(path, json={"slot_id": "ghost", "quantity": 1, "mandate_id": small}, headers=H())
+    assert bad_slot.status_code == 400
+    no_mandate = mock_client.post(path, json={"slot_id": "ib_a", "quantity": 1}, headers=H())
+    assert no_mandate.status_code == 404
+    too_many = mock_client.post(path, json={"slot_id": "ib_a", "quantity": 2, "mandate_id": small}, headers=H())
+    assert too_many.status_code == 409 and too_many.json()["error"]["code"] == "INSUFFICIENT_CAPACITY"
+    underfunded = mock_client.post(path, json={"slot_id": "ib_a", "quantity": 1, "mandate_id": small}, headers=H())
+    assert underfunded.status_code == 402 and underfunded.json()["error"]["code"] == "INSUFFICIENT_BALANCE"
+
+
+@pytest.mark.parametrize(
+    "s,status,code",
+    [
+        ("no_inventory", 409, "SOLD_OUT"),
+        ("payment_failure", 402, "PAYMENT_FAILED"),
+    ],
+)
+def test_buy_failure_scenarios_release_the_hold(mock_client, s, status, code):
+    release = mock_client.post("/venue/releases", json=instant_release_body(), headers=H(key="r1")).json()
+    auth = new_mandate(mock_client, 100000)
+    scenario(mock_client, target="venue.buy", s=s)
+    r = mock_client.post(
+        f"/venue/releases/{release['release_id']}/buy",
+        json={"slot_id": "ib_a", "quantity": 2, "mandate_id": auth},
+        headers=H(),
+    )
+    assert r.status_code == status and r.json()["error"]["code"] == code
+    # A refused buy must leave no held capacity behind, and must not have charged anyone.
+    state = mock_client.get("/__admin/state", params={"run_id": "r"}).json()
+    assert state["active_holds"] == 0 and state["bookings"] == 0 and state["captured_paise"] == 0
+    slots = mock_client.get(f"/venue/releases/{release['release_id']}", headers=H()).json()["slots"]
+    assert slots[0]["capacity"] == 4
+
+
+def test_catalogue_filters_by_organiser_and_status(mock_client):
+    seeded = mock_client.get("/venue/catalogue", params={"organiser_id": "org_seed"}, headers=H()).json()["events"]
+    assert {e["event_id"] for e in seeded} == {"ev_badminton", "ev_tennis", "ev_movie", "ev_f1"}
+    assert all(e["status"] == "published" for e in seeded)
+    assert mock_client.get("/venue/catalogue", params={"status": "draft"}, headers=H()).json()["events"] == []
