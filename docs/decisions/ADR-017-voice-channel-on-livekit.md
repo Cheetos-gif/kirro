@@ -45,10 +45,22 @@ Replace the custom relay with the standard stack on both sides.
   AgenticOrg LLM adapter, and the agent-entrypoint wiring. Speech, transport, playback, and the
   visualiser are the libraries' problem now.
 - **A fourth Deployment** (`kirro-livekit`) and a fourth port set. Self-hosting is the cost of
-  avoiding per-minute billing: the room server needs `hostNetwork` because WebRTC media cannot
-  travel through an Ingress, which means the node must have a public IP and `7880/tcp`, `7881/tcp`,
-  and `7882/udp` open on the host firewall. `7882/udp` is a single muxed port rather than LiveKit's
-  default 50000-60000 range, precisely so that firewall rule stays small.
+  avoiding per-minute billing: WebRTC media cannot travel through an Ingress, so the browser has to
+  reach the node's own ports — `7881/tcp` and `7882/udp`, opened in the cluster repo's
+  `terraform/firewall.tf`. `7882/udp` is a single muxed port rather than LiveKit's default
+  50000-60000 range, precisely so that firewall rule stays small.
+- **The media ports are published by a `LoadBalancer` Service, not `hostNetwork`.** The obvious
+  answer for a WebRTC server is `hostNetwork: true`, and it does not work on this cluster:
+  namespace `kirro` enforces Pod Security `baseline`, which rejects host namespaces and hostPorts
+  outright (the pod never schedules), and relaxing that to `privileged` for one pod would grant the
+  permission to every workload in the namespace. k3s's ServiceLB binds the same port numbers on the
+  node instead — the mechanism Traefik already uses for 80/443 here — which keeps the pod
+  PSA-clean and still satisfies ICE, since ICE has no notion of port translation and the advertised
+  port must be the listening port. That also means the room server's NetworkPolicy needs an
+  `ipBlock` rule for the media ports: ServiceLB forwards with the *caller's* source address
+  preserved, so there is no in-cluster source to match.
+- Signalling is the only part that goes through the Ingress (`voice-kirro.upayan.dev`, port 443 like
+  every other host), so `7880/tcp` is deliberately **not** opened on the firewall.
 - LiveKit's cloud-only features degrade rather than break offline: the adaptive interruption
   detector fails its `401` against `agent-gateway.livekit.cloud` and falls back, and turn detection
   runs locally through Silero, whose model ships inside the plugin. No LiveKit account, no LiveKit
