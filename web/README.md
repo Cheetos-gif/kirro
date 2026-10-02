@@ -57,9 +57,16 @@ pnpm build
 
 ## Deploying
 
-Vercel, from the fork (`upayanmazumder/kirro`). Set the env vars above on the Vercel project; point
-`MOCK_API_URL` at the deployed mock (`https://api-kirro.upayan.dev`) and set `AUTH_TRUST_HOST=true`. Google OAuth
-needs the deployed callback URL registered: `https://<domain>/api/auth/callback/google`.
+Vercel project `kirro-web` (Root Directory `web`, Node 24.x), **git-connected to the fork
+`upayanmazumder/kirro`** — so a push to that repo's `main` is the deploy. Live at
+<https://kirro.upayan.dev>.
+
+Production environment variables: `MOCK_API_URL=https://api-kirro.upayan.dev`, `MOCK_RUN_ID=default`,
+`ADMIN_EMAILS` (comma-separated), `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_TRUST_HOST=true`.
+Google OAuth needs the deployed callback URL registered: `https://<domain>/api/auth/callback/google`.
+
+Env changes need a **new deployment** — `vercel redeploy` reuses the source deployment's env snapshot, so push a
+commit (or trigger a fresh Git deploy) for the change to take effect.
 
 ## Layout
 
