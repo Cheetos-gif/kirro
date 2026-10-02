@@ -14,8 +14,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 import httpx
+
+from logging_.redact import redact_text
 
 log = logging.getLogger("voice_bridge.agenticorg")
 
@@ -53,6 +56,8 @@ class AgentChat:
         # sends it back on every turn (`assets/ChatPanel-*.js`: `...R ? {thread_id: R} : {}`) and
         # stores `r.data.thread_id` from each reply. The first response hands one out.
         self._thread_id: str | None = None
+        # For log correlation only ("turn 3 failed") — never sent to the platform.
+        self._turn = 0
 
     @property
     def thread_id(self) -> str | None:
@@ -83,6 +88,10 @@ class AgentChat:
             "/api/v1/auth/login", json={"email": self._email, "password": self._password}
         )
         if response.status_code != 200:
+            log.error(
+                "agenticorg login failed",
+                extra={"status": response.status_code, "body": redact_text(response.text[:200])},
+            )
             raise AgentChatError(f"AgenticOrg login failed: {response.status_code} {response.text[:200]}")
         self._logged_in = True
         log.info("agenticorg session established for %s", self._email)
@@ -93,17 +102,42 @@ class AgentChat:
         The turn continues whatever conversation this client is in; the first reply creates it.
         """
         async with self._lock:
+            self._turn += 1
+            turn, thread_before = self._turn, self._thread_id
+            started = time.monotonic()
             if not self._logged_in:
                 await self.login()
             reply, status, thread = await self._post(text)
             if status in (401, 403):
-                log.info("agenticorg session expired; re-authenticating")
+                log.info("agenticorg session expired; re-authenticating", extra={"turn": turn})
                 await self.login()
                 reply, status, thread = await self._post(text)
+            latency_ms = round((time.monotonic() - started) * 1000)
             if status != 200:
+                log.error(
+                    "agenticorg turn failed",
+                    extra={
+                        "turn": turn,
+                        "thread_id": thread_before,
+                        "status": status,
+                        "latency_ms": latency_ms,
+                        "body": redact_text(reply[:200]),
+                    },
+                )
                 raise AgentChatError(f"chat/query failed: {status} {reply[:200]}")
             if thread:
                 self._thread_id = thread
+            log.info(
+                "agenticorg turn",
+                extra={
+                    "turn": turn,
+                    "thread_id_before": thread_before,
+                    "thread_id_after": self._thread_id,
+                    "latency_ms": latency_ms,
+                    "query": redact_text(text),
+                    "answer": redact_text(reply),
+                },
+            )
             return reply
 
     async def _post(self, text: str) -> tuple[str, int, str | None]:

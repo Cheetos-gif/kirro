@@ -318,3 +318,67 @@ def test_greet_caller_stays_silent_if_agenticorg_is_unreachable() -> None:
 
     assert spoken == []
     _run(llm.aclose())
+
+
+def test_greet_caller_logs_what_it_spoke(caplog: pytest.LogCaptureFixture) -> None:
+    """The greeting is the one line spoken before any caller turn exists to log on its own."""
+    import logging
+
+    from voice_bridge.agent import greet_caller
+
+    platform = _Platform(answer="Hello! What would you like to book today?")
+    llm = AgenticOrgChat(client=platform.chat())
+
+    with caplog.at_level(logging.INFO, logger="voice_bridge.agent"):
+        _run(greet_caller(llm, lambda _: None))
+
+    assert any("Hello! What would you like to book today?" in r.message for r in caplog.records)
+    _run(llm.aclose())
+
+
+def test_pipeline_error_is_logged_as_one_structured_line(caplog: pytest.LogCaptureFixture) -> None:
+    """A TTS/STT/LLM failure must be findable as one clear line, not only inside a vendored
+    traceback — this is what would have made the Gnani TTS outage immediately visible."""
+    import logging as logging_module
+
+    from livekit.agents import ErrorEvent
+    from livekit.agents.tts import TTSError
+
+    from voice_bridge.agent import _on_pipeline_error
+
+    error = TTSError(
+        timestamp=0.0,
+        label="gnani-tts",
+        error=RuntimeError("We are facing technical difficulties. Please try again later."),
+        recoverable=False,
+    )
+    event = ErrorEvent(error=error, source=error)
+
+    with caplog.at_level(logging_module.ERROR, logger="voice_bridge.agent"):
+        _on_pipeline_error(event)
+
+    record = next(r for r in caplog.records if r.message == "pipeline error")
+    assert record.stage == "tts_error"
+    assert record.label == "gnani-tts"
+    assert record.recoverable is False
+
+
+def test_session_close_is_logged_with_reason_and_duration(caplog: pytest.LogCaptureFixture) -> None:
+    import logging as logging_module
+    import time
+
+    from livekit.agents import CloseEvent, CloseReason
+
+    from voice_bridge.agent import _on_session_close
+
+    started_at = time.monotonic() - 5
+    handler = _on_session_close(started_at, "kirro-upayanm3-gmail-com")
+
+    with caplog.at_level(logging_module.INFO, logger="voice_bridge.agent"):
+        handler(CloseEvent(reason=CloseReason.PARTICIPANT_DISCONNECTED))
+
+    record = next(r for r in caplog.records if r.message == "voice session ended")
+    assert record.room == "kirro-upayanm3-gmail-com"
+    assert record.reason == "participant_disconnected"
+    assert record.duration_s >= 5
+    assert record.error is None

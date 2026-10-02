@@ -14,13 +14,23 @@ booking decision stays with the agent on AgenticOrg (ADR-011).
 from __future__ import annotations
 
 import logging
+import time
 from typing import Callable
 
-from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli
+from livekit.agents import (
+    Agent,
+    AgentSession,
+    CloseEvent,
+    ErrorEvent,
+    JobContext,
+    WorkerOptions,
+    cli,
+)
 from livekit.plugins import silero
 from livekit.plugins.gnani import STT as GnaniSTT
 from livekit.plugins.gnani import TTS as GnaniTTS
 
+from logging_.redact import redact_text
 from voice_bridge.agenticorg import AgentChatError
 from voice_bridge.agenticorg_llm import AgenticOrgChat, build_llm
 from voice_bridge.config import VoiceConfig
@@ -86,15 +96,55 @@ async def greet_caller(llm: AgenticOrgChat, say: Callable[[str], object]) -> Non
         log.warning("greeting turn failed, starting silent: %s", exc)
         greeting = ""
     if greeting:
+        log.info("spoke opening greeting: %s", redact_text(greeting))
         say(greeting)
+    else:
+        log.warning("no greeting to speak, call starts silent")
+
+
+def _on_pipeline_error(event: ErrorEvent) -> None:
+    """Every STT/LLM/TTS failure the pipeline sees, in one line instead of a vendored traceback.
+
+    This is what would have made the Gnani TTS outage (`docs/testing.md`, "We are facing technical
+    difficulties") immediately visible as a single clear line instead of something only found by
+    reading through `_tts_inference_task` tracebacks after the fact.
+    """
+    error = event.error
+    log.error(
+        "pipeline error",
+        extra={
+            "stage": error.type,
+            "label": error.label,
+            "recoverable": error.recoverable,
+            "error": repr(error.error),
+        },
+    )
+
+
+def _on_session_close(started_at: float, room_name: str) -> Callable[[CloseEvent], None]:
+    def handler(event: CloseEvent) -> None:
+        log.info(
+            "voice session ended",
+            extra={
+                "room": room_name,
+                "reason": event.reason.value,
+                "duration_s": round(time.monotonic() - started_at, 1),
+                "error": repr(event.error) if event.error else None,
+            },
+        )
+
+    return handler
 
 
 async def entrypoint(ctx: JobContext) -> None:
     config = VoiceConfig.from_env()
     await ctx.connect()
+    started_at = time.monotonic()
     # Built per job, so each call gets its own AgenticOrg conversation. Sharing one would leak the
     # previous caller's declaration into the next one.
     session = build_session(config)
+    session.on("error", _on_pipeline_error)
+    session.on("close", _on_session_close(started_at, ctx.room.name))
     await session.start(
         agent=Agent(instructions=INSTRUCTIONS),
         room=ctx.room,
