@@ -303,6 +303,63 @@ def test_lookup_survives_a_misresolved_date_and_a_bid_without_slots(mcp_base):
     assert bid["status_code"] == 200 and bid["body"]["status"] == "DECLARED"
 
 
+def test_no_model_facing_parameter_carries_a_type_or_concrete_default(mcp_base):
+    """AgenticOrg appears to prefill a tool call's arguments from the JSON-schema defaults: a parameter declared with
+    a concrete type and default arrives empty or zero however the model chose it, while `Any = None` lets the model's
+    value through — the cause behind `docs/agenticorg/platform-map.md` §11, which cost hours and produced a bid with
+    a zero group size. Every parameter the model is expected to fill must therefore stay untyped with a null default.
+
+    `run_id`, `idempotency_key` and `currency` are exempt: they are plumbing we supply, not values the model chooses.
+    """
+    exempt = {"run_id", "idempotency_key", "currency"}
+
+    async def go():
+        async with session(f"{mcp_base}/all/mcp") as s:
+            schemas = {}
+            for tool in (await s.list_tools()).tools:
+                schema = getattr(tool, "inputSchema", None) or getattr(tool, "input_schema", None) or {}
+                schemas[tool.name] = schema if isinstance(schema, dict) else schema.model_dump()
+            return schemas
+
+    offenders = {}
+    for name, schema in asyncio.run(go()).items():
+        bad = [
+            param
+            for param, spec in (schema.get("properties") or {}).items()
+            if param not in exempt and ("type" in spec or spec.get("default") is not None)
+        ]
+        if bad:
+            offenders[name] = bad
+    assert offenders == {}, f"typed parameters discard the model's values: {offenders}"
+
+
+def test_draw_accepts_bids_as_a_json_string(mcp_base):
+    """The model sends an array parameter as a JSON string as often as a list; both must reach the allocator."""
+
+    async def go():
+        async with session(f"{mcp_base}/allocator/mcp") as s:
+            bids = [
+                {
+                    "declaration_id": "d1",
+                    "user_id": "u1",
+                    "acceptable_slot_ids": ["bd_0700"],
+                    "group_size": 4,
+                    "min_group_size": 4,
+                    "max_price_paise": 30000,
+                }
+            ]
+            as_string = payload(
+                await s.call_tool("draw", {"release_id": "rel_badminton_sat", "bids": json.dumps(bids)})
+            )
+            as_list = payload(await s.call_tool("draw", {"release_id": "rel_badminton_sat", "bids": bids}))
+            return as_string, as_list
+
+    as_string, as_list = asyncio.run(go())
+    assert as_string["status_code"] == 200
+    assert as_string["body"] == as_list["body"]
+    assert as_string["body"]["results"][0]["status"] == "ALLOCATED"
+
+
 def test_every_tool_invocation_is_logged_with_the_arguments_received(mcp_server):
     """A guard that answers inside the tool used to leave no trace at all, so a call the platform made and we
     rejected was indistinguishable from one it never sent. The arguments as received must land in the run log."""

@@ -20,6 +20,7 @@ which also shares the pool. See `docs/connectors.md` and ADR-013.
 
 from __future__ import annotations
 
+import json
 import os
 from datetime import datetime, timezone
 from typing import Any
@@ -129,46 +130,79 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
             }
         return await _call(client, "GET", f"/venue/releases/{found[0]['release_id']}", run_id=run_id)
 
-    @mcp.tool(description="Place a time-boxed hold on a slot.")
+    @mcp.tool(
+        description=(
+            "Place a time-boxed hold on a slot. release_id, slot_id and quantity (how many people to seat) are "
+            "required; ttl_s is optional and defaults to 600 seconds."
+        )
+    )
     async def create_hold(
-        release_id: str,
-        slot_id: str,
-        quantity: int,
-        ttl_s: int = 600,
+        release_id: Any = None,
+        slot_id: Any = None,
+        quantity: Any = None,
+        ttl_s: Any = None,
         run_id: str = DEFAULT_RUN,
         idempotency_key: str | None = None,
     ) -> dict:
+        release = _first_str(release_id)
+        slot = _first_str(slot_id)
+        seats = _first_int(quantity)
+        if release is None or slot is None or seats is None:
+            return _bad_request(
+                "release_id, slot_id and quantity are required; received "
+                f"release_id={release_id!r}, slot_id={slot_id!r}, quantity={quantity!r}"
+            )
+        body: dict[str, Any] = {"slot_id": slot, "quantity": seats}
+        ttl = _first_int(ttl_s)
+        if ttl is not None:
+            body["ttl_s"] = ttl
+        _record("create_hold", run_id, body)
         return await _call(
-            client,
-            "POST",
-            f"/venue/releases/{release_id}/holds",
-            run_id=run_id,
-            idem=idempotency_key,
-            json={"slot_id": slot_id, "quantity": quantity, "ttl_s": ttl_s},
+            client, "POST", f"/venue/releases/{release}/holds", run_id=run_id, idem=idempotency_key, json=body
         )
 
     @mcp.tool(description="Check a hold's status (active | released | expired).")
-    async def get_hold(hold_id: str, run_id: str = DEFAULT_RUN) -> dict:
-        return await _call(client, "GET", f"/venue/holds/{hold_id}", run_id=run_id)
+    async def get_hold(hold_id: Any = None, run_id: str = DEFAULT_RUN) -> dict:
+        hold = _first_str(hold_id)
+        if hold is None:
+            return _bad_request("hold_id is required; take it from the create_hold result")
+        _record("get_hold", run_id, {"hold_id": hold})
+        return await _call(client, "GET", f"/venue/holds/{hold}", run_id=run_id)
 
     @mcp.tool(description="Release a hold back to inventory.")
-    async def release_hold(hold_id: str, run_id: str = DEFAULT_RUN, idempotency_key: str | None = None) -> dict:
-        return await _call(client, "DELETE", f"/venue/holds/{hold_id}", run_id=run_id, idem=idempotency_key)
+    async def release_hold(hold_id: Any = None, run_id: str = DEFAULT_RUN, idempotency_key: str | None = None) -> dict:
+        hold = _first_str(hold_id)
+        if hold is None:
+            return _bad_request("hold_id is required; take it from the create_hold result")
+        _record("release_hold", run_id, {"hold_id": hold})
+        return await _call(client, "DELETE", f"/venue/holds/{hold}", run_id=run_id, idem=idempotency_key)
 
-    @mcp.tool(description="Confirm a booking against an active hold and a captured payment.")
+    @mcp.tool(
+        description=(
+            "Confirm a booking against an active hold and a captured payment. Both hold_id and payment_id are "
+            "required and must come from earlier results."
+        )
+    )
     async def confirm_booking(
-        hold_id: str,
-        payment_id: str,
+        hold_id: Any = None,
+        payment_id: Any = None,
         run_id: str = DEFAULT_RUN,
         idempotency_key: str | None = None,
     ) -> dict:
+        hold = _first_str(hold_id)
+        payment = _first_str(payment_id)
+        if hold is None or payment is None:
+            return _bad_request(
+                f"hold_id and payment_id are required; received hold_id={hold_id!r}, payment_id={payment_id!r}"
+            )
+        _record("confirm_booking", run_id, {"hold_id": hold, "payment_id": payment})
         return await _call(
             client,
             "POST",
             "/venue/bookings",
             run_id=run_id,
             idem=idempotency_key,
-            json={"hold_id": hold_id, "payment_id": payment_id},
+            json={"hold_id": hold, "payment_id": payment},
         )
 
     @mcp.tool(
@@ -249,18 +283,43 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
             },
         )
 
-    @mcp.tool(description="List the release's declared-interest pool (one entry per pending bid).")
-    async def list_pool_entries(release_id: str, run_id: str = DEFAULT_RUN) -> dict:
-        return await _call(client, "GET", f"/venue/releases/{release_id}/declarations", run_id=run_id)
+    @mcp.tool(
+        description=(
+            "List the release's declared-interest pool (one entry per pending bid). release_id is required — the "
+            "entries this returns are the bids to pass to draw."
+        )
+    )
+    async def list_pool_entries(release_id: Any = None, run_id: str = DEFAULT_RUN) -> dict:
+        release = _first_str(release_id)
+        if release is None:
+            return _bad_request("release_id is required; call list_releases first")
+        _record("list_pool_entries", run_id, {"release_id": release})
+        return await _call(client, "GET", f"/venue/releases/{release}/declarations", run_id=run_id)
 
-    @mcp.tool(description="Remove a declaration from the pool.")
+    @mcp.tool(
+        description=(
+            "Remove a declaration from the pool. release_id and declaration_id are both required, taken from "
+            "list_pool_entries."
+        )
+    )
     async def cancel_declaration(
-        release_id: str, declaration_id: str, run_id: str = DEFAULT_RUN, idempotency_key: str | None = None
+        release_id: Any = None,
+        declaration_id: Any = None,
+        run_id: str = DEFAULT_RUN,
+        idempotency_key: str | None = None,
     ) -> dict:
+        release = _first_str(release_id)
+        declaration = _first_str(declaration_id)
+        if release is None or declaration is None:
+            return _bad_request(
+                f"release_id and declaration_id are required; received release_id={release_id!r}, "
+                f"declaration_id={declaration_id!r}"
+            )
+        _record("cancel_declaration", run_id, {"release_id": release, "declaration_id": declaration})
         return await _call(
             client,
             "DELETE",
-            f"/venue/releases/{release_id}/declarations/{declaration_id}",
+            f"/venue/releases/{release}/declarations/{declaration}",
             run_id=run_id,
             idem=idempotency_key,
         )
@@ -303,6 +362,19 @@ def _first_int(*candidates: Any) -> int | None:
         coerced = _coerce_int(candidate)
         if coerced is not None:
             return coerced
+    return None
+
+
+def _bids(value: Any) -> list[dict] | None:
+    """Bids as a list of entries, or a JSON-encoded string of one — models send both for array parameters."""
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError:
+            return None
+    if isinstance(value, list):
+        entries = [entry for entry in value if isinstance(entry, dict)]
+        return entries or None
     return None
 
 
@@ -494,23 +566,43 @@ def _pinelabs(mcp: MCPServer, client: httpx.AsyncClient) -> None:
             json={"amount": {"value": value}},
         )
 
-    @mcp.tool(description="Release the mandate's unused reserved amount.")
-    async def release(authorization_id: str, run_id: str = DEFAULT_RUN, idempotency_key: str | None = None) -> dict:
+    @mcp.tool(
+        description=(
+            "Release the mandate's unused reserved amount. authorization_id is required — take it from the "
+            "create_mandate result. Use this for a loser's mandate and for the residual after a capture."
+        )
+    )
+    async def release(
+        authorization_id: Any = None, run_id: str = DEFAULT_RUN, idempotency_key: str | None = None
+    ) -> dict:
+        mandate = _first_str(authorization_id)
+        if mandate is None:
+            return _bad_request("authorization_id is required; take it from the create_mandate result")
+        _record("release", run_id, {"authorization_id": mandate})
         return await _call(
             client,
             "POST",
-            f"/pinelabs/mandates/{authorization_id}/release",
+            f"/pinelabs/mandates/{mandate}/release",
             run_id=run_id,
             idem=idempotency_key,
             json={},
         )
 
-    @mcp.tool(description="Refund a captured payment.")
-    async def refund(payment_id: str, run_id: str = DEFAULT_RUN, idempotency_key: str | None = None) -> dict:
+    @mcp.tool(
+        description=(
+            "Refund a captured payment. payment_id is required — take it from the execute result. Use this when a "
+            "charge succeeded but the booking could not be confirmed."
+        )
+    )
+    async def refund(payment_id: Any = None, run_id: str = DEFAULT_RUN, idempotency_key: str | None = None) -> dict:
+        payment = _first_str(payment_id)
+        if payment is None:
+            return _bad_request("payment_id is required; take it from the execute result")
+        _record("refund", run_id, {"payment_id": payment})
         return await _call(
             client,
             "POST",
-            f"/pinelabs/payments/{payment_id}/refund",
+            f"/pinelabs/payments/{payment}/refund",
             run_id=run_id,
             idem=idempotency_key,
             json={},
@@ -520,45 +612,68 @@ def _pinelabs(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 def _allocator(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 
     @mcp.tool(
-        description="Run the DIFD draw for a release's pool. Deterministic for a given (release, window_open_iso)."
+        description=(
+            "Run the DIFD draw for a release's pool. release_id and bids are required: bids is the list of pool "
+            "entries from list_pool_entries. Deterministic for a given (release, window), so re-running it cannot "
+            "change an allocation."
+        )
     )
     async def draw(
-        release_id: str,
-        bids: list[dict],
-        window_open_iso: str | None = None,
+        release_id: Any = None,
+        bids: Any = None,
+        window_open_iso: Any = None,
         run_id: str = DEFAULT_RUN,
         idempotency_key: str | None = None,
     ) -> dict:
-        payload: dict = {"release_id": release_id, "bids": bids}
-        if window_open_iso:
-            payload["window_open_iso"] = window_open_iso
+        release = _first_str(release_id)
+        entries = _bids(bids)
+        if release is None or entries is None:
+            return _bad_request(
+                "release_id and bids (the pool entries) are required; received "
+                f"release_id={release_id!r}, bids={bids!r}"
+            )
+        payload: dict[str, Any] = {"release_id": release, "bids": entries}
+        window = _first_str(window_open_iso)
+        if window is not None:
+            payload["window_open_iso"] = window
+        _record("draw", run_id, {"release_id": release, "bids": entries, "window_open_iso": window})
         return await _call(client, "POST", "/allocator/draw", run_id=run_id, idem=idempotency_key, json=payload)
 
 
 def _delhivery(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 
     @mcp.tool(description="Pincode serviceability lookup (empty list means non-serviceable).")
-    async def pincode_serviceability(filter_codes: str, run_id: str = DEFAULT_RUN) -> dict:
+    async def pincode_serviceability(filter_codes: Any = None, run_id: str = DEFAULT_RUN) -> dict:
+        codes = _first_str(filter_codes)
+        if codes is None:
+            return _bad_request("filter_codes is required (a comma-separated list of pincodes)")
+        _record("pincode_serviceability", run_id, {"filter_codes": codes})
         return await _call(
-            client, "GET", "/delhivery/c/api/pin-codes/json/", run_id=run_id, params={"filter_codes": filter_codes}
+            client, "GET", "/delhivery/c/api/pin-codes/json/", run_id=run_id, params={"filter_codes": codes}
         )
 
     @mcp.tool(description="Create a shipment from a Delhivery-shaped create payload.")
-    async def create_shipment(data: str, run_id: str = DEFAULT_RUN, idempotency_key: str | None = None) -> dict:
+    async def create_shipment(data: Any = None, run_id: str = DEFAULT_RUN, idempotency_key: str | None = None) -> dict:
+        payload = _first_str(data)
+        if payload is None:
+            return _bad_request("data is required (the Delhivery create payload as a JSON string)")
+        _record("create_shipment", run_id, {"data": payload})
         return await _call(
             client,
             "POST",
             "/delhivery/api/cmu/create.json",
             run_id=run_id,
             idem=idempotency_key,
-            json={"format": "json", "data": data},
+            json={"format": "json", "data": payload},
         )
 
     @mcp.tool(description="Track a shipment by waybill.")
-    async def track(waybill: str, run_id: str = DEFAULT_RUN) -> dict:
-        return await _call(
-            client, "GET", "/delhivery/api/v1/packages/json/", run_id=run_id, params={"waybill": waybill}
-        )
+    async def track(waybill: Any = None, run_id: str = DEFAULT_RUN) -> dict:
+        number = _first_str(waybill)
+        if number is None:
+            return _bad_request("waybill is required; take it from the create_shipment result")
+        _record("track", run_id, {"waybill": number})
+        return await _call(client, "GET", "/delhivery/api/v1/packages/json/", run_id=run_id, params={"waybill": number})
 
 
 BUILDERS = {"venue": _venue, "pinelabs": _pinelabs, "allocator": _allocator, "delhivery": _delhivery}
