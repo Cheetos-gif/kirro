@@ -56,6 +56,12 @@ it). Keyed per run by `release_id → declaration_id → bid`:
   its declared fields plus `status: "DECLARED"` (this is the Workflow's `list_pool_entries`).
 - `DELETE /venue/releases/{release_id}/declarations/{declaration_id}` — removes the entry, 404 `NOT_FOUND` if absent.
 
+The MCP `declare_interest` tool (below) additionally accepts `mandate_id`/`authorization_id` (the id
+`create_mandate` returned earlier in the same conversation) and keys the fallback `declaration_id` on it —
+`decl_{run_id}_{release_id}_{mandate_id}` instead of `decl_{run_id}_{release_id}` — so two different callers'
+bids on the same release, each with their own mandate, no longer overwrite each other. A model that omits it
+falls back to the run's most recently created mandate, same as before (unaffected in a single-caller run).
+
 ### Organisers, events and releases (ADR-015)
 
 The venue portal's write surface. Events and releases used to be a static read of `catalogue.json`; they are now

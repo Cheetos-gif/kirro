@@ -416,6 +416,51 @@ def test_a_bid_without_a_mandate_id_carries_the_run_s_most_recent_one(mcp_base):
     assert entry["mandate_id"] == mandate["body"]["authorizationId"]
 
 
+def test_two_callers_bidding_on_the_same_release_do_not_collide(mcp_base):
+    """Before, a bid's declaration_id was keyed only on (run, release), so a second caller's `declare_interest`
+    overwrote the first's pool entry and inherited whichever mandate was created last. Passing each caller's own
+    mandate_id keeps their bids - and their reservations - separate."""
+
+    async def go():
+        async with session(f"{mcp_base}/pinelabs/mcp") as s:
+            first_mandate = payload(await s.call_tool("create_mandate", {"amount_value": 60000}))["body"][
+                "authorizationId"
+            ]
+            second_mandate = payload(await s.call_tool("create_mandate", {"amount_value": 90000}))["body"][
+                "authorizationId"
+            ]
+        async with session(f"{mcp_base}/venue/mcp") as v:
+            await v.call_tool(
+                "declare_interest",
+                {
+                    "release_id": "rel_badminton_sat",
+                    "group_size": 2,
+                    "min_group_size": 2,
+                    "max_price_paise": 30000,
+                    "mandate_id": first_mandate,
+                },
+            )
+            await v.call_tool(
+                "declare_interest",
+                {
+                    "release_id": "rel_badminton_sat",
+                    "group_size": 3,
+                    "min_group_size": 3,
+                    "max_price_paise": 30000,
+                    "mandate_id": second_mandate,
+                },
+            )
+            pool = payload(await v.call_tool("list_pool_entries", {"release_id": "rel_badminton_sat"}))
+        return first_mandate, second_mandate, pool
+
+    first_mandate, second_mandate, pool = asyncio.run(go())
+    entries = pool["body"]["declarations"]
+    assert len(entries) == 2
+    by_mandate = {e["mandate_id"]: e for e in entries}
+    assert by_mandate[first_mandate]["group_size"] == 2
+    assert by_mandate[second_mandate]["group_size"] == 3
+
+
 def test_every_tool_invocation_is_logged_with_the_arguments_received(mcp_server):
     """A guard that answers inside the tool used to leave no trace at all, so a call the platform made and we
     rejected was indistinguishable from one it never sent. The arguments as received must land in the run log."""

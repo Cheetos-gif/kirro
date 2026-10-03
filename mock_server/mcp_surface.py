@@ -240,8 +240,9 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
             "Enter the user's bid into a booking release's declared-interest pool. release_id: an id such as "
             "rel_badminton_sat. group_size: how many people are coming. min_group_size: the fewest they would "
             "still accept. max_price_paise: their per-person ceiling in paise, so Rs 300 is 30000. "
-            "acceptable_slot_ids is optional; empty means every slot in the release. Never tell the user they are "
-            "in the pool unless this returns success."
+            "mandate_id is the authorization id create_mandate returned earlier in this conversation; pass it so "
+            "this bid binds your own reservation, not another caller's. acceptable_slot_ids is optional; empty "
+            "means every slot in the release. Never tell the user they are in the pool unless this returns success."
         )
     )
     async def declare_interest(
@@ -252,6 +253,9 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         min_group_size: Any = None,
         max_price_paise: Any = None,
         acceptable_slot_ids: Any = None,
+        mandate_id: Any = None,
+        authorization_id: Any = None,
+        user_contact: Any = None,
         run_id: str = DEFAULT_RUN,
         idempotency_key: str | None = None,
     ) -> dict:
@@ -266,6 +270,8 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
                 "min_group_size": min_group_size,
                 "max_price_paise": max_price_paise,
                 "acceptable_slot_ids": acceptable_slot_ids,
+                "mandate_id": mandate_id,
+                "authorization_id": authorization_id,
             },
         )
         listing = await _releases(client, run_id, _first_str(release_id, releaseId, release), None)
@@ -292,6 +298,10 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
                 "group_size, min_group_size and max_price_paise (paise) are required; received "
                 f"group_size={group_size!r}, min_group_size={min_group_size!r}, max_price_paise={max_price_paise!r}"
             )
+        # The model that passes its own mandate_id/authorization_id back disambiguates this bid from a
+        # concurrent caller's on the same release; one that does not falls back to the run's most recently
+        # created mandate, same as before (single-caller runs, including every eval so far, are unaffected).
+        mandate = _first_str(mandate_id, authorization_id) or _LATEST_MANDATE.get(run_id)
         return await _call(
             client,
             "POST",
@@ -299,18 +309,15 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
             run_id=run_id,
             idem=idempotency_key,
             json={
-                # A stable fallback keeps a retry of the same bid from becoming a second pool entry.
-                "declaration_id": f"decl_{run_id}_{resolved}",
+                # Keyed on the mandate so a retry of the same bid stays one pool entry, but two different
+                # callers' bids on the same release - each with their own mandate - no longer collide.
+                "declaration_id": f"decl_{run_id}_{resolved}_{mandate}" if mandate else f"decl_{run_id}_{resolved}",
                 "acceptable_slot_ids": slots_for_bid,
                 "group_size": group,
                 "min_group_size": minimum,
                 "max_price_paise": ceiling,
-                "user_contact": None,
-                # The model does not carry the authorization id from the mandate result into the bid, and the pool
-                # entry is what the allocation captures against, so a bid takes the mandate this run most recently
-                # created — the declare flow reserves immediately before it bids. Exposing it as a parameter only
-                # lengthened the tool's signature, which is what the model's argument emission degrades on.
-                "mandate_id": _LATEST_MANDATE.get(run_id),
+                "user_contact": _first_str(user_contact),
+                "mandate_id": mandate,
             },
         )
 
