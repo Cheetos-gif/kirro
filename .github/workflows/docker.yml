@@ -3,9 +3,16 @@ name: docker
 on:
   push:
     branches: [main]
+    # `k8s/**` cannot affect the image, and `k8s/kustomization.yaml` is exactly what
+    # argocd-image-updater rewrites when it pins a resolved digest. Without this filter every
+    # write-back commit rebuilt the image, and the image's new digest then triggered another
+    # write-back — an endless loop (one commit every ~2 minutes, 2026-10-03). `tests/**` is the same
+    # argument: it is not in the image.
     paths-ignore:
       - "docs/**"
       - "*.md"
+      - "k8s/**"
+      - "tests/**"
 
 permissions:
   contents: read
@@ -13,6 +20,9 @@ permissions:
 
 jobs:
   build-push:
+    # Belt as well as braces: even if the path filter above is ever widened, a commit authored by the
+    # image updater must never cause a rebuild — that is the loop that fed itself.
+    if: github.event.head_commit.author.email != 'noodle@upayan.dev'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

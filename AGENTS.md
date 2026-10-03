@@ -195,13 +195,24 @@ The cluster is GitOps. An ArgoCD Application named `kirro` watches **this repo's
 namespace `kirro` with `selfHeal` and `prune` enabled. So **merging to `main` is the deploy**, and there is no deploy
 step in CI beyond the image build:
 
-- `.github/workflows/docker.yml` builds and pushes `ghcr.io/cheetos-gif/kirro:latest` on every push to `main`.
+- `.github/workflows/docker.yml` builds and pushes `ghcr.io/cheetos-gif/kirro:latest` on every push to `main` —
+  except pushes that touch only `docs/`, `k8s/`, `tests/` or markdown, which cannot change the image. That filter is
+  load-bearing, not tidiness: the image updater pins its digest *into* `k8s/kustomization.yaml`, so a build on a
+  `k8s/`-only commit would produce a new digest that the updater then writes back, triggering another build — a loop
+  (it ran one commit every ~2 minutes before the filter existed). The workflow also refuses to build a commit
+  authored by `noodle@upayan.dev` as a second guard.
 - The Deployment pulls that tag with `imagePullPolicy: Always`, and ArgoCD reconciles `k8s/` from the same commit.
+- **The image pin is written back into `k8s/kustomization.yaml` by argocd-image-updater** (in the cluster repo's
+  `k8s/argocd/applications/apps/kirro.yaml`), which resolves the mutable `latest` digest and commits it here as
+  `noodle <noodle@upayan.dev>`. Those `build: automatic update of kirro` commits are the intended write-back, not
+  something to revert by hand. A push to `main` therefore rolls out on its own, with no rollout restart — and the
+  running revision is recorded in git, which it was not before 2026-10-03. This depends on the `noodle` write
+  deploy key being installed on this repo; if the updater's commits stop appearing, that key is the thing to check.
 - `kubectl apply -k k8s/` **does not stick**: `selfHeal` reverts it within seconds (this cost real debugging time
   once — a manifest change was applied by hand, silently reverted, and the volume mount never took effect). Commit
   manifest changes instead.
 - `kubectl rollout restart deploy/kirro-mock -n kirro` is still the way to force a pod onto a freshly pushed image
-  without a manifest change.
+  without a manifest change — a manual override, not the normal path.
 
 ## Working on this repo (for Claude sessions)
 
