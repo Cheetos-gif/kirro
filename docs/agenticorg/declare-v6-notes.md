@@ -17,11 +17,10 @@ red "Below Floor" badge returns (v4 kept running with it; no other consequence h
 
 Where tool-less turns still come from:
 
-- **The voice bridge's synthetic "Hi".** Every call starts with `greet_caller()` sending `GREETING_OPENER = "Hi"`
-  through the agent (`voice_bridge/agent.py`). v6 answers in one sentence without a tool (0.65). Fix: speak a fixed
-  greeting with `session.say()` and send nothing to AgenticOrg until the caller speaks. This reverses the documented
-  choice that the opening line is agent-authored (`docs/testing.md`, the 60s idle fix), so it needs a decision; the
-  idle protection still holds because `say()` runs immediately.
+- **Fixed 2026-10-03: the voice bridge's synthetic "Hi".** Every call used to start with `greet_caller()` sending
+  `GREETING_OPENER = "Hi"` through the agent, scoring one tool-less turn per call before the caller ever spoke.
+  `greet_caller` now speaks a fixed `GREETING_TEXT` straight through `session.say()` with no AgenticOrg call
+  (`voice_bridge/agent.py`); the 60s idle protection is unchanged (`docs/testing.md`, "Superseded 2026-10-03").
 - **Cumulative transcript re-sends.** On v4, 14 user turns were the previous turn plus more words ("solah ek" →
   "solah ek ek din" → …), each a scored turn and a repeated read-back. Fix in `voice_bridge/agenticorg_llm.py`: send
   only the newest user message, skip an exact repeat, send only the new suffix of a growing one; log every skip.

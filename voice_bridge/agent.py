@@ -40,8 +40,7 @@ from livekit.plugins.gnani import STT as GnaniSTT
 from livekit.plugins.gnani import TTS as GnaniTTS
 
 from logging_.redact import redact_text
-from voice_bridge.agenticorg import AgentChatError
-from voice_bridge.agenticorg_llm import AgenticOrgChat, build_llm
+from voice_bridge.agenticorg_llm import build_llm
 from voice_bridge.config import VoiceConfig
 from voice_bridge.conversation_log import CallLogger, ConversationLogHandler
 
@@ -66,11 +65,17 @@ INSTRUCTIONS = (
     "never invent availability, prices, or confirmation."
 )
 
-# Sent once, before the caller has said anything, so the real AgenticOrg agent's own opening line
-# plays immediately. A caller who doesn't know to speak first sits in silence, and Gnani's streaming
-# STT hard-closes its session after 60s with no detected speech (vendor behaviour, not configurable
-# here) — greeting first means no call ever reaches that idle clock before the caller's first turn.
-GREETING_OPENER = "Hi"
+# Spoken once, before the caller has said anything, so a caller who doesn't know to speak first never sits in
+# silence: Gnani's streaming STT hard-closes its session after 60s with no detected speech (vendor behaviour, not
+# configurable here), and speaking first means no call ever reaches that idle clock before the caller's first turn.
+# Fixed text, spoken directly through TTS with no AgenticOrg call (2026-10-03): the earlier version sent a
+# synthetic "Hi" to the agent as if the caller had said it, which both cost one scored turn per call on whichever
+# agent is live (`docs/agenticorg/declare-v6-notes.md` §1) and put a line in the agent's own conversation thread
+# that the caller never actually spoke.
+GREETING_TEXT = (
+    "Hi, I'm Kirro. Tell me what you'd like to book: the event, the date, how many people, and the "
+    "most you'll pay per person."
+)
 
 
 def build_session(config: VoiceConfig, call_id: str | None = None) -> AgentSession:
@@ -107,25 +112,16 @@ def build_session(config: VoiceConfig, call_id: str | None = None) -> AgentSessi
     )
 
 
-async def greet_caller(
-    llm: AgenticOrgChat, say: Callable[[str], object], call_log: logging.LoggerAdapter | None = None
-) -> None:
-    """Speak the real AgenticOrg agent's own opening line before the caller says anything.
+def greet_caller(say: Callable[[str], object], call_log: logging.LoggerAdapter | None = None) -> None:
+    """Speak a fixed opening line before the caller says anything, with no AgenticOrg call.
 
     `say` is `AgentSession.say`, taken as a callable rather than the session itself so this can be
-    tested without building a real voice pipeline.
+    tested without building a real voice pipeline. Synchronous and cannot fail into silence the way the
+    old agent-authored greeting could if AgenticOrg was unreachable (`docs/testing.md`, 2026-10-02).
     """
     logger = call_log or log
-    try:
-        greeting = await llm.ask(GREETING_OPENER)
-    except AgentChatError as exc:
-        logger.warning("greeting turn failed, starting silent: %s", exc)
-        greeting = ""
-    if greeting:
-        logger.info("spoke opening greeting: %s", redact_text(greeting))
-        say(greeting)
-    else:
-        logger.warning("no greeting to speak, call starts silent")
+    logger.info("spoke opening greeting: %s", redact_text(GREETING_TEXT))
+    say(GREETING_TEXT)
 
 
 def room_publisher(room: rtc.Room, call_log: logging.LoggerAdapter) -> Callable[[str, str], None]:
@@ -357,9 +353,7 @@ async def entrypoint(ctx: JobContext) -> None:
     except Exception as exc:  # noqa: BLE001 - a missing badge must never break the call itself
         call_log.warning("could not publish the call id to the room: %s", exc)
 
-    llm = session.llm
-    assert isinstance(llm, AgenticOrgChat)
-    await greet_caller(llm, session.say, call_log)
+    greet_caller(session.say, call_log)
 
 
 def main() -> None:

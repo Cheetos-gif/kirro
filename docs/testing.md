@@ -280,9 +280,8 @@ Promoted at 26 samples, 0.804 (`POST /agents/{id}/promote` → `active`, version
 DECLARED, and the agent's claim matched; 28 samples at 0.808 afterwards.
 
 **Voice cutover (2026-10-03):** the bridge now drives v6 (`voice_bridge/config.py` `DEFAULT_AGENT_ID`); v4 stays
-`active` until v6 has carried real calls. Still open, with the rest of the work list, in
-`docs/agenticorg/declare-v6-notes.md`: the bridge's synthetic "Hi" opener and cumulative-transcript re-sends are
-scored turns on v6.
+`active` until v6 has carried real calls. The synthetic "Hi" opener is fixed the same day (below); cumulative
+transcript re-sends remain open, tracked in `docs/agenticorg/declare-v6-notes.md`.
 
 **L09's mock caveat, fixed (2026-10-03).** `declare_interest`'s fallback `declaration_id` was keyed only on
 `(run_id, release_id)`, so a second caller's bid on the same release overwrote the first's pool entry and inherited
@@ -492,6 +491,13 @@ the caller's first real turn. No call can now reach 60s of silence before the ca
 agent speak and had a cue to answer. Covered by
 `tests/test_voice_bridge.py::test_greet_caller_speaks_the_agents_own_opening_line` and
 `::test_greet_caller_stays_silent_if_agenticorg_is_unreachable`.
+
+**Superseded 2026-10-03.** The synthetic `"Hi"` was a real user-sized sample on whichever agent is live — one
+scored turn per call, for free, before the caller ever spoke (`docs/agenticorg/declare-v6-notes.md` §1). `greet_caller`
+now speaks a fixed line (`GREETING_TEXT`) straight through `session.say()` with no AgenticOrg call at all; the idle
+protection is unchanged because `say()` still runs before the caller can reach 60s of silence, and it can no longer
+fail into silence the way an unreachable AgenticOrg call could. Covered by
+`tests/test_voice_bridge.py::test_greet_caller_speaks_the_fixed_opening_line_with_no_agenticorg_call`.
 
 **Per-call id and conversation log (2026-10-03).** Debugging the two incidents above meant grepping raw
 `kubectl logs` and writing throwaway repro scripts, because nothing tied a call's turns together and the pod's

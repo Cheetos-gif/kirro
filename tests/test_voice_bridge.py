@@ -290,51 +290,28 @@ def test_the_session_wires_gnani_speech_around_the_agent() -> None:
     assert sample_rate == 16000
 
 
-def test_greet_caller_speaks_the_agents_own_opening_line() -> None:
-    """The agent speaks first, and what it says is AgenticOrg's real reply, not invented text."""
-    from voice_bridge.agent import GREETING_OPENER, greet_caller
+def test_greet_caller_speaks_the_fixed_opening_line_with_no_agenticorg_call() -> None:
+    """The greeting is spoken immediately and costs no scored turn on whichever agent is live
+    (docs/agenticorg/declare-v6-notes.md section 1) — no HTTP call happens at all."""
+    from voice_bridge.agent import GREETING_TEXT, greet_caller
 
-    platform = _Platform(answer="Hello! What would you like to book today?")
-    llm = AgenticOrgChat(client=platform.chat())
     spoken: list[str] = []
 
-    _run(greet_caller(llm, spoken.append))
+    greet_caller(spoken.append)
 
-    assert spoken == ["Hello! What would you like to book today?"]
-    assert platform.queries[0]["body"]["query"] == GREETING_OPENER
-    # the greeting is turn one, so it must not carry a thread_id yet
-    assert "thread_id" not in platform.queries[0]["body"]
-    _run(llm.aclose())
-
-
-def test_greet_caller_stays_silent_if_agenticorg_is_unreachable() -> None:
-    """A failed greeting must not crash the call; the caller can still speak first instead."""
-    from voice_bridge.agent import greet_caller
-
-    platform = _Platform(fail_query=True)
-    llm = AgenticOrgChat(client=platform.chat())
-    spoken: list[str] = []
-
-    _run(greet_caller(llm, spoken.append))
-
-    assert spoken == []
-    _run(llm.aclose())
+    assert spoken == [GREETING_TEXT]
 
 
 def test_greet_caller_logs_what_it_spoke(caplog: pytest.LogCaptureFixture) -> None:
     """The greeting is the one line spoken before any caller turn exists to log on its own."""
     import logging
 
-    from voice_bridge.agent import greet_caller
-
-    platform = _Platform(answer="Hello! What would you like to book today?")
-    llm = AgenticOrgChat(client=platform.chat())
+    from voice_bridge.agent import GREETING_TEXT, greet_caller
 
     with caplog.at_level(logging.INFO, logger="voice_bridge.agent"):
-        _run(greet_caller(llm, lambda _: None))
+        greet_caller(lambda _: None)
 
-    assert any("Hello! What would you like to book today?" in r.message for r in caplog.records)
-    _run(llm.aclose())
+    assert any(GREETING_TEXT in r.message for r in caplog.records)
 
 
 def test_pipeline_error_is_logged_as_one_structured_line(caplog: pytest.LogCaptureFixture) -> None:
