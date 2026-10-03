@@ -53,6 +53,7 @@ plus exits `Cancelled, Released, Failed, Expired`), not the 19-state oracle mach
 - L07 and L17 are the same underlying gap (a mandate created but never pooled, from a drop between "yes" and
   `declare_interest`) viewed from each side — Declare Agent and Workflow. Both are explicitly flagged rather than
   assumed handled; `agent-spec.md` §7 names the concrete fix candidate (`release` tool on Kirro Declare).
-- Running these requires: the live agent built (ADR-011 §8 steps 6–7), `AGENTICORG_API_KEY` or a scripted
-  phone/WhatsApp channel to drive turns, and the mock server deployed publicly. None of that exists yet — this file
-  is the test plan, not a report of results.
+- This file is the test plan; results live in `docs/testing.md`. L01–L10 were run against `Kirro Declare v6` on
+  2026-10-03 through the chat API, one fresh thread per case, with verdicts from the mock log ("Kirro Declare v6").
+  Declarations need a release whose `declarations_open` is `true`: every seeded fixture release has already opened,
+  so those runs used `rel_0002` (tennis, 10 October) and `rel_0003` (badminton, 11 October) in run `default`.

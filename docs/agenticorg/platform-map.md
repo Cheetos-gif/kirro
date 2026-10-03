@@ -854,8 +854,14 @@ conversation executed the tool.
 
 Creating an agent with `status: "active"` is forced back to `shadow` (201 with `status: shadow`). So the only route
 is: chat enough turns that the computed accuracy clears 0.800, then promote — which then returns
-`{"promoted": true, "from": "shadow", "to": "active"}`. Accuracy climbs with every turn regardless of topic, so
-clean, well-formed declaration turns are the cheapest way up; expect roughly 60–70 turns from a fresh agent.
+`{"promoted": true, "from": "shadow", "to": "active"}`.
+
+**How the score is computed (established 2026-10-03, `docs/testing.md` "Kirro Declare v6").** Per-turn confidence is
+0.85 for every reply after a tool has been attempted in the thread (even a failed one), otherwise 0.60 for a reply of
+at most 100 characters and 0.65 for a longer one; `shadow_accuracy_current` is the mean over all samples. The older
+"accuracy climbs with every turn regardless of topic" reading was a side effect of those runs reaching tools. Tool
+calls are **not** held in shadow any more: `Kirro Declare v6` and `v6-dev` created mandates and pool entries on the
+mock while still in shadow.
 
 ### Connector schema changes need re-registration, then a health check
 
@@ -911,6 +917,9 @@ experiment; both are now trimmed to a demo-ready state:
   `stripe`, `tally`, `zoho_books`, `gstn`, `banking_aa`).
 - **Agents:** `Kirro Declare v2`, `v3` and `Kirro` retired and deleted; **`Kirro Declare v4`** (`27ec9d3c`) and
   **`Kirro Allocator`** (`5591e57a`) remain, both `active`. The five platform built-ins are untouched.
+  Added 2026-10-03: **`Kirro Declare v6`** (`6596b872-abb5-465a-87d3-fff8de17536d`, `active`, six tools on
+  `mcp_kirro_all_v22` including `cancel_declaration`) and the development copy `Kirro Declare v6-dev`
+  (`69766e00-a725-40e2-8c46-fbfec611a0e1`, `shadow`). The voice bridge still targets v4.
 - **Workflow:** one, `Kirro Window Allocation`, `Trigger | schedule`.
 
 ## 11. Tool arguments: what arrives, what the mock resolves, and what the platform withholds
