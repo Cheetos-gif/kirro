@@ -51,7 +51,10 @@ it). Keyed per run by `release_id → declaration_id → bid`:
 - `POST /venue/releases/{release_id}/declarations` — body carries the bid: `declaration_id?` (generated if absent),
   `user_contact?`, `mandate_id?`, `acceptable_slot_ids[]`, `group_size`, `min_group_size`, `max_price_paise`,
   plus any extra fields. Required int fields and a non-empty `acceptable_slot_ids` are validated → 400 `BAD_REQUEST`;
-  unknown release → 404 `NOT_FOUND`. Returns `{declaration_id, release_id, status: "DECLARED"}`.
+  unknown release → 404 `NOT_FOUND`, a closed release (see `declarations_open` below) → 409 `POOL_CLOSED`.
+  Returns `{declaration_id, release_id, status: "DECLARED"}`; a second call with the **same**
+  `declaration_id` is a no-op (the stored bid is not overwritten) and returns the same body plus
+  `duplicate: true`, so a caller can tell a retry from a first success.
 - `GET /venue/releases/{release_id}/declarations` — returns `{release_id, declarations: [...]}`, every entry carrying
   its declared fields plus `status: "DECLARED"` (this is the Workflow's `list_pool_entries`).
 - `DELETE /venue/releases/{release_id}/declarations/{declaration_id}` — removes the entry, 404 `NOT_FOUND` if absent.
@@ -72,12 +75,18 @@ Each event carries an `organiser_id` and a `status` (`draft`|`published`); each 
 
 Both release routes also carry `declarations_open` (MOCK field): `true` only for a `fair_draw` release whose
 `opens_at` is still in the future, computed from the wall clock at request time. The draw runs when the window
-opens, so a release past `opens_at` can no longer be declared on; the agent reads this field instead of doing date
-arithmetic. The detail route also carries the release's `date`. On the MCP surface, an event word (`"tennis"`)
-passed to `get_release` or `declare_interest` that matches several releases resolves to the one whose
+opens, so a release past `opens_at` can no longer be declared on — the agent reads this field instead of doing
+date arithmetic, and `POST .../declarations` enforces it server-side (409 `POOL_CLOSED` above). A fresh run's
+catalogue fixture is seeded with dates computed relative to that seed's own clock (`mock_server/state.py`
+`_seed_domain`), not pinned to a calendar date, so its releases are open right after a reset regardless of when
+that happens to be. The detail and listing routes also carry: the release's `date`; `weekday` (its day name,
+MOCK field, so the agent never reads one back wrong); `opens_at_ist` (`opens_at` converted to IST, a fixed
+UTC+5:30 offset, MOCK field, so the agent does not do that arithmetic either); and
+`min_price_per_person_paise` (the cheapest slot's price, MOCK field, so the agent can tell a bidder their
+ceiling is below every slot without computing it). On the MCP surface, an event word (`"tennis"`) passed to
+`get_release` or `declare_interest` that matches several releases resolves to the one whose
 `declarations_open` is `true` when exactly one is; otherwise the tool answers with the candidate list, dates
-included. The REST pool route does not refuse a closed release yet — that refusal is deliberately not in place
-while every seeded fixture release is past its `opens_at`.
+included.
 
 - `GET /venue/organisers?status=` — `{organisers: [...]}`, each `{organiser_id, name, contact, status, requested_by}`.
 - `POST /venue/organisers` — self-serve request; body `{name, contact, requested_by}` (all non-empty strings).
@@ -249,6 +258,15 @@ assertions.
 Logs: `logs/mock/<run_id>.jsonl` with ts, request_id, upstream_request_id, path, target, scenario, request, response,
 status, latency_ms. Each line is also written to stdout, the only channel the cluster's log agent ships to Loki; the
 file under `MOCK_LOG_DIR` remains the record of authority (the stdout line carries no `run_id`, only the file name does).
+
+**`/__admin/*` answered unauthenticated on the public mock URL** (`https://api-kirro.upayan.dev/__admin/state`
+returned 200 from anywhere — #12 item 2). `MOCK_ADMIN_KEY`, when set, gates every `/__admin/*` call behind a
+matching `X-Admin-Key` header (`mock_server/app.py` `_admin_key_denied`); a mismatch or missing header is 403
+`FORBIDDEN`. Unset — the state until an operator provisions it — is a no-op, so a cluster without the key keeps
+working exactly as before. To turn it on: add a `MOCK_ADMIN_KEY` key to a `kirro-mock-admin` Secret (ksops, same
+pattern as `kirro-voice` in the cluster repo's `k8s/apps/kirro/secrets/`), restart `kirro-mock`
+(`k8s/deployments.yaml` wires it in as `optional: true`), and set the same value as `X-Admin-Key` on every
+harness `/__admin` call thereafter. The agent is never told this header exists.
 
 ## Failure and retry behaviour
 

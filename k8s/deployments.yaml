@@ -66,6 +66,15 @@ spec:
             # allowed or every MCP call is a 421 (ADR-012). Update when the host changes.
             - name: MOCK_ALLOWED_HOSTS
               value: api-kirro.upayan.dev,kirro-mock,kirro-mock:*,localhost,localhost:*,127.0.0.1,127.0.0.1:*
+            # Gates /__admin/* behind a matching X-Admin-Key header (#12 item 2: the surface answered
+            # unauthenticated on the public mock URL). `optional: true` so this Deployment still comes
+            # up before the Secret/key exists; the guard itself (mock_server/app.py) is a no-op until
+            # MOCK_ADMIN_KEY is actually set. Provision `kirro-mock-admin/MOCK_ADMIN_KEY` (ksops, same
+            # pattern as `kirro-voice` in the cluster repo's `k8s/apps/kirro/secrets/`) to turn it on,
+            # then set the same value as X-Admin-Key on every harness /__admin call.
+            - name: MOCK_ADMIN_KEY
+              valueFrom:
+                secretKeyRef: { name: kirro-mock-admin, key: MOCK_ADMIN_KEY, optional: true }
           volumeMounts:
             - name: data
               mountPath: /app/data

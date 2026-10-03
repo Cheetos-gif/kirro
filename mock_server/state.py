@@ -29,10 +29,27 @@ import sqlite3
 import sys
 import threading
 from collections import deque
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator, MutableMapping
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+# `catalogue.json`'s dates are authored relative to this instant (its own earliest `opens_at`), not
+# to the wall clock. A run seeded straight off those dates eventually seeds a release that is
+# permanently in the past (#12 item 3: "every seeded fixture release is already past its window").
+# `_seed_domain` shifts every date/opens_at/starts_at by the same delta so their relative spacing
+# (same-day slots, a release opening the day before its date) survives, while guaranteeing the
+# declare window is open for `_SEED_LEAD` past whenever a run actually gets seeded.
+_FIXTURE_ANCHOR = datetime(2026, 10, 2, 6, 0, 0, tzinfo=timezone.utc)
+_SEED_LEAD = timedelta(hours=27)
+
+
+def _shift_iso(value: str, delta: timedelta) -> str:
+    dt = datetime.fromisoformat(value.replace("Z", "+00:00")) + delta
+    return dt.isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
 SCENARIOS = {
     "success",
     "no_inventory",
@@ -370,8 +387,18 @@ class MockState:
         }
         for event in self.catalogue["events"]:
             state.events[event["event_id"]] = {**event, "organiser_id": "org_seed", "status": "published"}
+        # Fixture dates are shifted relative to this seed's own "now" (see `_FIXTURE_ANCHOR` above),
+        # not copied verbatim, so a release's declare window is open right after a reset regardless
+        # of how much wall-clock time has passed since the fixture was authored.
+        delta = (datetime.now(timezone.utc) + _SEED_LEAD) - _FIXTURE_ANCHOR
         for release in self.catalogue["releases"]:
-            state.releases[release["release_id"]] = {**release, "allocation_mode": "fair_draw"}
+            state.releases[release["release_id"]] = {
+                **release,
+                "date": (datetime.fromisoformat(release["date"]) + delta).date().isoformat(),
+                "opens_at": _shift_iso(release["opens_at"], delta),
+                "allocation_mode": "fair_draw",
+                "slots": [{**slot, "starts_at": _shift_iso(slot["starts_at"], delta)} for slot in release["slots"]],
+            }
 
     def reset(self, run_id: str | None = None) -> None:
         if run_id:

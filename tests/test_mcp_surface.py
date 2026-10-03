@@ -517,9 +517,10 @@ def _future_tennis_release(base, date, key):
 
 
 def test_an_event_word_resolves_to_the_one_release_still_open(mcp_base):
-    """ "tennis" matches the past fixture release and any future one. The agent must land on the one that can still
-    take declarations, through both the lookup and the bid; with two open, it gets the list with dates instead."""
-    open_id = _future_tennis_release(mcp_base, "2099-01-10", "t1")
+    """ "tennis" matches `rel_tennis_sat` alone right after a reset — the fixture is seeded with an open
+    declare window (#12 item 3), not a past one — so the word resolves to it without ambiguity; a second
+    open "tennis" release then makes the word ambiguous, and the tool must list candidates instead of
+    guessing, through both the lookup and the bid."""
 
     async def go():
         async with session(f"{mcp_base}/venue/mcp") as s:
@@ -531,7 +532,7 @@ def test_an_event_word_resolves_to_the_one_release_still_open(mcp_base):
                         "release_id": "tennis",
                         "group_size": 2,
                         "min_group_size": 2,
-                        "max_price_paise": 50000,
+                        "max_price_paise": 60000,
                         "run_id": "mcp",
                     },
                 )
@@ -539,11 +540,11 @@ def test_an_event_word_resolves_to_the_one_release_still_open(mcp_base):
             return looked, bid
 
     looked, bid = asyncio.run(go())
-    assert looked["status_code"] == 200 and looked["body"]["release_id"] == open_id
+    assert looked["status_code"] == 200 and looked["body"]["release_id"] == "rel_tennis_sat"
     assert looked["body"]["declarations_open"] is True
-    assert bid["body"]["release_id"] == open_id and bid["body"]["status"] == "DECLARED"
+    assert bid["body"]["release_id"] == "rel_tennis_sat" and bid["body"]["status"] == "DECLARED"
 
-    _future_tennis_release(mcp_base, "2099-02-10", "t2")
+    second_id = _future_tennis_release(mcp_base, "2099-02-10", "t2")
 
     async def ambiguous():
         async with session(f"{mcp_base}/venue/mcp") as s:
@@ -551,4 +552,4 @@ def test_an_event_word_resolves_to_the_one_release_still_open(mcp_base):
 
     listed = asyncio.run(ambiguous())
     assert listed["status_code"] == 404
-    assert {item["date"] for item in listed["body"]["releases"]} == {"2026-10-03", "2099-01-10", "2099-02-10"}
+    assert {item["release_id"] for item in listed["body"]["releases"]} == {"rel_tennis_sat", second_id}
