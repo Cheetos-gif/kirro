@@ -830,6 +830,20 @@ def create_app(log_dir: str | None = None) -> FastAPI:
             window_starts_at = body.get("declare_window_starts_at")
             if window_starts_at is not None and not isinstance(window_starts_at, str):
                 return err(400, "BAD_REQUEST", "declare_window_starts_at must be an ISO timestamp string")
+            # A timestamp that does not parse is not cosmetic: `declarations_open` treats an
+            # unreadable one as closed, so a release created with a typo'd `opens_at` would silently
+            # never accept a declaration (#35's class of bug — accepted, then unwinnable, with no
+            # signal). Reject it here instead, where the caller can still fix it.
+            try:
+                _parse_iso(opens_at)
+                if window_starts_at is not None:
+                    _parse_iso(window_starts_at)
+            except ValueError:
+                return err(
+                    400,
+                    "BAD_REQUEST",
+                    "opens_at and declare_window_starts_at must be ISO timestamps (e.g. 2026-10-03T06:00:00Z)",
+                )
             raw_slots = body.get("slots")
             if not isinstance(raw_slots, list) or not raw_slots:
                 return err(400, "BAD_REQUEST", "slots must be a non-empty list")

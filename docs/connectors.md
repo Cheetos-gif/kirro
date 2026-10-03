@@ -123,8 +123,11 @@ included.
   `status: "draft"` unless `status` is given.
 - `PATCH /venue/events/{id}` — partial update of `name|aliases|generic_aliases|fulfilment|status`; any other key →
   400 `BAD_REQUEST`; unknown id → 404.
-- `POST /venue/releases` — body `{event_id, date, opens_at, slots: [{slot_id?, label, starts_at, capacity, price_per_person_paise}], allocation_mode?}`. Unknown event → 404; invalid mode/empty slots/non-positive
-  capacity or price → 400. `slot_id` is generated when omitted.
+- `POST /venue/releases` — body `{event_id, date, opens_at, slots: [{slot_id?, label, starts_at, capacity, price_per_person_paise}], allocation_mode?, declare_window_starts_at?}`. Unknown event → 404; invalid mode/empty slots/non-positive
+  capacity or price → 400. `slot_id` is generated when omitted. `declare_window_starts_at` is optional and
+  delays the window start (see `declarations_open` below). `opens_at` and `declare_window_starts_at` must each
+  be a **parseable** ISO timestamp: an unreadable one would be stored and then read as "closed" forever, so a
+  release created with a typo'd timestamp would silently never accept a declaration.
 - `POST /venue/releases/{id}/buy` — **instant_buy only.** One call: checks capacity, creates the hold, captures
   `quantity x price_per_person_paise` against the `mandate_id` in the body, confirms the booking. Returns
   `{release_id, slot_id, quantity, hold_id, payment_id, booking_ref, status: "CONFIRMED", amount_paise}`. A

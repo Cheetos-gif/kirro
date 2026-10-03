@@ -576,6 +576,22 @@ def test_release_rejects_a_non_string_window_start(mock_client):
     assert r.status_code == 400 and r.json()["error"]["code"] == "BAD_REQUEST"
 
 
+@pytest.mark.parametrize(
+    "over",
+    [
+        {"opens_at": "next Tuesday"},
+        {"declare_window_starts_at": "soon"},
+    ],
+)
+def test_release_rejects_a_timestamp_that_does_not_parse(mock_client, over):
+    """An unreadable `opens_at` is not cosmetic: `declarations_open` treats a bad timestamp as closed,
+    so the release would silently never accept a declaration (#35's class of bug). Rejected at
+    creation, where the caller can still fix it."""
+    body = instant_release_body(event_id="ev_tennis", date="2026-11-01", allocation_mode="fair_draw", **over)
+    r = mock_client.post("/venue/releases", json=body, headers=H(key="r1"))
+    assert r.status_code == 400 and r.json()["error"]["code"] == "BAD_REQUEST"
+
+
 def test_create_release_returns_the_same_shape_as_get_release(mock_client):
     """The create response carries the computed fields (`declarations_open`, `weekday`, …) too, not
     the raw stored document — otherwise a caller has to re-read a release it just made to find out
