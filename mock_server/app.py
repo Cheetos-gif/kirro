@@ -24,6 +24,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from allocator.engine import Bid, Slot, allocate
 from logging_.redact import redact
 from mock_server.mcp_surface import build_surfaces, transport_security
+from mock_server.pinelabs_plural import get_real_pinelabs_client
 from mock_server.state import SCENARIOS, MockState, RunState
 
 Handler = Callable[[str, dict, RunState], tuple[int, Any]]
@@ -92,8 +93,20 @@ def capture(run: RunState, auth_id: str, amount: Any, sc: str, user_contact: str
         # Portal-initiated captures carry the buyer's contact so /__admin/state can answer "what did this
         # user pay for" without a per-user business route (ADR-015 dashboard).
         payment["user_contact"] = user_contact
+    # Optional real call-out (ADR-019): disabled (None) unless PINELABS_CLIENT_ID/SECRET are set, so this
+    # is a no-op in every offline test. Never blocks or changes the mock's own response on failure.
+    real_order = get_real_pinelabs_client().create_order(amount, pid)
+    response: dict[str, Any] = {
+        "payment_id": pid,
+        "status": "SUCCESS",
+        "receipt_id": f"rcpt_{pid}",
+        "amount": money(amount),
+    }
+    if real_order is not None:
+        payment["real_order"] = real_order
+        response["real_order"] = real_order
     run.payments[pid] = payment
-    return 200, {"payment_id": pid, "status": "SUCCESS", "receipt_id": f"rcpt_{pid}", "amount": money(amount)}
+    return 200, response
 
 
 def create_app(log_dir: str | None = None) -> FastAPI:
@@ -858,7 +871,20 @@ def create_app(log_dir: str | None = None) -> FastAPI:
             if not p:
                 return err(404, "NOT_FOUND", "payment not found")
             p["refunded"] = True
-            return 200, {"refund_id": run.next_id("rf"), "payment_id": payment_id, "status": "REFUNDED"}
+            response: dict[str, Any] = {
+                "refund_id": run.next_id("rf"),
+                "payment_id": payment_id,
+                "status": "REFUNDED",
+            }
+            # Optional real call-out (ADR-019): only fires if this payment's capture placed a real
+            # UAT order; disabled or order-less otherwise, so a mocked-only run is unaffected.
+            real_order = p.get("real_order") or {}
+            order_id = real_order.get("order_id")
+            if order_id:
+                real_refund = get_real_pinelabs_client().create_refund(order_id, p["amount"], payment_id)
+                if real_refund is not None:
+                    response["real_refund"] = real_refund
+            return 200, response
 
         return await serve(request, "pinelabs.refund", h)
 

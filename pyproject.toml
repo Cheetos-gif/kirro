@@ -16,6 +16,7 @@ dependencies = [
   "livekit-agents>=1.8",
   "livekit-plugins-gnani>=1.8",
   "livekit-plugins-silero>=1.8.4",
+  "pinelabs-python>=0.2.1",
 ]
 
 [dependency-groups]

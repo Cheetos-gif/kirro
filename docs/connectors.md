@@ -6,16 +6,16 @@ Verification dates refer to the Opus plan pass (2026-10-01) unless a different s
 
 ## Summary
 
-| Connector                              | Kind in repo                                          | Mode            | In this repo | Label                                                                               |
-| -------------------------------------- | ----------------------------------------------------- | --------------- | ------------ | ----------------------------------------------------------------------------------- |
-| Venue inventory + holds + declare pool | mock (budgeted, 1 of 3)                               | mock            | yes          | MOCK REQUIRED (no rail offers time-boxed holds)                                     |
-| Pine Labs order/payment-link/refund    | real, native AgenticOrg connector (`pinelabs_plural`) | real (platform) | no           | REAL — already connected in the AgenticOrg tenant                                   |
-| Pine Labs mandate hold/release         | mock (budgeted, 1 of 3)                               | mock            | yes          | MOCK REQUIRED (no AgenticOrg or Pine Labs connector exposes authorize/hold/release) |
-| Vachana (Gnani.ai STT/TTS)             | real, custom AgenticOrg connector                     | real (platform) | no           | DOCUMENTED (`api.vachana.ai`, PyPI `gnani-vachana`, `docs.gnani.ai`)                |
-| Twilio (call leg)                      | real, native AgenticOrg connector                     | n/a (platform)  | no           | REAL — in AgenticOrg catalog (`make_call`, `send_sms`, `send_whatsapp`)             |
-| Delhivery Express                      | mock, mandatory, additional to the 3-slot budget      | mock            | yes          | MOCK REQUIRED (competition rule); paths DOCUMENTED                                  |
-| DIFD allocator (fair draw)             | mock/internal (budgeted, 1 of 3)                      | mock            | yes          | KIRRO-owned; never an external capability (ADR-002)                                 |
-| Delhivery Maps MCP                     | not built                                             | -               | no           | REAL per plan (stretch, dropped — see ADR-010)                                      |
+| Connector                              | Kind in repo                                                   | Mode               | In this repo  | Label                                                                                                                                                                |
+| -------------------------------------- | -------------------------------------------------------------- | ------------------ | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Venue inventory + holds + declare pool | mock (budgeted, 1 of 3)                                        | mock               | yes           | MOCK REQUIRED (no rail offers time-boxed holds)                                                                                                                      |
+| Pine Labs order/refund (UAT)           | real, official `pinelabs-python` SDK called from `mock_server` | real (UAT sandbox) | yes (ADR-019) | REAL, optional — env-gated, off by default; the AgenticOrg `pinelabs_plural` connector itself is registered but uncredentialed and unused (`has_credentials: false`) |
+| Pine Labs mandate hold/release         | mock (budgeted, 1 of 3)                                        | mock               | yes           | MOCK REQUIRED (no AgenticOrg or Pine Labs connector exposes authorize/hold/release)                                                                                  |
+| Vachana (Gnani.ai STT/TTS)             | real, custom AgenticOrg connector                              | real (platform)    | no            | DOCUMENTED (`api.vachana.ai`, PyPI `gnani-vachana`, `docs.gnani.ai`)                                                                                                 |
+| Twilio (call leg)                      | real, native AgenticOrg connector                              | n/a (platform)     | no            | REAL — in AgenticOrg catalog (`make_call`, `send_sms`, `send_whatsapp`)                                                                                              |
+| Delhivery Express                      | mock, mandatory, additional to the 3-slot budget               | mock               | yes           | MOCK REQUIRED (competition rule); paths DOCUMENTED                                                                                                                   |
+| DIFD allocator (fair draw)             | mock/internal (budgeted, 1 of 3)                               | mock               | yes           | KIRRO-owned; never an external capability (ADR-002)                                                                                                                  |
+| Delhivery Maps MCP                     | not built                                                      | -                  | no            | REAL per plan (stretch, dropped — see ADR-010)                                                                                                                       |
 
 Mode is decided by ADR-010; the repo no longer carries a connector-mode config file (`config/connectors.yaml` was
 removed with the AgenticOrg migration — see ADR-011). What this repo runs is `mock_server/`; the real connectors are
@@ -38,7 +38,9 @@ idempotency and request logging work:
   subsection).
 - **Pine Labs mandate** (capability 2 of 3): `POST /pinelabs/mandates`, `GET /pinelabs/mandates/{id}/balance`,
   `POST /pinelabs/mandates/{id}/execute`, `POST /pinelabs/mandates/{id}/release`,
-  `POST /pinelabs/payments/{id}/refund`.
+  `POST /pinelabs/payments/{id}/refund`. The execute/refund responses additionally carry `real_order`/
+  `real_refund` when `PINELABS_CLIENT_ID`/`PINELABS_CLIENT_SECRET` are set (ADR-019) — absent by default and in
+  every test.
 - **DIFD draw** (capability 3 of 3): `POST /allocator/draw`.
 - **Delhivery Express** (mandatory, additional): `GET /delhivery/c/api/pin-codes/json/`,
   `POST /delhivery/api/cmu/create.json`, `GET /delhivery/api/v1/packages/json/`.
@@ -185,26 +187,43 @@ sides *different* run ids, or they will not see each other's pool. Single writer
 
 ## Pine Labs
 
-- **Native on AgenticOrg**: `Pine Labs (Plural)` connector, already registered and active in this tenant as
-  `pinelabs_plural` (`Auth: API_KEY`). Tools: `create_order, create_payment_link, get_order_status, get_payout_analytics, get_settlement_report, initiate_refund`. A second native connector, `Pinelabs Online payment` (QR `create_payment/create_qr_transaction/check_payment_status/cancel_payment/cancel_qr_transaction/ get_qr_transaction_status`), exists but is not registered in this tenant. Use `pinelabs_plural` for the real
-  charge/order/refund leg.
-- **Gap (why we still mock)**: none of the above is an authorize-then-hold-then-capture-or-release primitive.
-  KIRRO's mandate (reserve `group_size x max_price`, hold, capture \<= ceiling, release unused) has no native
-  match — see ADR-010 decision 2.
-- **Verified from package source** (`pinelabs-online-p3p-server-sdk` 1.3.0, import `pinelabs_p3p_server`, inspected from
-  the PyPI wheel): server instance methods `create_mandate`, `get_mandate`, `get_mandate_balance`, `revoke_mandate`,
-  `capture`, `create_refund`; REST paths `POST /mpp/v1/pre-authorize`, `GET /mpp/v1/authorization/{id}`,
-  `GET /mpp/v1/balance`, `POST /mpp/v1/revoke`, `POST /api/pay/v1/refunds/{order_id}`; sandbox base
-  `https://pluraluat.v2.pinepg.in`; config needs `clientId`, `clientSecret`, `merchantId`, `paymentGateway`,
-  `availablePaymentMethods`. Env names (`PINELABS_CLIENT_ID`, ...) are from the plan, not the package. This SDK
-  path is a fallback only if the mandate mock needs a real-shaped reference; the primary real path is the native
-  AgenticOrg `pinelabs_plural` connector above.
-- **Correction to the plan**: the client SDK (`pinelabs-online-p3p-client-sdk` 1.3.0) no longer creates mandates; it only
-  creates payment tokens bound to a 402 challenge (`client.methods.create_token`). Charging is a two-party flow
-  (server challenge -> client token -> server `capture`). The mock's single `execute_charge` call is a simplification.
+- **AgenticOrg's own `pinelabs_plural` connector is registered but not actually wired.** Live `GET /api/v1/connectors` on the tenant (2026-10-03, `docs/agenticorg/platform-map.md` §14): `status: active` but
+  `has_credentials: false`, `base_url: ""`, `health_check_at: null` — a catalog placeholder, never given real
+  keys. Tools advertised: `create_order, check_order_status` (two, not the six ADR-010 originally recorded). No
+  code in this repo calls it; it is unused.
+- **Gap (why the mandate stays mocked)**: neither `pinelabs_plural` nor the wider Plural API has an
+  authorize-then-hold-then-capture-or-release primitive. KIRRO's mandate (reserve `group_size x max_price`,
+  hold, capture \<= ceiling, release unused) has no native match — see ADR-010 decision 2. This is unchanged;
+  `create_mandate`, `get_mandate_balance` and `release` are pure mock regardless of what follows.
+- **REAL, optional (ADR-019, 2026-10-03): a direct call-out from `mock_server` itself**, not through
+  AgenticOrg. The official SDK is `pinelabs-python` (PyPI, MIT, `docs.pluralonline.com`), OAuth2
+  client_credentials against the free UAT sandbox `https://pluraluat.v2.pinepg.in` ("no production credentials
+  required" per Pine Labs' own quick-start guide). `mock_server/pinelabs_plural.py` wraps it:
+  `PINELABS_CLIENT_ID`/`PINELABS_CLIENT_SECRET` unset (the default, and every test) means zero network calls;
+  set, a successful `pinelabs.execute`/`venue.buy` capture also places a real UAT `orders.create_order`, and a
+  `pinelabs.refund` against that payment also places a real UAT `refunds.create_refund`. Results are attached
+  as `real_order`/`real_refund` on the response and the payment record; a failed or unreachable sandbox is
+  caught and returned as `{"error": ...}`, never raised — it cannot fail the mock's own response.
+  **Verified live, 2026-10-03**, with real UAT test-mode credentials (Pine Labs dashboard -> Test Mode ->
+  Settings -> Credentials; the live-mode tab stays KYC-gated): a real capture placed a real order
+  (`201 Created`, `order_id: v1-261003174706-aa-9NHfQ9`). A refund attempt against it returned a real
+  `404 ORDER_NOT_FOUND`, caught as `real_refund.error` — expected, since the order was never paid through
+  Plural's own checkout (`challenge_url`); KIRRO's capture moves money through its own mandate mock, not
+  Plural's checkout. **SDK bug found and worked around**: `pinelabs-python` 0.2.1's client wrapper
+  unconditionally sets `Authorization: Bearer {token}`, so its own documented `token=""` bootstrap sends
+  `Bearer ` (empty, trailing space) and `httpx`/`h11` reject it before the request leaves the process —
+  `mock_server/pinelabs_plural.py` fetches the token with a plain `httpx` POST instead, then hands the SDK a
+  real token for every other call. Offline tests stub the transport
+  (`tests/test_mock_server.py::test_pinelabs_real_callout_*`).
+- **Superseded investigation, kept for history**: an earlier pass inspected a different package,
+  `pinelabs-online-p3p-server-sdk` 1.3.0 (`pinelabs_p3p_server`), whose server instance exposed
+  `create_mandate`/`get_mandate`/`revoke_mandate`/`capture`/`create_refund` against the same UAT base URL. That
+  package is not what `pinelabs-python` (used above) is, and was never wired in; it is not a dependency of this
+  repo.
 - Mock endpoints (inline KIRRO mock contract in `mock_server/app.py`): `POST /pinelabs/mandates`, `GET .../{id}/balance`,
   `POST .../{id}/execute`, `POST .../{id}/release`, `POST /pinelabs/payments/{id}/refund`. Names `authorizationId`,
-  `Amount(value, currency)`, `RESERVE_PAY` mirror documented names; response bodies are KIRRO mock shapes.
+  `Amount(value, currency)`, `RESERVE_PAY` mirror documented names; response bodies are KIRRO mock shapes, plus
+  the optional real-call fields above.
 
 ## Vachana (Gnani.ai voice)
 

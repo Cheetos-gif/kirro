@@ -173,6 +173,81 @@ def test_payment_failure_body(mock_client):
     assert r["status"] == "FAILED" and r["reason"] == "BANK_DECLINED"
 
 
+def test_pinelabs_real_callout_is_a_noop_when_unconfigured(mock_client):
+    """Default state, and every other test in this file: no PINELABS_CLIENT_ID/SECRET, so the
+    capture/refund responses carry no `real_order`/`real_refund` key at all (ADR-019) — this is
+    the regression test that guards `uv run pytest` staying network-free."""
+    m = mock_client.post("/pinelabs/mandates", json={"amount": {"value": 100000}}, headers=H()).json()
+    p = mock_client.post(
+        f"/pinelabs/mandates/{m['authorizationId']}/execute", json={"amount": {"value": 50000}}, headers=H(key="e")
+    ).json()
+    assert p["status"] == "SUCCESS" and "real_order" not in p
+    r = mock_client.post(f"/pinelabs/payments/{p['payment_id']}/refund", headers=H(key="rf")).json()
+    assert r["status"] == "REFUNDED" and "real_refund" not in r
+
+
+def test_pinelabs_real_callout_fronts_capture_and_refund(mock_client, monkeypatch):
+    """With real credentials configured (stubbed transport, no real network — ADR-019), a
+    successful capture also places a real UAT order and a refund places a real UAT refund,
+    surfaced as `real_order`/`real_refund` alongside the mock's own response."""
+    import httpx
+
+    import mock_server.app as app_module
+    from mock_server.pinelabs_plural import RealPinelabsClient
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/token"):
+            return httpx.Response(200, json={"access_token": "tok", "expires_at": "2099-01-01T00:00:00Z"})
+        if "refunds" in request.url.path:
+            return httpx.Response(200, json={"data": {"order_id": "rf_real_1", "status": "REFUND_INITIATED"}})
+        return httpx.Response(200, json={"data": {"order_id": "ord_real_1", "status": "CREATED"}})
+
+    stub = RealPinelabsClient(
+        client_id="cid",
+        client_secret="csecret",
+        base_url="https://stub.local",
+        httpx_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    monkeypatch.setattr(app_module, "get_real_pinelabs_client", lambda: stub)
+
+    m = mock_client.post("/pinelabs/mandates", json={"amount": {"value": 100000}}, headers=H()).json()
+    p = mock_client.post(
+        f"/pinelabs/mandates/{m['authorizationId']}/execute", json={"amount": {"value": 50000}}, headers=H(key="e")
+    ).json()
+    assert p["status"] == "SUCCESS" and p["real_order"] == {"order_id": "ord_real_1", "status": "CREATED"}
+    r = mock_client.post(f"/pinelabs/payments/{p['payment_id']}/refund", headers=H(key="rf")).json()
+    assert r["status"] == "REFUNDED"
+    assert r["real_refund"] == {"order_id": "rf_real_1", "status": "REFUND_INITIATED"}
+
+
+def test_pinelabs_real_callout_failure_does_not_break_the_mock_response(mock_client, monkeypatch):
+    """A flaky/unreachable UAT sandbox must not fail the mock's own capture (ADR-019): the
+    response stays 200 SUCCESS, with the real-call error surfaced, not raised."""
+    import httpx
+
+    import mock_server.app as app_module
+    from mock_server.pinelabs_plural import RealPinelabsClient
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/token"):
+            return httpx.Response(200, json={"access_token": "tok", "expires_at": "2099-01-01T00:00:00Z"})
+        return httpx.Response(400, json={"error_code": "BAD_REQUEST", "message": "nope"})
+
+    stub = RealPinelabsClient(
+        client_id="cid",
+        client_secret="csecret",
+        base_url="https://stub.local",
+        httpx_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    monkeypatch.setattr(app_module, "get_real_pinelabs_client", lambda: stub)
+
+    m = mock_client.post("/pinelabs/mandates", json={"amount": {"value": 100000}}, headers=H()).json()
+    p = mock_client.post(
+        f"/pinelabs/mandates/{m['authorizationId']}/execute", json={"amount": {"value": 50000}}, headers=H(key="e")
+    ).json()
+    assert p["status"] == "SUCCESS" and "error" in p["real_order"]
+
+
 def test_malformed_returns_html_200_but_processes(mock_client):
     scenario(mock_client, target="venue.hold", s="malformed")
     r = mock_client.post("/venue/releases/rel_badminton_sat/holds", json=hold_body(), headers=H(key="k"))

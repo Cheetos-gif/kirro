@@ -1316,3 +1316,25 @@ reachable integration from a `developer`-role account. If an admin account is ob
 an API key from `/dashboard/settings` (or `POST /api/v1/org/api-keys`), set `AGENTICORG_API_KEY`, and replace the
 login/`chat/query` calls with the `agenticorg` SDK client — `client.agents.run(...)` is the stateless call shape;
 its fit for the bridge's multi-turn, `thread_id`-keyed conversation is untried (§5's note at the time still holds).
+
+## 14. `pinelabs_plural` is registered but uncredentialed, 2026-10-03
+
+Asked directly whether the real Pine Labs payment setup is actually usable by our backend. Live
+`GET /api/v1/connectors` on the tenant, filtered to `name: pinelabs_plural`:
+
+```
+{"status": "active", "has_credentials": false, "base_url": "", "health_check_at": null,
+ "tool_functions": ["create_order", "check_order_status"], "is_trusted": true}
+```
+
+`status: active` is the catalog flag (it shows up in `/dashboard/connectors`); `has_credentials: false` and an
+empty `base_url` mean it has never been given real Pine Labs keys and has never been health-checked. It is a
+seed-tenant placeholder, not a working integration — confirming the suspicion behind `docs/connectors.md`'s
+stale "already connected" claim for this connector, now corrected in the same change as ADR-019. A repo-wide
+`grep` for `pinelabs_plural`, `create_order`, `create_payment_link`, `initiate_refund`, `get_payout_analytics`
+across `mock_server/`, `voice_bridge/`, `allocator_bridge/`, `allocator/`, `web/src` returns no matches — nothing
+in this repo has ever called it, credentialed or not.
+
+ADR-019 wires a real Pine Labs call-out a different way: directly from `mock_server` against Pine Labs' own
+UAT sandbox via the official `pinelabs-python` SDK, independent of this (uncredentialed, unused) AgenticOrg
+connector.
