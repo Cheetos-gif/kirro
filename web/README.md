@@ -33,7 +33,9 @@ only ever renders the declare form for that mode.
 ## Environment
 
 Copy `example.env` to `.env.local` (git-ignored) and fill it in — see that file for each variable. Summary:
-`MOCK_API_URL`, `MOCK_RUN_ID`, `ADMIN_EMAILS`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`.
+`MOCK_API_URL`, `MOCK_RUN_ID`, `ADMIN_EMAILS`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`,
+`MOCK_ADMIN_KEY` (gates the mock's `/__admin/*` surface; blank is a no-op), `VAPID_PUBLIC_KEY`/
+`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT` (Web Push; blank disables push notifications entirely).
 
 ## Running
 
@@ -64,7 +66,10 @@ Vercel project `kirro-web` (Root Directory `web`, Node 24.x), **git-connected to
 Production environment variables: `MOCK_API_URL=https://api-kirro.upayan.dev`, `MOCK_RUN_ID=default`,
 `LIVEKIT_URL=wss://voice-kirro.upayan.dev`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` (the same key pair
 the cluster's `kirro-voice` secret holds — it signs the browser's room tokens),
-`ADMIN_EMAILS` (comma-separated), `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_TRUST_HOST=true`.
+`ADMIN_EMAILS` (comma-separated), `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_TRUST_HOST=true`,
+`MOCK_ADMIN_KEY` (must match the cluster's `kirro-mock-admin` secret exactly), `VAPID_PUBLIC_KEY`,
+`VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (generate a pair with `node -e "console.log(require('web-push').generateVAPIDKeys())"`,
+once — rotating it invalidates every existing subscription).
 Google OAuth needs the deployed callback URL registered: `https://<domain>/api/auth/callback/google`.
 
 Env changes need a **new deployment** — `vercel redeploy` reuses the source deployment's env snapshot, so push a
@@ -73,10 +78,13 @@ commit (or trigger a fresh Git deploy) for the change to take effect.
 ## Layout
 
 - `src/app/` — routes: `/`, `/events/[id]`, `/dashboard`, `/organiser`, `/organiser/request`, `/admin`,
-  `/signin`, `/talk` (the LiveKit voice channel, ADR-017), and `/api/voice/token` (mints a room token for
-  the signed-in viewer).
+  `/signin`, `/talk` (the LiveKit voice channel, ADR-017), `/api/voice/token` (mints a room token for
+  the signed-in viewer), `manifest.ts` (PWA manifest), and `/api/push/vapid-public-key`.
 - `src/app/actions.ts` — server actions (declare, buy, organiser request, event/release creation, approvals,
   scenario control, reset).
 - `src/lib/kirro/` — mock schemas, typed API calls, formatters.
+- `src/lib/push/` — Web Push: `send.ts` (server-side, VAPID-signed), `subscribe.ts` (client-side
+  `pushManager.subscribe`/permission helpers). `public/sw.js` holds the service worker itself
+  (install/fetch/push/notificationclick); `src/components/pwa/` registers it.
 - `src/lib/auth/roles.ts` — viewer + role resolution and route guards.
 - `src/components/` — shadcn/Base UI components (`ui/`), site header, auth buttons.
