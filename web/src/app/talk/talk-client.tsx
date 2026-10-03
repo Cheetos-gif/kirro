@@ -32,6 +32,17 @@ const VOICE_OK_TOPIC = 'kirro.voice_ok';
 /** Shown when the worker's failure payload carries no message of its own. */
 const DEFAULT_VOICE_NOTICE = 'KIRRO is having trouble speaking right now. Your words are still being heard.';
 
+/** Kirro's own WhatsApp Business number: the draw result lands here, but only inside a 24-hour window the
+ * user opens themselves by messaging first, so the CTA below exists to make that one message easy to send,
+ * right after a reservation succeeds. */
+const KIRRO_WHATSAPP_NUMBER = '918167312268';
+const KIRRO_WHATSAPP_URL = `https://wa.me/${KIRRO_WHATSAPP_NUMBER}?text=${encodeURIComponent('Hi Kirro')}`;
+
+/** The agent's own wording for a successful declaration (agent-spec.md section 3, STEP 4.4): "Rs <amount> is
+ * reserved, not charged". Matching on it is a pure display heuristic: it only decides whether to show a
+ * popup, never anything about the booking itself, so a false negative just means no popup. */
+export const RESERVATION_SUCCESS_PATTERN = /reserved,\s*not charged/i;
+
 const STATE_LABEL: Record<string, string> = {
   initializing: 'Connecting…',
   idle: 'Listening',
@@ -86,10 +97,12 @@ function Call({
   onTurn,
   onCallId,
   onVoiceError,
+  onReserved,
 }: {
   onTurn: (line: TranscriptLine) => void;
   onCallId: (id: string) => void;
   onVoiceError: (notice: string | null) => void;
+  onReserved: () => void;
 }) {
   const { state, audioTrack } = useVoiceAssistant();
   const connection = useConnectionState();
@@ -124,8 +137,11 @@ function Call({
         text: line.text,
         at: line.streamInfo.timestamp ?? 0,
       });
+      // A display-only heuristic (see RESERVATION_SUCCESS_PATTERN): the agent's own reservation
+      // wording is what triggers the WhatsApp CTA, never anything this page decides on its own.
+      if (!mine && RESERVATION_SUCCESS_PATTERN.test(line.text)) onReserved();
     }
-  }, [transcriptions, localParticipant.identity, onTurn]);
+  }, [transcriptions, localParticipant.identity, onTurn, onReserved]);
 
   // Gnani's TTS does return 500s mid-call, and the caller otherwise just hears silence with no way
   // to tell a vendor outage apart from a stalled agent. The worker publishes the failure, and a
@@ -186,6 +202,7 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
   const [startedAt, setStartedAt] = useState<Date | null>(null);
   const [callId, setCallId] = useState<string | null>(null);
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
+  const [showWhatsAppPopup, setShowWhatsAppPopup] = useState(false);
   const scrollBox = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -204,6 +221,10 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
     setVoiceNotice(detail);
   }, []);
 
+  const onReserved = useCallback(() => {
+    setShowWhatsAppPopup(true);
+  }, []);
+
   const start = useCallback(async () => {
     setConnecting(true);
     setError(null);
@@ -212,6 +233,7 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
     setCopied(false);
     setCallId(null);
     setVoiceNotice(null);
+    setShowWhatsAppPopup(false);
     setStartedAt(new Date());
     try {
       const response = await fetch('/api/voice/token', { method: 'POST' });
@@ -270,7 +292,7 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
             className="flex flex-col gap-4"
           >
             <RoomAudioRenderer />
-            <Call onTurn={onTurn} onCallId={onCallId} onVoiceError={onVoiceError} />
+            <Call onTurn={onTurn} onCallId={onCallId} onVoiceError={onVoiceError} onReserved={onReserved} />
             <Button variant="outline" className="w-fit" onClick={stop}>
               End call
             </Button>
@@ -363,6 +385,37 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
           conversation.
         </p>
       </CardContent>
+
+      {showWhatsAppPopup ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="wa-popup-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+        >
+          <Card className="w-full max-w-sm">
+            <CardHeader>
+              <CardTitle id="wa-popup-title">Your reservation is in the draw</CardTitle>
+              <CardDescription>
+                The result arrives on WhatsApp after the window closes — but WhatsApp only lets us
+                message you once you&apos;ve messaged us first. Tap below to open WhatsApp and send
+                the message; that opens the thread we&apos;ll reply on.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2">
+              <Button
+                render={<a href={KIRRO_WHATSAPP_URL} target="_blank" rel="noreferrer" />}
+                nativeButton={false}
+              >
+                Open WhatsApp
+              </Button>
+              <Button variant="ghost" className="w-fit" onClick={() => setShowWhatsAppPopup(false)}>
+                Not now
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
     </Card>
   );
 }
