@@ -47,6 +47,19 @@ the rejected levers).
     user declares → taps the CTA / messages `+91 81673 12268` once → the Allocator's result lands inside that
     window. v6's closing line now tells the user to send that first message, and `/talk` shows a popup with a
     `wa.me` link after a successful reservation.
+  - **Drafted 2026-10-04, not yet applied live: v6 stops asking for the number.** The prompt no longer asks
+    verbally for a WhatsApp number. The address is taken from the caller's own account instead: the portal saves
+    it once in `/settings`, the mock's declare route already falls back to that saved number keyed by
+    `user_contact`, and the voice bridge already injects the signed-in caller's email into the first turn as
+    `[caller: <email>]`. A new `CALLER` paragraph in the prompt tells the agent to read that prefix and pass it as
+    `user_contact`, so nothing is asked and nothing is guessed. `docs/agenticorg/agent-spec.md` carries the new
+    wording; the live agents still run the previous wording until the pause → `PATCH system_prompt_text` → resume
+    cycle is run (v6-dev first, then v6).
+  - **Drafted 2026-10-04, not yet applied live: a ceiling that cannot win is explained, not reported as an
+    error.** The mock now refuses a bid whose `max_price_paise` is below the cheapest *acceptable* slot (#35), so
+    the prompt gained a matching branch in STEP 4.3: that refusal is not a technical failure — release the mandate,
+    say plainly the maximum is under the cheapest slot they would take, and ask for a higher one. The same prompt
+    revision documents `min_price_per_person_paise` on `get_release`.
 - **Fixed 2026-10-03: "The window opens at 11:30 AM IST on 9 October."** `opens_at_ist` is now a mock-computed
   field on both release routes (`mock_server/app.py` `opens_at_ist`), so the conversion is no longer the model's
   arithmetic; the prompt still needs to be told to read and repeat it rather than compute its own (live, open).
