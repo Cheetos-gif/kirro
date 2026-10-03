@@ -306,6 +306,47 @@ caller 2: "Tennis court on 10th October for 3 people, minimum 3, max 700 each" -
 survived the second (previously it would have been silently overwritten). Offline coverage:
 `test_two_callers_bidding_on_the_same_release_do_not_collide` (`tests/test_mcp_surface.py`).
 
+## The WhatsApp result notification (2026-10-03)
+
+The draw's outcome is delivered to the bidder on WhatsApp. Three pieces, each verified separately:
+
+**Platform: a real Business number and a working connector.** The Kirro Meta app now has its own registered
+number (`+91 81673 12268`, Phone Number ID `1387147764471942`) instead of the free test number, so the sender is
+not sandbox-limited. The permanent access token lives in the `whatsapp_kirro` connector's `auth_config`. One
+non-obvious fix was needed to make the platform's health check pass: this native connector probes its **base URL**
+directly, and the bare `https://graph.facebook.com/v21.0` always answers `400`, which left the connector stuck at
+`status: error` — and an agent may only link an `active` connector, so the tool could not be granted at all.
+Setting the base URL to `https://graph.facebook.com/v21.0/1387147764471942` (the phone number itself) made the
+check return `{status: healthy, phone: "+91 81673 12268"}`.
+
+**Allocator: a NOTIFY step.** "Kirro Allocator" is granted `whatsapp__send_text_message` and its prompt's step 7
+sends each bid's own `notify_phone` one message derived only from that run's results, after every loser's mandate
+has been released. Verified live against a real handset: a pool entry carrying `+918509701939` was drawn, held,
+captured (`BK-0003`) and the Allocator reported *"A WhatsApp message has been successfully sent to the user at
++918509701939"*.
+
+**Address collection: `notify_phone` is required, in three places.**
+
+- Mock: `POST /venue/releases/{release_id}/declarations` refuses a bid without it (`400 BAD_REQUEST`) and stores
+  the normalised E.164 form; `spaces`, dashes, brackets and a leading `00` are accepted, anything else is not
+  (`mock_server/app.py` `normalise_phone`). The MCP tool does the same and additionally falls back to
+  `user_contact` when the model sends the number under that older name — observed live, where the model did
+  exactly that and the bid still stored `notify_phone: "+918509701939"`.
+- Portal: `/settings` holds the number per signed-in user (`GET|PUT /venue/users/{user_contact}/profile`), read
+  once and reused for every later declaration, so the form asks for it once rather than per bid. Verified against a
+  local mock: saving normalises and prefills, and a declaration without a stored number is refused with a message
+  pointing at settings.
+- Agent: v6's prompt makes the number a required declaration field, asks for it alongside the other fields, and its
+  closing line now states that the user must message `+91 81673 12268` first. Verified live: asked for the number
+  when it was missing, and on a full declaration reached the read-back, created the mandate, declared with the
+  number, and closed with the "send one message first" instruction.
+
+**The demo-shaped constraint.** The WhatsApp Business API only lets a business send freeform text inside a 24-hour
+window the user opens by messaging first; business-initiated messages need an approved template and a payment
+method ("no paid plans" rules that out). So the order matters: declare → user messages the number once → the
+result lands inside that window. `/talk` shows a popup with a `wa.me` link after the agent confirms a reservation,
+so that first message is one tap.
+
 ## The allocator-trigger bridge (ADR-018, 2026-10-03)
 
 The native "Kirro Window Allocation" Workflow executes zero steps on every run

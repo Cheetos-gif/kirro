@@ -33,14 +33,20 @@ Where tool-less turns still come from:
 Do not chase the score with padded replies, gratuitous tool calls or filler conversations (`docs/testing.md` lists
 the rejected levers).
 
-## 2. Promises the system cannot keep yet
+## 2. The WhatsApp result notification
 
-- **On hold at the owner's direction (2026-10-03): "You will get a WhatsApp message with the result after the
-  draw."** The draw itself genuinely runs — `allocator_bridge/` (ADR-018) drives "Kirro Allocator" on a schedule, so
-  a bid is no longer left in the pool forever. The WhatsApp leg is still unsent: the Allocator agent is not granted
-  `whatsapp_kirro__send_text_message`, and the pool entry carries `user_contact: null` regardless (no declare
-  channel collects one yet). Do not grant the tool or change v6's closing line until the owner authorizes it
-  (GitHub issue #12, comment 2026-10-03T07:30:31Z: "skip whatsapp until i authorize it").
+- **Wired 2026-10-03 (owner authorized): the draw result now leaves over WhatsApp.** The Meta app's own free test
+  number was replaced by a real Business number (`+91 81673 12268`, registered on the Kirro Meta app), its
+  permanent access token is in the `whatsapp_kirro` connector, and "Kirro Allocator" is granted
+  `whatsapp__send_text_message` with a NOTIFY step in its prompt. A declaration must now carry a `notify_phone`
+  (mock-side requirement, portal collects it once in `/settings`, v6 asks for it), so there is always an address to
+  notify. Verified live: `whatsapp__send_text_message` delivered a result message to a real handset.
+  - **Caveat that shapes the demo:** the WhatsApp Business API only allows a business to send freeform text inside
+    a 24-hour window the *user* opens by messaging the business first. WhatsApp-initiated (template) messages need
+    an approved template and a payment method, which is out of scope ("no paid plans"). So the demo order is:
+    user declares → taps the CTA / messages `+91 81673 12268` once → the Allocator's result lands inside that
+    window. v6's closing line now tells the user to send that first message, and `/talk` shows a popup with a
+    `wa.me` link after a successful reservation.
 - **Fixed 2026-10-03: "The window opens at 11:30 AM IST on 9 October."** `opens_at_ist` is now a mock-computed
   field on both release routes (`mock_server/app.py` `opens_at_ist`), so the conversion is no longer the model's
   arithmetic; the prompt still needs to be told to read and repeat it rather than compute its own (live, open).
