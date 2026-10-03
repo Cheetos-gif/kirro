@@ -279,10 +279,11 @@ Promoted at 26 samples, 0.804 (`POST /agents/{id}/promote` → `active`, version
 (badminton 11 October, 2 people, minimum 2, Rs 300) went `create_mandate` 60000 ACTIVE → `declare_interest` `rel_0003`
 DECLARED, and the agent's claim matched; 28 samples at 0.808 afterwards.
 
-**Not done yet:** the voice bridge still points at v4 (`voice_bridge/config.py` `DEFAULT_AGENT_ID`); v4 is still
-active. The bridge's synthetic "Hi" opener and cumulative-transcript re-sends are unchanged, and each is a scored
-turn on whichever agent it drives. The pool keys a declaration per `(run, release)`, so a second user's bid on the
-same release overwrites the first (L09 above).
+**Voice cutover (2026-10-03):** the bridge now drives v6 (`voice_bridge/config.py` `DEFAULT_AGENT_ID`); v4 stays
+`active` until v6 has carried real calls. Still open, with the rest of the work list, in
+`docs/agenticorg/declare-v6-notes.md`: the bridge's synthetic "Hi" opener and cumulative-transcript re-sends are
+scored turns on v6, and the pool keys a declaration per `(run, release)`, so a second user's bid on the same
+release overwrites the first (L09 above).
 
 ## The voice channel (ADR-016, ADR-017)
 

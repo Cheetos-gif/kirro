@@ -16,6 +16,8 @@ before relying on them (ADR-011 §8 step 1).
   the tenant state observed. Keep this current as we work — it is the reference for anything done in the UI.
 - `evals.md` — eval cases written against the live platform agent (the E01–E10 local-oracle suite they were
   cross-referenced against was removed with the migration; its inputs survive as history in `docs/evals.md`).
+- `declare-v6-notes.md` — the live declare agent's (`Kirro Declare v6`) known gaps and next improvements, highest
+  value first.
 
 Source-of-truth extraction this spec is built from: the pre-migration local oracle (`agent/state/machine.py`,
 `agent/state/fields.py`, `agent/policies/*`, `agent/core.py`, `agent/tools/*`, `agent/system-prompt/v0.md`,

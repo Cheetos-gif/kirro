@@ -11,8 +11,8 @@ import os
 from dataclasses import dataclass
 from typing import Mapping
 
-# The live "Kirro Declare" agent on the competition tenant.
-DEFAULT_AGENT_ID = "27ec9d3c-ffe2-423f-a397-7569bf8f0f61"
+# The live "Kirro Declare v6" agent on the competition tenant (docs/testing.md, "Kirro Declare v6").
+DEFAULT_AGENT_ID = "6596b872-abb5-465a-87d3-fff8de17536d"
 
 # The worker's own health endpoint (LiveKit's ServerOptions.port).
 DEFAULT_HEALTH_PORT = 8082
