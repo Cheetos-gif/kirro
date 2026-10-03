@@ -1286,3 +1286,32 @@ One caveat when re-checking those states: `POST /__admin/reset` clears one run w
 **all** state when it does not (`docs/connectors.md`) — it reads the body, not `X-Run-Id`. A later global reset
 cleared the runs above, so `GET /__admin/state?run_id=dryrun_a` now reads zero; the log lines cited here persist, and
 the observations were taken live at the time.
+
+## 13. Re-verified 2026-10-03: no non-login path exists for this account
+
+Asked directly: does AgenticOrg provide an official API/MCP interface the backend could drive instead of
+`voice_bridge/agenticorg.py`'s email/password login bridge? Re-checked live via a relay browser tab on the same
+signed-in session (`upayanm3@gmail.com`), not from memory of §11's findings. Conclusion unchanged, confirmed fresh:
+
+- **The official interface is real and documented**, at `/dashboard/integrations`: `pip install agenticorg` /
+  `npm i agenticorg-sdk`, a CLI (`agenticorg agents run ...`), REST, A2A (`client.a2a.agents()`, 55 skills) and an
+  MCP server (`client.mcp.tools()`, 55 tools). All of it authenticates with either `AgenticOrg(api_key="...")` or
+  `AgenticOrg(grantex_token="...")` (`AGENTICORG_API_KEY` env var equivalent).
+- **`GET /api/v1/org/api-keys` → `403 {"detail":"Missing scope: agenticorg:admin"}`**, reproduced live. Issuing an
+  API key needs an admin-scoped account; this tenant's account is not one.
+- **`/dashboard/settings`** (where a key would be managed) **redirects straight to `/dashboard/access-denied`** for
+  this session — confirmed by navigation, not just the RBAC message pattern already seen on `/report-schedules`.
+- **`GET /api/v1/auth/me` → `{"role": "developer", ...}`**, unchanged from §1's handover state.
+- **`grantex_token` is not self-service either.** It is the scoped credential AgenticOrg issues *to* an agent you
+  create, for other systems to call *into* that agent over A2A/MCP (visible only as a DID,
+  e.g. `did:grantex:ag_01M3WTR022YXPQEAXEC4CHYQQX`, in `GET /api/v1/agents/{id}`) — not a credential this account can
+  mint to drive an agent as a client. The `/dashboard/integrations` page has no generate/copy control for it; its DOM
+  was searched for any button/link matching `grantex|api.?key|token|generate` and nothing matched — the page is
+  documentation only.
+
+**Conclusion: unchanged from §11.** There is no credential below `agenticorg:admin` that unlocks the official SDK/
+API/MCP path. `voice_bridge/agenticorg.py`'s session-cookie bridge against `/api/v1/chat/query` remains the only
+reachable integration from a `developer`-role account. If an admin account is obtained later, the cutover is: fetch
+an API key from `/dashboard/settings` (or `POST /api/v1/org/api-keys`), set `AGENTICORG_API_KEY`, and replace the
+login/`chat/query` calls with the `agenticorg` SDK client — `client.agents.run(...)` is the stateless call shape;
+its fit for the bridge's multi-turn, `thread_id`-keyed conversation is untried (§5's note at the time still holds).
