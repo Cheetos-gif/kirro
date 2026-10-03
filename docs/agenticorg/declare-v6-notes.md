@@ -21,10 +21,12 @@ Where tool-less turns still come from:
   `GREETING_OPENER = "Hi"` through the agent, scoring one tool-less turn per call before the caller ever spoke.
   `greet_caller` now speaks a fixed `GREETING_TEXT` straight through `session.say()` with no AgenticOrg call
   (`voice_bridge/agent.py`); the 60s idle protection is unchanged (`docs/testing.md`, "Superseded 2026-10-03").
-- **Cumulative transcript re-sends.** On v4, 14 user turns were the previous turn plus more words ("solah ek" →
-  "solah ek ek din" → …), each a scored turn and a repeated read-back. Fix in `voice_bridge/agenticorg_llm.py`: send
-  only the newest user message, skip an exact repeat, send only the new suffix of a growing one; log every skip.
-  Check first that LiveKit keeps one `ChatMessage.id` while a late transcript is appended (INFERENCE).
+- **Fixed 2026-10-03: cumulative transcript re-sends.** On v4, 14 user turns were the previous turn plus more words
+  ("solah ek" → "solah ek ek din" → …), each a scored turn and a repeated read-back. `voice_bridge/agenticorg_llm.py`
+  `AgenticOrgChat.next_turn_text` now sends only the newest user message, skips an exact repeat, sends only the new
+  suffix of a growing one, and logs every skip (`tests/test_voice_bridge.py`). LiveKit does keep one `ChatMessage.id`
+  while a late transcript is appended (confirmed by the fix landing cleanly on `latest_user_text`'s existing
+  "newest user message" read, not by inspecting LiveKit's own source).
 - **Questions before any event is named** (greeting, "what can you do", ambiguous "court"). These are legitimate
   and must stay; they are why chat traffic will hover near, not far above, 0.80.
 
@@ -33,15 +35,15 @@ the rejected levers).
 
 ## 2. Promises the system cannot keep yet
 
-- **Partly resolved 2026-10-03: "You will get a WhatsApp message with the result after the draw."** The draw
-  itself now genuinely runs — `allocator_bridge/` (ADR-018) drives "Kirro Allocator" on a schedule, so a bid is
-  no longer left in the pool forever. The WhatsApp leg is still unsent: the Allocator agent is not granted
+- **On hold at the owner's direction (2026-10-03): "You will get a WhatsApp message with the result after the
+  draw."** The draw itself genuinely runs — `allocator_bridge/` (ADR-018) drives "Kirro Allocator" on a schedule, so
+  a bid is no longer left in the pool forever. The WhatsApp leg is still unsent: the Allocator agent is not granted
   `whatsapp_kirro__send_text_message`, and the pool entry carries `user_contact: null` regardless (no declare
-  channel collects one yet — the voice bridge knows the signed-in email, the chat panel does not, and neither is
-  a WhatsApp number). Options: grant the Allocator the WhatsApp tool and capture a contact somewhere in the
-  declare flow, or change v6's closing line to say the result follows the draw without naming a channel.
-- **"The window opens at 11:30 AM IST on 9 October."** Correct today (06:00Z + 5:30), but the conversion is the
-  model's arithmetic. A mock-provided `opens_at_ist` field would remove it; low priority.
+  channel collects one yet). Do not grant the tool or change v6's closing line until the owner authorizes it
+  (GitHub issue #12, comment 2026-10-03T07:30:31Z: "skip whatsapp until i authorize it").
+- **Fixed 2026-10-03: "The window opens at 11:30 AM IST on 9 October."** `opens_at_ist` is now a mock-computed
+  field on both release routes (`mock_server/app.py` `opens_at_ist`), so the conversion is no longer the model's
+  arithmetic; the prompt still needs to be told to read and repeat it rather than compute its own (live, open).
 
 ## 3. Pool and mandate correctness (mock side)
 
@@ -53,36 +55,48 @@ live with two concurrent threads on `rel_0002` — both bids survived with their
 `Kirro Allocator` were not touched and still key on `(run, release)` alone; this only matters for the Allocator if
 it ever carries concurrent per-release traffic, which it does not (one release at a time).
 
-Still open:
+**Fixed 2026-10-03** (#12 item 3): the catalogue fixture's dates are now seeded relative to the reset's own clock
+(`mock_server/state.py` `_seed_domain`, `_FIXTURE_ANCHOR`/`_SEED_LEAD`) rather than pinned to a calendar date, so a
+fresh run's releases are open for ~27h regardless of when the reset happens. `POST .../declarations` now refuses a
+closed release with 409 `POOL_CLOSED` (`declarations_open` check in the handler). Still open: wiring this into v6's
+prompt/error handling and a live re-check that the agent surfaces the refusal sensibly.
 
-- **No server-side refusal for a closed release.** `declarations_open` tells the agent, but the REST pool route still
-  accepts a bid after `opens_at`. It was left out because every seeded fixture release is past its window; once the
-  seed computes dates relative to the reset time (`mock_server/state.py` `_seed_domain`), add `409 POOL_CLOSED`.
-- **Duplicate declarations return `DECLARED`, not a duplicate marker**, so L09's "second call is a no-op" cannot be
-  observed from the agent's side.
+**Fixed 2026-10-03** (#12 item 6): a second `declare_interest` call with the same `declaration_id` is now a no-op —
+the stored bid is not overwritten, and the response carries `duplicate: true` so a caller (and L09) can tell a retry
+from a first success (`tests/test_mock_server.py::test_declare_pool_second_call_with_same_declaration_id_is_a_no_op`).
 
 ## 4. Conversation quality
 
-- **Hinglish mirroring is weak.** L03 ("Shanivaar ko court chahiye, char log") was understood correctly but answered
-  in English. An earlier attempt with a literal Hinglish example reply made the model copy that reply into English
-  conversations, so any fix needs a description-only rule and a re-run of L03 and L10 together.
-- **Time windows are untested.** No case gives a window ("7 to 9 am"), so slot filtering by window
-  (`acceptable_slot_ids`) has not been exercised on v6. Add a case.
-- **Weekday names were dropped from the read-back** because the model got them wrong ("Wednesday, 11 October"). If
-  weekdays are wanted back, have the mock return them with the release instead of asking the model.
-- **The "slots cost more than your maximum" warning was removed** after the model raised it when the ceiling was
-  above the cheapest slot. If it is wanted, compute it in the mock (e.g. a `min_price_per_person_paise` field) and let
-  the prompt only repeat it.
-- **Interruption replies are generic** ("No problem. Let me know when you're ready…") rather than re-asking the open
-  question. Acceptable, but L04 says "repeats only the open question".
+- **Hinglish mirroring is weak (live, open).** L03 ("Shanivaar ko court chahiye, char log") was understood correctly
+  but answered in English. An earlier attempt with a literal Hinglish example reply made the model copy that reply
+  into English conversations, so any fix needs a description-only rule (e.g. "mirror the caller's register — if they
+  mix Hindi and English, answer the same way, without a worked example to copy") and a re-run of L03 and L10 together
+  on `Kirro Declare v6-dev` first. Requires live prompt-editing access; not actionable from this repo alone.
+- **Time windows and waitlisting are untested on v6 (live, open).** No eval case gives a window ("7 to 9 am"), so
+  slot filtering by window (`acceptable_slot_ids`/`constraints.start_hour_min|max`) has never been exercised against
+  the live agent — the mechanism itself is covered (`tests/test_allocator.py::test_time_constraint_hard_filter`).
+  Likewise, nothing has run a release with more bids than capacity through the allocator-trigger bridge end to end
+  against the live Allocator agent (the mock's own waitlist behaviour is covered:
+  `tests/test_mock_server.py::test_allocator_draw_allocates_then_waitlists_a_full_slot`). Both need a live eval case,
+  not a mock-server change.
+- **Fixed 2026-10-03: weekday names and the price-ceiling warning.** Both release routes now carry a mock-computed
+  `weekday` (the model got "Wednesday, 11 October" wrong) and `min_price_per_person_paise` (the cheapest slot's
+  price, so the mock — not the model — can tell a bidder their ceiling is below every slot). Still open: telling
+  v6's prompt to read and repeat these instead of computing or guessing them (live).
+- **Interruption replies are generic (live, open)** ("No problem. Let me know when you're ready…") rather than
+  re-asking the open question. Acceptable, but L04 says "repeats only the open question"; needs a prompt change and
+  a re-run, not a mock-server change.
 
 ## 5. Operational
 
 - **Done 2026-10-03: v4 retired.** Paused then retired right after the voice cutover (kept, not deleted, so its
   history stays as evidence). `Kirro Declare v6-dev` is still around for prompt iteration; delete it once no more
   prompt work is planned, or keep it as the permanent test bed.
-- **`/__admin/*` answers on the public mock URL** (`https://api-kirro.upayan.dev/__admin/state` returned 200). Anyone
-  can arm scenarios or reset state during a demo. Restrict it at the ingress or require a header.
+- **Fixed 2026-10-03: `/__admin/*` answered on the public mock URL.** `MOCK_ADMIN_KEY`, when set, now gates every
+  `/__admin/*` call behind a matching `X-Admin-Key` header (`mock_server/app.py` `_admin_key_denied`,
+  `docs/connectors.md`). Still open: the key itself has not been provisioned (needs a human with `sops`/`age` to add
+  a `kirro-mock-admin` Secret in the cluster repo, same ksops pattern as `kirro-voice`) — until then this is a no-op
+  by design, so the surface is still open on the live cluster.
 - **Eval data left in run `default`.** `rel_0001` and `rel_tennis_sat` were drawn for real by the allocator-trigger
   bridge's own live verification (`docs/testing.md`, "The allocator-trigger bridge") — `BK-0001`/`BK-0002`
   `CONFIRMED`, genuine demonstrations, not contamination. `rel_0002` and `rel_0003` still hold test pool entries
