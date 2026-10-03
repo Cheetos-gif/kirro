@@ -64,6 +64,15 @@ Each event carries an `organiser_id` and a `status` (`draft`|`published`); each 
 `allocation_mode` (`fair_draw`|`instant_buy`, default `fair_draw`), surfaced on `GET /venue/releases` and
 `GET /venue/releases/{release_id}`.
 
+Both release routes also carry `declarations_open` (MOCK field): `true` only for a `fair_draw` release whose
+`opens_at` is still in the future, computed from the wall clock at request time. The draw runs when the window
+opens, so a release past `opens_at` can no longer be declared on; the agent reads this field instead of doing date
+arithmetic. The detail route also carries the release's `date`. On the MCP surface, an event word (`"tennis"`)
+passed to `get_release` or `declare_interest` that matches several releases resolves to the one whose
+`declarations_open` is `true` when exactly one is; otherwise the tool answers with the candidate list, dates
+included. The REST pool route does not refuse a closed release yet — that refusal is deliberately not in place
+while every seeded fixture release is past its `opens_at`.
+
 - `GET /venue/organisers?status=` — `{organisers: [...]}`, each `{organiser_id, name, contact, status, requested_by}`.
 - `POST /venue/organisers` — self-serve request; body `{name, contact, requested_by}` (all non-empty strings).
   Creates the organiser with `status: "pending"` → 400 `BAD_REQUEST` otherwise.

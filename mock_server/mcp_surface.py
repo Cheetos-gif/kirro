@@ -122,6 +122,7 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
             # parameter before the call reaches us, so an empty lookup answers with the candidates instead —
             # the ids still reach the model, which a platform-side rejection cannot achieve.
             return {"status_code": 200, "body": {"releases": found, "note": "pass release_id to fetch one"}}
+        found = _single_open_or_all(found)
         if len(found) != 1:
             return {
                 "status_code": 404,
@@ -268,7 +269,7 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
             },
         )
         listing = await _releases(client, run_id, _first_str(release_id, releaseId, release), None)
-        found = listing["body"].get("releases", [])
+        found = _single_open_or_all(listing["body"].get("releases", []))
         if len(found) != 1:
             return _bad_request(
                 "release_id is required; call list_releases and pass the release_id it returns "
@@ -488,6 +489,19 @@ def _record(tool: str, run_id: str, arguments: dict[str, Any]) -> None:
             "latency_ms": 0,
         },
     )
+
+
+def _single_open_or_all(found: list[dict]) -> list[dict]:
+    """Several matches for an event word, exactly one still taking declarations: that one.
+
+    "tennis" matches every tennis release, past and future, but usually only one can still be declared on. With
+    several open (or none), the caller gets the full list, dates included, and the agent picks.
+    """
+    if len(found) > 1:
+        still_open = [item for item in found if item.get("declarations_open")]
+        if len(still_open) == 1:
+            return still_open
+    return found
 
 
 async def _releases(client: httpx.AsyncClient, run_id: str, event: str | None, date: str | None) -> dict:

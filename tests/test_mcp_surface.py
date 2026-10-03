@@ -456,3 +456,54 @@ def test_an_empty_release_lookup_returns_the_candidates(mcp_base):
     body = asyncio.run(go())
     assert body["status_code"] == 200
     assert {item["release_id"] for item in body["body"]["releases"]} >= {"rel_badminton_sat", "rel_tennis_sat"}
+
+
+def _future_tennis_release(base, date, key):
+    body = {
+        "event_id": "ev_tennis",
+        "date": date,
+        "opens_at": f"{date[:-2]}01T06:00:00Z",
+        "slots": [
+            {"label": "Court 3", "starts_at": f"{date}T09:00:00Z", "capacity": 4, "price_per_person_paise": 50000}
+        ],
+    }
+    created = httpx.post(f"{base}/venue/releases", json=body, headers={**H, "Idempotency-Key": key}, timeout=10)
+    return created.json()["release_id"]
+
+
+def test_an_event_word_resolves_to_the_one_release_still_open(mcp_base):
+    """ "tennis" matches the past fixture release and any future one. The agent must land on the one that can still
+    take declarations, through both the lookup and the bid; with two open, it gets the list with dates instead."""
+    open_id = _future_tennis_release(mcp_base, "2099-01-10", "t1")
+
+    async def go():
+        async with session(f"{mcp_base}/venue/mcp") as s:
+            looked = payload(await s.call_tool("get_release", {"release_id": "tennis", "run_id": "mcp"}))
+            bid = payload(
+                await s.call_tool(
+                    "declare_interest",
+                    {
+                        "release_id": "tennis",
+                        "group_size": 2,
+                        "min_group_size": 2,
+                        "max_price_paise": 50000,
+                        "run_id": "mcp",
+                    },
+                )
+            )
+            return looked, bid
+
+    looked, bid = asyncio.run(go())
+    assert looked["status_code"] == 200 and looked["body"]["release_id"] == open_id
+    assert looked["body"]["declarations_open"] is True
+    assert bid["body"]["release_id"] == open_id and bid["body"]["status"] == "DECLARED"
+
+    _future_tennis_release(mcp_base, "2099-02-10", "t2")
+
+    async def ambiguous():
+        async with session(f"{mcp_base}/venue/mcp") as s:
+            return payload(await s.call_tool("get_release", {"release_id": "tennis", "run_id": "mcp"}))
+
+    listed = asyncio.run(ambiguous())
+    assert listed["status_code"] == 404
+    assert {item["date"] for item in listed["body"]["releases"]} == {"2026-10-03", "2099-01-10", "2099-02-10"}

@@ -74,6 +74,7 @@ def test_movie_release_is_bookable(mock_client):
             "date": "2026-10-03",
             "opens_at": "2026-10-02T06:00:00Z",
             "allocation_mode": "fair_draw",
+            "declarations_open": False,
         }
     ]
     a = mock_client.post(
@@ -425,6 +426,30 @@ def test_release_creation_defaults_to_fair_draw_and_generates_slot_ids(mock_clie
     assert release["release_id"] == "rel_0001" and release["allocation_mode"] == "fair_draw"
     assert release["slots"][0]["slot_id"] == "slot_0001"
     assert mock_client.get("/venue/releases/rel_0001", headers=H()).json()["allocation_mode"] == "fair_draw"
+
+
+def test_a_release_takes_declarations_only_until_its_window_opens(mock_client):
+    """The draw runs when the window opens, so a release past its opens_at can no longer be declared on. The agent
+    reads that as a field rather than doing date arithmetic; it must be right for past, future and instant_buy."""
+    future = instant_release_body(
+        event_id="ev_tennis", date="2099-01-02", opens_at="2099-01-01T06:00:00Z", allocation_mode="fair_draw"
+    )
+    open_id = mock_client.post("/venue/releases", json=future, headers=H(key="r1")).json()["release_id"]
+    instant_id = mock_client.post("/venue/releases", json=instant_release_body(), headers=H(key="r2")).json()[
+        "release_id"
+    ]
+
+    detail = mock_client.get(f"/venue/releases/{open_id}", headers=H()).json()
+    assert detail["declarations_open"] is True and detail["date"] == "2099-01-02"
+    past = mock_client.get("/venue/releases/rel_tennis_sat", headers=H()).json()
+    assert past["declarations_open"] is False and past["date"] == "2026-10-03"
+    assert mock_client.get(f"/venue/releases/{instant_id}", headers=H()).json()["declarations_open"] is False
+
+    listed = {
+        r["release_id"]: r["declarations_open"]
+        for r in mock_client.get("/venue/releases", headers=H()).json()["releases"]
+    }
+    assert listed[open_id] is True and listed["rel_tennis_sat"] is False and listed[instant_id] is False
 
 
 @pytest.mark.parametrize(

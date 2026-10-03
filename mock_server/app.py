@@ -242,6 +242,19 @@ def create_app(log_dir: str | None = None) -> FastAPI:
         # Events/releases are store documents now (ADR-015), not a static fixture read.
         return run.releases.get(rel_id)
 
+    def declarations_open(r: dict) -> bool:
+        """A fair-draw release takes declarations only until its window opens (the draw runs then).
+
+        Computed from the wall clock, so an agent never has to do date arithmetic to know whether a release
+        can still be declared on; an unparseable `opens_at` counts as closed rather than open.
+        """
+        if r.get("allocation_mode", "fair_draw") != "fair_draw":
+            return False
+        try:
+            return _now() < _parse_iso(r["opens_at"])
+        except (KeyError, TypeError, ValueError):
+            return False
+
     def slot_view(run: RunState, sc: str, s: dict) -> dict:
         cap = s["capacity"] - run.used_capacity[s["slot_id"]]
         if sc == "no_inventory":
@@ -276,6 +289,7 @@ def create_app(log_dir: str | None = None) -> FastAPI:
                     "date": r["date"],
                     "opens_at": r["opens_at"],
                     "allocation_mode": r.get("allocation_mode", "fair_draw"),
+                    "declarations_open": declarations_open(r),
                 }
                 for r in run.releases.values()
                 if (not q.get("event_id") or r["event_id"] == q["event_id"])
@@ -294,8 +308,10 @@ def create_app(log_dir: str | None = None) -> FastAPI:
             return 200, {
                 "release_id": r["release_id"],
                 "event_id": r["event_id"],
+                "date": r.get("date"),
                 "opens_at": r["opens_at"],
                 "allocation_mode": r.get("allocation_mode", "fair_draw"),
+                "declarations_open": declarations_open(r),
                 "slots": [slot_view(run, sc, s) for s in r["slots"]],
             }
 
