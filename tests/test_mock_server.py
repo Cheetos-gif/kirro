@@ -2,6 +2,7 @@ import json
 import socket
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -52,6 +53,43 @@ def test_admin_routes_require_the_configured_admin_key(mock_client, monkeypatch)
 
     ok = mock_client.get("/__admin/state", params={"run_id": "r"}, headers={"X-Admin-Key": "harness-secret"})
     assert ok.status_code == 200
+
+
+def test_agent_stats_round_trip(mock_client):
+    """The sync job writes, the portal reads (#33). Stored verbatim: the mock does not know which
+    fields AgenticOrg exposes, so it must not drop or invent any."""
+    assert mock_client.get("/venue/agent-stats", headers=H()).json() == {"agents": []}
+
+    stats = {
+        "status": "active",
+        "shadow_accuracy_current": 0.804,
+        "shadow_sample_count": 26,
+        "synced_at": "2026-10-04T00:00:00Z",
+    }
+    wrote = mock_client.put("/__admin/agent-stats/agent-abc", json=stats, headers=H())
+    assert wrote.status_code == 200
+
+    listed = mock_client.get("/venue/agent-stats", headers=H()).json()["agents"]
+    assert listed == [{"agent_id": "agent-abc", **stats}]
+
+    # A second sync overwrites the previous snapshot for the same agent rather than appending.
+    mock_client.put("/__admin/agent-stats/agent-abc", json={**stats, "shadow_sample_count": 27}, headers=H())
+    listed = mock_client.get("/venue/agent-stats", headers=H()).json()["agents"]
+    assert len(listed) == 1 and listed[0]["shadow_sample_count"] == 27
+
+
+def test_agent_stats_write_needs_the_admin_key_when_configured(mock_client, monkeypatch):
+    """The read is public (a homepage stat card); the write is harness-only, like the rest of
+    `/__admin/*`."""
+    monkeypatch.setenv("MOCK_ADMIN_KEY", "harness-secret")
+    assert mock_client.put("/__admin/agent-stats/agent-abc", json={"status": "active"}, headers=H()).status_code == 403
+    assert mock_client.get("/venue/agent-stats", headers=H()).status_code == 200
+    allowed = mock_client.put(
+        "/__admin/agent-stats/agent-abc",
+        json={"status": "active"},
+        headers={**H(), "X-Admin-Key": "harness-secret"},
+    )
+    assert allowed.status_code == 200
 
 
 def test_unknown_scenario_rejected(mock_client):
@@ -462,6 +500,93 @@ def test_declare_pool_refuses_a_closed_release(mock_client):
     r = mock_client.post(f"/venue/releases/{closed_id}/declarations", json=declare_body(), headers=H())
     assert r.status_code == 409 and r.json()["error"]["code"] == "POOL_CLOSED"
     assert mock_client.get(f"/venue/releases/{closed_id}/declarations", headers=H()).json()["declarations"] == []
+
+
+def _windowed_draw_release(mock_client, *, starts_at, opens_at, key="r1"):
+    body = instant_release_body(
+        event_id="ev_tennis",
+        date="2026-11-01",
+        opens_at=opens_at,
+        allocation_mode="fair_draw",
+        declare_window_starts_at=starts_at,
+    )
+    return mock_client.post("/venue/releases", json=body, headers=H(key=key)).json()["release_id"]
+
+
+def test_declare_window_is_closed_before_its_start(mock_client):
+    """A release created for a near-future demo declares `declarations_open: false` until its window
+    starts, and the REST route refuses a bid in that state (#32)."""
+    now = datetime.now(timezone.utc)
+    starts_at = (now + timedelta(minutes=2)).isoformat()
+    rid = _windowed_draw_release(mock_client, starts_at=starts_at, opens_at=(now + timedelta(minutes=5)).isoformat())
+
+    detail = mock_client.get(f"/venue/releases/{rid}", headers=H()).json()
+    assert detail["declare_window_starts_at"] == starts_at
+    assert detail["declarations_open"] is False
+
+    refused = mock_client.post(f"/venue/releases/{rid}/declarations", json=declare_body(), headers=H())
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "POOL_CLOSED"
+
+
+def test_declare_window_is_open_once_its_start_has_passed(mock_client):
+    """Same release shape, but the window start is already behind us: open, and the bid is accepted."""
+    now = datetime.now(timezone.utc)
+    starts_at = (now - timedelta(minutes=1)).isoformat()
+    rid = _windowed_draw_release(mock_client, starts_at=starts_at, opens_at=(now + timedelta(minutes=5)).isoformat())
+
+    assert mock_client.get(f"/venue/releases/{rid}", headers=H()).json()["declarations_open"] is True
+
+    accepted = mock_client.post(f"/venue/releases/{rid}/declarations", json=declare_body(), headers=H())
+    assert accepted.status_code == 200
+    assert accepted.json()["status"] == "DECLARED"
+
+
+def test_release_without_a_window_start_is_open_immediately(mock_client):
+    """The field is optional, so every pre-existing fixture and organiser-created release keeps the
+    "open from creation" behaviour it had before #32 — the regression guard for this change."""
+    now = datetime.now(timezone.utc)
+    body = instant_release_body(
+        event_id="ev_tennis",
+        date="2026-11-01",
+        opens_at=(now + timedelta(days=1)).isoformat(),
+        allocation_mode="fair_draw",
+    )
+    rid = mock_client.post("/venue/releases", json=body, headers=H(key="r1")).json()["release_id"]
+
+    detail = mock_client.get(f"/venue/releases/{rid}", headers=H()).json()
+    assert "declare_window_starts_at" not in detail or detail["declare_window_starts_at"] is None
+    assert detail["declarations_open"] is True
+
+
+def test_release_rejects_a_non_string_window_start(mock_client):
+    body = instant_release_body(
+        event_id="ev_tennis", date="2026-11-01", allocation_mode="fair_draw", declare_window_starts_at=123
+    )
+    r = mock_client.post("/venue/releases", json=body, headers=H(key="r1"))
+    assert r.status_code == 400 and r.json()["error"]["code"] == "BAD_REQUEST"
+
+
+def test_create_release_returns_the_same_shape_as_get_release(mock_client):
+    """The create response carries the computed fields (`declarations_open`, `weekday`, …) too, not
+    the raw stored document — otherwise a caller has to re-read a release it just made to find out
+    whether its own declare window is open (#32)."""
+    now = datetime.now(timezone.utc)
+    body = instant_release_body(
+        event_id="ev_tennis",
+        date="2026-11-01",
+        opens_at=(now + timedelta(minutes=5)).isoformat(),
+        allocation_mode="fair_draw",
+        declare_window_starts_at=(now + timedelta(minutes=2)).isoformat(),
+    )
+    created = mock_client.post("/venue/releases", json=body, headers=H(key="r1")).json()
+
+    assert created["declarations_open"] is False
+    assert created["declare_window_starts_at"] == body["declare_window_starts_at"]
+    assert "weekday" in created and "min_price_per_person_paise" in created
+    assert created["slots"][0]["capacity"] == 4
+
+    fetched = mock_client.get(f"/venue/releases/{created['release_id']}", headers=H()).json()
+    assert created == fetched
 
 
 @pytest.mark.parametrize(

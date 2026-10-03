@@ -16,10 +16,16 @@ import '@livekit/components-styles';
 import type { ReceivedChatMessage } from '@livekit/components-react';
 import { ConnectionState } from 'livekit-client';
 import type { TextStreamReader } from 'livekit-client';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { matchEventsInTranscript } from '@/lib/kirro/match-events';
+import type { KirroEvent } from '@/lib/kirro/schemas';
+
+import type { DemoPrompt } from './demo-prompt';
+import { DemoPromptCard } from './demo-prompt';
 
 export type TranscriptLine = { key: string; mine: boolean; text: string; at: number };
 
@@ -216,7 +222,15 @@ function Call({
   );
 }
 
-export function TalkClient({ serverUrl }: { serverUrl: string }) {
+export function TalkClient({
+  serverUrl,
+  events,
+  demo = null,
+}: {
+  serverUrl: string;
+  events: KirroEvent[];
+  demo?: DemoPrompt | null;
+}) {
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
@@ -231,6 +245,13 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
   useEffect(() => {
     scrollBox.current?.scrollTo({ top: scrollBox.current.scrollHeight });
   }, [lines]);
+
+  // Which events the caller has named so far, recomputed as captions arrive. Purely a display
+  // affordance over text LiveKit already gives the browser — it never influences the agent.
+  const mentioned = useMemo(
+    () => matchEventsInTranscript(lines.map(line => line.text), events),
+    [lines, events]
+  );
 
   const onTurn = useCallback((line: TranscriptLine) => {
     setLines(previous => mergeTurn(previous, line));
@@ -333,6 +354,8 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
 
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
+        {demo ? <DemoPromptCard demo={demo} /> : null}
+
         {voiceNotice ? (
           <p
             role="status"
@@ -402,6 +425,26 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
             )}
           </div>
         </section>
+
+        {mentioned.length ? (
+          <section className="flex flex-col gap-2">
+            <h2 className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
+              Mentioned in this call
+            </h2>
+            <ul className="flex flex-wrap gap-2">
+              {mentioned.map(event => (
+                <li key={event.event_id}>
+                  <Link
+                    href={`/events/${event.event_id}`}
+                    className="inline-flex items-center rounded-full border border-border px-3 py-1 text-sm text-foreground transition-colors hover:bg-muted"
+                  >
+                    {event.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
         <p className="text-xs text-muted-foreground">
           Your browser will ask for the microphone. One call at a time — the agent keeps a single

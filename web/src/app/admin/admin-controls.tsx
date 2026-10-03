@@ -11,6 +11,13 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useActionToast } from '@/hooks/use-action-toast';
 
 const SCENARIOS = [
@@ -26,9 +33,6 @@ const SCENARIOS = [
   'partial_group',
   'upstream_500',
 ];
-
-const SELECT_CLASS =
-  'h-9 w-full rounded-3xl border border-transparent bg-input/50 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30';
 
 export function ApproveOrganiserButton({ organiserId }: { organiserId: string }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
@@ -66,18 +70,18 @@ export function ScenarioForm() {
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="scenario-name">Scenario</Label>
-          <select
-            id="scenario-name"
-            name="scenario"
-            defaultValue="success"
-            className={SELECT_CLASS}
-          >
-            {SCENARIOS.map(scenario => (
-              <option key={scenario} value={scenario}>
-                {scenario}
-              </option>
-            ))}
-          </select>
+          <Select name="scenario" defaultValue="success">
+            <SelectTrigger id="scenario-name" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SCENARIOS.map(scenario => (
+                <SelectItem key={scenario} value={scenario}>
+                  {scenario}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="scenario-delay">Delay (seconds)</Label>

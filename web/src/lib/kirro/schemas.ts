@@ -43,6 +43,10 @@ export const releaseDetailSchema = z.object({
   event_id: z.string(),
   opens_at: z.string(),
   allocation_mode: allocationModeSchema,
+  /** MOCK field: whether the declare window is open right now (wall-clock, server-computed). */
+  declarations_open: z.boolean(),
+  /** MOCK field: when the declare window opens; absent/null on a release open from creation. */
+  declare_window_starts_at: z.string().nullable().optional(),
   slots: z.array(slotSchema),
 });
 export type ReleaseDetail = z.infer<typeof releaseDetailSchema>;
@@ -148,3 +152,19 @@ export const userProfileSchema = z.object({
   push_subscription: pushSubscriptionSchema.optional(),
 });
 export type UserProfile = z.infer<typeof userProfileSchema>;
+
+/**
+ * One agent's last-known stats, mirrored from AgenticOrg by the stats-sync CronJob (ADR-020). Every
+ * field is optional except the id: the mock stores whatever the sync job was able to read, so a field
+ * the platform did not expose is absent rather than zero, and the UI must say "—" instead of "0%".
+ */
+export const agentStatSchema = z.object({
+  agent_id: z.string(),
+  name: z.string().optional(),
+  status: z.string().optional(),
+  accuracy: z.number().optional(),
+  shadow_accuracy_current: z.number().optional(),
+  shadow_sample_count: z.number().int().optional(),
+  synced_at: z.string().optional(),
+});
+export type AgentStat = z.infer<typeof agentStatSchema>;

@@ -1,18 +1,39 @@
 import { isApiError } from '@/api';
 import { AllocationFlow } from '@/components/marketing/allocation-flow';
+import { AgentStats } from '@/components/marketing/agent-stats';
 import { ArchitectureDiagram } from '@/components/marketing/architecture-diagram';
 import { DrawVisualizer } from '@/components/marketing/draw-visualizer';
 import { EvidenceGrid } from '@/components/marketing/evidence-grid';
 import { InventoryList } from '@/components/marketing/inventory-list';
 import { MechanismTimeline } from '@/components/marketing/mechanism-timeline';
 import { SectionLabel } from '@/components/marketing/section-label';
+import { QuickDemoButton } from '@/components/quick-demo-button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { AGENTICORG_URL } from '@/constants';
+import { currentViewer } from '@/lib/auth/roles';
 import * as api from '@/lib/kirro/api';
-import type { KirroEvent, Organiser, ReleaseDetail } from '@/lib/kirro/schemas';
+import type { AgentStat, KirroEvent, Organiser, ReleaseDetail } from '@/lib/kirro/schemas';
+
+/**
+ * The organiser the seeded catalogue fixture belongs to (`mock_server/state.py` `_seed_domain`).
+ * Anything else was created through the portal — either by a real organiser or by the homepage's
+ * demo button — and is shown after the curated listings.
+ */
+const SEED_ORGANISER_ID = 'org_seed';
 
 export default async function HomePage() {
+  const viewer = await currentViewer();
+
+  // Mirrored agent stats (ADR-020). Deliberately tolerant: these are a stat strip, and a sync that
+  // has never run (or a mock without the route) must not blank the whole homepage.
+  let agentStats: AgentStat[] = [];
+  try {
+    agentStats = await api.getAgentStats();
+  } catch {
+    agentStats = [];
+  }
+
   let releases: Array<{
     detail: ReleaseDetail;
     event: KirroEvent;
@@ -37,6 +58,14 @@ export default async function HomePage() {
         })
     );
     releases = details.filter((row): row is NonNullable<typeof row> => row !== null);
+    // Curated catalogue listings lead, organiser-created releases follow. The homepage's demo button
+    // seeds a fresh event on every click, so without this the strip would fill up with demo events
+    // and push the actual venue catalogue off the end of the visible three.
+    releases.sort((a, b) => {
+      const aSeed = a.event.organiser_id === SEED_ORGANISER_ID ? 0 : 1;
+      const bSeed = b.event.organiser_id === SEED_ORGANISER_ID ? 0 : 1;
+      return aSeed - bSeed || a.detail.opens_at.localeCompare(b.detail.opens_at);
+    });
   } catch (error) {
     return (
       <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-16">
@@ -73,6 +102,11 @@ export default async function HomePage() {
             KIRRO holds your spot, enters a seeded draw when a slot is contested, and books it
             outright when it isn&apos;t. Arrival time decides nothing.
           </p>
+          {viewer?.role === 'organiser' || viewer?.role === 'admin' ? (
+            <div className="mt-6">
+              <QuickDemoButton />
+            </div>
+          ) : null}
         </div>
         <div className="flex items-center lg:col-span-5">
           <AllocationFlow />
@@ -143,6 +177,11 @@ export default async function HomePage() {
         <h2 className="font-heading text-2xl font-medium tracking-tight text-foreground">
           What&apos;s real
         </h2>
+        {agentStats.length ? (
+          <div className="mt-6">
+            <AgentStats agents={agentStats} />
+          </div>
+        ) : null}
         <div className="mt-6">
           <EvidenceGrid />
         </div>

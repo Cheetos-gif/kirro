@@ -8,6 +8,7 @@ resources:
   - configmap.yaml
   - deployments.yaml
   - allocator-cronjob.yaml
+  - agent-stats-sync-cronjob.yaml
   - services.yaml
   - ingress.yaml
 images:

@@ -11,18 +11,22 @@ import { formatDateTime, formatPaise } from '@/lib/kirro/format';
 import type { Slot } from '@/lib/kirro/schemas';
 
 import { BuyForm } from './buy-form';
-import { DeclareForm } from './declare-form';
+import { DeclareWindow } from './declare-window';
 
 async function ActionPanel({
   releaseId,
   mode,
   slots,
   viewer,
+  startsAt,
+  opensAt,
 }: {
   releaseId: string;
   mode: 'fair_draw' | 'instant_buy';
   slots: Slot[];
   viewer: Viewer | null;
+  startsAt?: string | null;
+  opensAt: string;
 }) {
   if (!viewer) {
     return (
@@ -40,7 +44,9 @@ async function ActionPanel({
   return mode === 'instant_buy' ? (
     <BuyForm releaseId={releaseId} slots={slots} />
   ) : (
-    <DeclareForm releaseId={releaseId} slots={slots} />
+    // The declare window can be scheduled for the future (#32), so the form goes through the
+    // countdown wrapper rather than rendering directly.
+    <DeclareWindow releaseId={releaseId} slots={slots} startsAt={startsAt} opensAt={opensAt} />
   );
 }
 
@@ -131,6 +137,8 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
                 mode={release.allocation_mode}
                 slots={release.slots}
                 viewer={viewer}
+                startsAt={release.declare_window_starts_at}
+                opensAt={release.opens_at}
               />
             </CardContent>
           </Card>

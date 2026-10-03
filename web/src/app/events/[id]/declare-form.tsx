@@ -11,7 +11,15 @@ import { useActionToast } from '@/hooks/use-action-toast';
 import { formatPaise } from '@/lib/kirro/format';
 import type { Slot } from '@/lib/kirro/schemas';
 
-export function DeclareForm({ releaseId, slots }: { releaseId: string; slots: Slot[] }) {
+export function DeclareForm({
+  releaseId,
+  slots,
+  disabled = false,
+}: {
+  releaseId: string;
+  slots: Slot[];
+  disabled?: boolean;
+}) {
   const [state, action, pending] = useActionState<ActionState, FormData>(declareAction, null);
   useActionToast(state);
   const [groupSize, setGroupSize] = useState(2);
@@ -86,7 +94,7 @@ export function DeclareForm({ releaseId, slots }: { releaseId: string; slots: Sl
           your WhatsApp number from <span className="text-foreground">settings</span>.
         </p>
 
-        <Button type="submit" disabled={pending} className="w-fit">
+        <Button type="submit" disabled={pending || disabled} className="w-fit">
           {pending ? 'Entering...' : 'Enter the draw'}
         </Button>
       </form>

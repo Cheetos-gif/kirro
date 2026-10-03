@@ -11,11 +11,15 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useActionToast } from '@/hooks/use-action-toast';
 import type { KirroEvent } from '@/lib/kirro/schemas';
-
-const SELECT_CLASS =
-  'h-9 w-full rounded-3xl border border-transparent bg-input/50 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30';
 
 export function CreateEventForm() {
   const [state, action, pending] = useActionState<ActionState, FormData>(createEventAction, null);
@@ -29,10 +33,15 @@ export function CreateEventForm() {
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="event-status">Status</Label>
-        <select id="event-status" name="status" defaultValue="draft" className={SELECT_CLASS}>
-          <option value="draft">Draft</option>
-          <option value="published">Published</option>
-        </select>
+        <Select name="status" defaultValue="draft">
+          <SelectTrigger id="event-status" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="draft">Draft</SelectItem>
+            <SelectItem value="published">Published</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
       <Button type="submit" disabled={pending} className="w-fit">
         {pending ? 'Creating...' : 'Create event'}
@@ -77,25 +86,30 @@ export function CreateReleaseForm({ events }: { events: KirroEvent[] }) {
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="rel-event">Event</Label>
-          <select id="rel-event" name="event_id" required className={SELECT_CLASS}>
-            {events.map(event => (
-              <option key={event.event_id} value={event.event_id}>
-                {event.name} ({event.status})
-              </option>
-            ))}
-          </select>
+          <Select name="event_id" required defaultValue={events[0]?.event_id}>
+            <SelectTrigger id="rel-event" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {events.map(event => (
+                <SelectItem key={event.event_id} value={event.event_id}>
+                  {event.name} ({event.status})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="rel-mode">How it sells</Label>
-          <select
-            id="rel-mode"
-            name="allocation_mode"
-            defaultValue="fair_draw"
-            className={SELECT_CLASS}
-          >
-            <option value="fair_draw">Draw, for slots people compete for</option>
-            <option value="instant_buy">Buy now, in order of arrival</option>
-          </select>
+          <Select name="allocation_mode" defaultValue="fair_draw">
+            <SelectTrigger id="rel-mode" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="fair_draw">Draw, for slots people compete for</SelectItem>
+              <SelectItem value="instant_buy">Buy now, in order of arrival</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="rel-date">Date</Label>

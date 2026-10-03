@@ -89,9 +89,13 @@ Each event carries an `organiser_id` and a `status` (`draft`|`published`); each 
 `GET /venue/releases/{release_id}`.
 
 Both release routes also carry `declarations_open` (MOCK field): `true` only for a `fair_draw` release whose
-`opens_at` is still in the future, computed from the wall clock at request time. The draw runs when the window
-opens, so a release past `opens_at` can no longer be declared on — the agent reads this field instead of doing
-date arithmetic, and `POST .../declarations` enforces it server-side (409 `POOL_CLOSED` above). A fresh run's
+declare window is currently open, computed from the wall clock at request time. The window is the optional
+`declare_window_starts_at` up to `opens_at`: a release with no `declare_window_starts_at` is open from creation
+(every seeded and organiser-created release, unchanged), while one that sets it stays closed until that instant —
+which is what the portal's quick-demo action uses to script "opens in 2 minutes, closes 3 minutes later". The
+draw runs when the window opens, so a release past `opens_at` can no longer be declared on — the agent reads this
+field instead of doing date arithmetic, and `POST .../declarations` enforces it server-side (409 `POOL_CLOSED`
+above, whose message says "not open right now" because a single boolean covers both edges). A fresh run's
 catalogue fixture is seeded with dates computed relative to that seed's own clock (`mock_server/state.py`
 `_seed_domain`), not pinned to a calendar date, so its releases are open right after a reset regardless of when
 that happens to be. The detail and listing routes also carry: the release's `date`; `weekday` (its day name,
@@ -189,6 +193,19 @@ Everything is keyed by `X-Run-Id`, so that header is the scope of a run: keep it
 the Workflow. Both fall back to `default`, which is also shared, so omitting it works too — just do not give the two
 sides *different* run ids, or they will not see each other's pool. Single writer: the Deployment runs one replica.
 `POST /__admin/reset` clears one run (with `run_id`) or all state.
+
+### Agent stats (ADR-020)
+
+The two live agents' accuracy/sample numbers exist only on AgenticOrg; `agent_stats_sync/` mirrors them in
+every 5 minutes. The mock stores each snapshot verbatim, keyed by agent id — it validates the envelope, never
+the numbers, and never invents a field the platform stopped exposing.
+
+- `PUT /__admin/agent-stats/{agent_id}` — writes one agent's snapshot (body is an arbitrary JSON object, e.g.
+  `{status, accuracy, shadow_accuracy_current, shadow_sample_count, synced_at}`). Admin-key gated like the rest
+  of `/__admin/*`.
+- `GET /venue/agent-stats` — **public**, for the portal's stat strip: `{"agents": [{agent_id, …, synced_at}]}`,
+  one entry per synced agent, or `{"agents": []}` before the first sync. `synced_at` is what lets the UI say how
+  old a number is; a caller must render absence as "—", never as zero.
 
 ## Pine Labs
 

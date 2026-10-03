@@ -23,6 +23,9 @@ What is here:
   Allocator" to draw a release once its declare window closes, because the platform's own Window Allocation
   Workflow executes zero steps. A relay, not a decision-maker, same shape as `voice_bridge/`.
 - `allocator/` — the DIFD seeded fair draw, the reference the mock's `/allocator/draw` transcribes.
+- `agent_stats_sync/` — the agent-stats mirror (ADR-020): a scheduled k8s CronJob that copies the two live
+  agents' accuracy/sample numbers from AgenticOrg into the mock, for the portal to display with a
+  "last synced" stamp. Read-only against the platform; writes no decisions.
 - `logging_/redact.py` — key/token/phone redaction shared by the mock request log.
 - `tests/` — mock-server scenarios and allocator properties.
 - `docs/` — the spec: `docs/agenticorg/` (agent, workflow, runbook, evals), `docs/decisions/` (ADRs), plus
@@ -69,14 +72,17 @@ voice_bridge/agenticorg_llm.py  exposes that agent as the pipeline's llm.LLM (ne
 allocator_bridge/run_once.py    finds closed, undrawn releases with bids; asks "Kirro Allocator" to draw each
                        (ADR-018); drawn-ness is the mock's own `drawn` field, not state this script keeps
 allocator_bridge/__main__.py    python -m allocator_bridge — one pass, run by k8s/allocator-cronjob.yaml
+agent_stats_sync/run_once.py    reads each agent's record and stores the displayable fields (ADR-020)
+agent_stats_sync/__main__.py    python -m agent_stats_sync — one pass, run by k8s/agent-stats-sync-cronjob.yaml
 logging_/redact.py     key/token/phone redaction applied before anything is logged
 tests/                 test_mock_server.py (scenarios, incl. a real uvicorn thread), test_allocator.py,
                        test_mcp_surface.py (MCP tool catalogs + REST/MCP state parity),
                        test_state_durability.py, test_voice_bridge.py (AgenticOrg client + LLM adapter,
                        no network, no LiveKit server), test_allocator_bridge.py (candidate/trigger logic,
-                       no network, no AgenticOrg)
-k8s/                   Deployments (kirro-mock, kirro-livekit, kirro-voice), the allocator-trigger CronJob,
-                       Services, Ingress, NetworkPolicy, ConfigMap, PVC
+                       no network, no AgenticOrg), test_agent_stats_sync.py (config + extract/store,
+                       no network)
+k8s/                   Deployments (kirro-mock, kirro-livekit, kirro-voice), the allocator-trigger and
+                       agent-stats-sync CronJobs, Services, Ingress, NetworkPolicy, ConfigMap, PVC
 scripts/dev.sh         starts the mock server on :8081 in the foreground
 web/                   Next.js portal (ADR-015): listings, declare/instant-buy, dashboard, organiser, admin,
                        and /talk (the LiveKit voice channel, ADR-017). Server-side only, talks to
