@@ -10,7 +10,8 @@ import {
 } from '@/components/ui/table';
 import { requireRole } from '@/lib/auth/roles';
 import * as api from '@/lib/kirro/api';
-import { formatPaise } from '@/lib/kirro/format';
+import { formatDate, formatDateTime, formatPaise } from '@/lib/kirro/format';
+import type { ReleaseDetail } from '@/lib/kirro/schemas';
 
 import { ApproveOrganiserButton, ResetRunButton, ScenarioForm } from './admin-controls';
 
@@ -32,12 +33,24 @@ export default async function AdminPage() {
   let state;
   let organisers;
   let events;
+  let releases: Array<{ detail: ReleaseDetail; date: string; declared: number }>;
   try {
-    [state, organisers, events] = await Promise.all([
+    let summaries;
+    [state, organisers, events, summaries] = await Promise.all([
       api.adminState(),
       api.listOrganisers(),
       api.listEvents(),
+      api.listReleases(),
     ]);
+    releases = await Promise.all(
+      summaries.map(async summary => {
+        const [detail, pool] = await Promise.all([
+          api.getRelease(summary.release_id),
+          api.listDeclarations(summary.release_id).catch(() => ({ declarations: [] })),
+        ]);
+        return { detail, date: summary.date, declared: pool.declarations.length };
+      })
+    );
   } catch (error) {
     return (
       <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-16">
@@ -52,6 +65,7 @@ export default async function AdminPage() {
   }
 
   const pending = organisers.filter(organiser => organiser.status === 'pending');
+  const eventName = new Map(events.map(event => [event.event_id, event.name]));
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-10">
@@ -167,6 +181,64 @@ export default async function AdminPage() {
                 </TableCell>
               </TableRow>
             ))}
+          </TableBody>
+        </Table>
+      </section>
+
+      <section className="border-t border-border py-8">
+        <h2 className="font-heading text-lg font-medium text-foreground">Releases</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Every release on sale: slot capacity, price range and draw entries.
+        </p>
+        <Table className="mt-4">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Release</TableHead>
+              <TableHead>Event</TableHead>
+              <TableHead>Date</TableHead>
+              <TableHead>Opens</TableHead>
+              <TableHead>Mode</TableHead>
+              <TableHead className="text-right">Slots</TableHead>
+              <TableHead className="text-right">Capacity</TableHead>
+              <TableHead className="text-right">Price / person</TableHead>
+              <TableHead className="text-right">Entries</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {releases.map(({ detail, date, declared }) => {
+              const prices = detail.slots.map(slot => slot.price_per_person_paise);
+              const low = prices.length ? Math.min(...prices) : 0;
+              const high = prices.length ? Math.max(...prices) : 0;
+              return (
+                <TableRow key={detail.release_id}>
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    {detail.release_id}
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    {eventName.get(detail.event_id) ?? detail.event_id}
+                  </TableCell>
+                  <TableCell>{formatDate(date)}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {formatDateTime(detail.opens_at)}
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={detail.allocation_mode === 'fair_draw' ? 'secondary' : 'outline'}
+                    >
+                      {detail.allocation_mode === 'fair_draw' ? 'fair draw' : 'instant buy'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">{detail.slots.length}</TableCell>
+                  <TableCell className="text-right">
+                    {detail.slots.reduce((sum, slot) => sum + slot.capacity, 0)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {low === high ? formatPaise(low) : `${formatPaise(low)}–${formatPaise(high)}`}
+                  </TableCell>
+                  <TableCell className="text-right">{declared}</TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </section>
