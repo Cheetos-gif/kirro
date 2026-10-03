@@ -918,8 +918,11 @@ experiment; both are now trimmed to a demo-ready state:
 - **Agents:** `Kirro Declare v2`, `v3` and `Kirro` retired and deleted; **`Kirro Declare v4`** (`27ec9d3c`) and
   **`Kirro Allocator`** (`5591e57a`) remain, both `active`. The five platform built-ins are untouched.
   Added 2026-10-03: **`Kirro Declare v6`** (`6596b872-abb5-465a-87d3-fff8de17536d`, `active`, six tools on
-  `mcp_kirro_all_v22` including `cancel_declaration`) and the development copy `Kirro Declare v6-dev`
-  (`69766e00-a725-40e2-8c46-fbfec611a0e1`, `shadow`). The voice bridge targets v6 since 2026-10-03.
+  **`mcp_kirro_all_v23`** including `cancel_declaration` — relinked from `v22` the same day to pick up
+  `declare_interest`'s new `mandate_id`/`user_contact` parameters, schema caching requiring a new connector record
+  per the usual recipe) and the development copy `Kirro Declare v6-dev` (`69766e00-a725-40e2-8c46-fbfec611a0e1`,
+  `shadow`, still on `v22`). The voice bridge targets v6 since 2026-10-03. `Kirro Declare v4` and `Kirro Allocator`
+  are untouched, still on `mcp_kirro_all_v22`.
 - **Workflow:** one, `Kirro Window Allocation`, `Trigger | schedule`.
 
 ## 11. Tool arguments: what arrives, what the mock resolves, and what the platform withholds

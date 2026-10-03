@@ -282,8 +282,29 @@ DECLARED, and the agent's claim matched; 28 samples at 0.808 afterwards.
 **Voice cutover (2026-10-03):** the bridge now drives v6 (`voice_bridge/config.py` `DEFAULT_AGENT_ID`); v4 stays
 `active` until v6 has carried real calls. Still open, with the rest of the work list, in
 `docs/agenticorg/declare-v6-notes.md`: the bridge's synthetic "Hi" opener and cumulative-transcript re-sends are
-scored turns on v6, and the pool keys a declaration per `(run, release)`, so a second user's bid on the same
-release overwrites the first (L09 above).
+scored turns on v6.
+
+**L09's mock caveat, fixed (2026-10-03).** `declare_interest`'s fallback `declaration_id` was keyed only on
+`(run_id, release_id)`, so a second caller's bid on the same release overwrote the first's pool entry and inherited
+whichever mandate was created last in the run — the gap L09's live run exposed. The tool now also accepts
+`mandate_id`/`authorization_id` and keys the fallback id on it (`mock_server/mcp_surface.py`); v6's prompt passes
+the authorization id `create_mandate` returned. Because a registered connector caches the tool schema it discovered
+at registration time, this needed the usual new-connector cycle: **`mcp_kirro_all_v23`** registered, health
+`{status: healthy, tool_count: 18}`, v6 paused → relinked (`connector_ids`, `authorized_tools`) → resumed. `v4` and
+`Kirro Allocator` are untouched, still on `v22`.
+
+Verified live: two fresh threads, same release (`rel_0002`, tennis 10 October) —
+
+```
+caller 1: "Tennis court on 10th October for 2 people, max 600 each, all or nothing" -> yes
+  create_mandate 120000 ACTIVE (auth_0016) -> declare_interest decl_default_rel_0002_auth_0016 DECLARED
+caller 2: "Tennis court on 10th October for 3 people, minimum 3, max 700 each" -> yes
+  create_mandate 210000 ACTIVE (auth_0017) -> declare_interest decl_default_rel_0002_auth_0017 DECLARED
+```
+
+`GET /venue/releases/rel_0002/declarations` held both entries, each with its own `mandate_id` — the first bid
+survived the second (previously it would have been silently overwritten). Offline coverage:
+`test_two_callers_bidding_on_the_same_release_do_not_collide` (`tests/test_mcp_surface.py`).
 
 ## The voice channel (ADR-016, ADR-017)
 

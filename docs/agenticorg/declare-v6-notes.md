@@ -44,15 +44,16 @@ the rejected levers).
 
 ## 3. Pool and mandate correctness (mock side)
 
-- **One pool entry per `(run, release)`.** `declaration_id` is `decl_{run}_{release}`, so a second user's bid on the
-  same release overwrites the first and its mandate is orphaned (seen in L09: `auth_0009` stayed active and was
-  released by hand). Fix: key the declaration by the mandate it binds (P2-2 in the planning notes), or by a
-  per-conversation key the model does not have to supply.
-- **`declare_interest` binds the run's latest mandate**, not the one this conversation created
-  (`_LATEST_MANDATE[run_id]` in `mock_server/mcp_surface.py`). Under concurrent callers a bid can attach someone
-  else's reservation. v6 now calls the two tools in sequence, which removes the single-caller case only. A real fix is
-  an explicit `mandate_id`/`authorization_id` parameter on `declare_interest`; that changes the tool schema, so it
-  needs a new connector record (`mcp_kirro_all_v23`), a relink and a health check on every agent that uses it.
+**Fixed 2026-10-03** (`docs/testing.md`, "L09's mock caveat, fixed"): `declare_interest` now accepts
+`mandate_id`/`authorization_id` and keys the fallback `declaration_id` on it, so two different callers' bids on the
+same release no longer collide or inherit each other's mandate. v6's prompt passes the authorization id
+`create_mandate` returned; relinked to a new connector (`mcp_kirro_all_v23`) to pick up the schema change. Verified
+live with two concurrent threads on `rel_0002` — both bids survived with their own `mandate_id`. `v4` and
+`Kirro Allocator` were not touched and still key on `(run, release)` alone; this only matters if either carries
+real concurrent traffic, which neither does (v4 is being retired, the Allocator runs one release at a time).
+
+Still open:
+
 - **No server-side refusal for a closed release.** `declarations_open` tells the agent, but the REST pool route still
   accepts a bid after `opens_at`. It was left out because every seeded fixture release is past its window; once the
   seed computes dates relative to the reset time (`mock_server/state.py` `_seed_domain`), add `409 POOL_CLOSED`.
