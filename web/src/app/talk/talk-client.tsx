@@ -41,8 +41,14 @@ const STATE_LABEL: Record<string, string> = {
 };
 
 /** Plain text for the clipboard and the download — one line per turn, speaker-prefixed. */
-export function transcriptAsText(lines: TranscriptLine[], startedAt: Date | null): string {
-  const header = startedAt ? `KIRRO voice transcript — ${startedAt.toLocaleString()}\n\n` : '';
+export function transcriptAsText(
+  lines: TranscriptLine[],
+  startedAt: Date | null,
+  callId: string | null = null
+): string {
+  const started = startedAt ? `KIRRO voice transcript — ${startedAt.toLocaleString()}\n` : '';
+  const id = callId ? `Call id: ${callId}\n` : '';
+  const header = started || id ? `${started}${id}\n` : '';
   return header + lines.map(line => `${line.mine ? 'You' : 'KIRRO'}: ${line.text}`).join('\n\n') + '\n';
 }
 
@@ -226,23 +232,23 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
 
   const copy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(transcriptAsText(lines, startedAt));
+      await navigator.clipboard.writeText(transcriptAsText(lines, startedAt, callId));
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
       setError('The browser blocked clipboard access. Select the text and copy it by hand.');
     }
-  }, [lines, startedAt]);
+  }, [lines, startedAt, callId]);
 
   const download = useCallback(() => {
-    const blob = new Blob([transcriptAsText(lines, startedAt)], { type: 'text/plain' });
+    const blob = new Blob([transcriptAsText(lines, startedAt, callId)], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.download = `kirro-transcript-${(startedAt ?? new Date()).toISOString().slice(0, 19).replace(/[:T]/g, '-')}.txt`;
     link.click();
     URL.revokeObjectURL(url);
-  }, [lines, startedAt]);
+  }, [lines, startedAt, callId]);
 
   return (
     <Card>

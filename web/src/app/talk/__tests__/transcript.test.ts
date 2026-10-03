@@ -44,6 +44,21 @@ describe('transcriptAsText', () => {
   it('is newline-terminated so a paste does not run into the next line', () => {
     expect(transcriptAsText([line('me|1', true, 'hi')], null).endsWith('\n')).toBe(true);
   });
+
+  it('includes the call id in the header when known, for reporting a problem with that call', () => {
+    const text = transcriptAsText(
+      [line('me|1', true, 'hi')],
+      new Date('2026-10-03T09:15:00Z'),
+      'call_29fbe992aa8d',
+    );
+    expect(text).toContain('Call id: call_29fbe992aa8d\n');
+    expect(text.startsWith('KIRRO voice transcript —')).toBe(true);
+  });
+
+  it('carries only the call id when the start time is unknown', () => {
+    const text = transcriptAsText([line('me|1', true, 'hi')], null, 'call_x');
+    expect(text).toBe('Call id: call_x\n\nYou: hi\n');
+  });
 });
 
 /**
