@@ -49,9 +49,9 @@ the rejected levers).
 `mandate_id`/`authorization_id` and keys the fallback `declaration_id` on it, so two different callers' bids on the
 same release no longer collide or inherit each other's mandate. v6's prompt passes the authorization id
 `create_mandate` returned; relinked to a new connector (`mcp_kirro_all_v23`) to pick up the schema change. Verified
-live with two concurrent threads on `rel_0002` — both bids survived with their own `mandate_id`. `v4` and
-`Kirro Allocator` were not touched and still key on `(run, release)` alone; this only matters if either carries
-real concurrent traffic, which neither does (v4 is being retired, the Allocator runs one release at a time).
+live with two concurrent threads on `rel_0002` — both bids survived with their own `mandate_id`. `v4` (retired) and
+`Kirro Allocator` were not touched and still key on `(run, release)` alone; this only matters for the Allocator if
+it ever carries concurrent per-release traffic, which it does not (one release at a time).
 
 Still open:
 
@@ -83,8 +83,11 @@ Still open:
   prompt work is planned, or keep it as the permanent test bed.
 - **`/__admin/*` answers on the public mock URL** (`https://api-kirro.upayan.dev/__admin/state` returned 200). Anyone
   can arm scenarios or reset state during a demo. Restrict it at the ingress or require a header.
-- **Eval data left in run `default`:** pool entries on `rel_0002` and `rel_0003` and their active mandates. Clear them
-  (`DELETE /venue/releases/{id}/declarations/{decl}` and `POST /pinelabs/mandates/{id}/release`) before a demo that
-  runs the allocator, or the draw will include test bids.
+- **Eval data left in run `default`.** `rel_0001` and `rel_tennis_sat` were drawn for real by the allocator-trigger
+  bridge's own live verification (`docs/testing.md`, "The allocator-trigger bridge") — `BK-0001`/`BK-0002`
+  `CONFIRMED`, genuine demonstrations, not contamination. `rel_0002` and `rel_0003` still hold test pool entries
+  and active mandates from this session's prompt iteration (not yet drawn, since their windows are still open).
+  Clear them (`DELETE /venue/releases/{id}/declarations/{decl}` and `POST /pinelabs/mandates/{id}/release`)
+  before a demo that relies on their pools being clean when the trigger eventually draws them.
 - **`v4`'s stored accuracy looked stale** (0.691 matched the running mean at 18:25Z, not the full mean 0.663).
   `POST /agents/{id}/retest` probably recomputes it; untested, and not worth running on v6.
