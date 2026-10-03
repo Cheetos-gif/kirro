@@ -86,20 +86,20 @@ to day, and the Docker path exists so nobody has to install Node and uv to see t
 
 ## Consequences
 
-- **The k8s deploy is deliberately untouched.** `k8s/kustomization.yaml` still pins an image
-  *digest* written back by argocd-image-updater, the Deployment still pins one replica driving the
-  same image with `uvicorn` (not gunicorn) as its command, and ArgoCD still reconciles `k8s/` on
-  `main`. This ADR changes how the image is *built*, the local dev story and the default command a
-  bare `docker run`/compose uses; it changes nothing about what the cluster runs. A k8s change here
-  would be a second, independent decision, and it is not needed to close #36.
+- **Production runs the image's gunicorn; development runs uvicorn. (Amended 2026-10-04, same day:
+  this originally left `k8s/deployments.yaml` overriding the command with bare `uvicorn`, and the
+  override has been removed.)** The rule is now one process model per environment, with exactly one
+  definition of each: production is the image's own CMD
+  (`gunicorn --config gunicorn.conf.py`, workers 1 — ADR-013), used by the cluster, by
+  `docker compose -f docker-compose.yml up` and by a bare `docker run`; development is `uvicorn --reload`, used by `Dockerfile.dev` (compose dev override) and by `scripts/dev.sh`, which now
+  passes `--reload` too so the two dev paths behave identically. The k8s Deployment no longer sets
+  `command:` at all — a manifest that overrides the image's process model is how the cluster ran
+  bare uvicorn for an hour while the image, compose and this ADR all said gunicorn. Changing the
+  process model now means editing `gunicorn.conf.py`, which is the point.
 - **docker-compose is a local dev/eval convenience, not a second deployment path.** It exists so
   `docker compose up` can show the mock and the portal together on a laptop. Nothing in
   `docker-compose.yml` is a source of truth for the cluster, and the two will diverge on purpose
-  (compose runs one gunicorn worker with no PVC; the cluster runs one uvicorn process with a PVC).
-- **The cluster and this repo now differ on the command.** The k8s Deployment keeps its own
-  `uvicorn ...` command until someone decides otherwise; the image default is gunicorn. That is a
-  knowing, temporary asymmetry, not an oversight — the image default is what compose and a bare
-  `docker run` get, and the manifest overrides it.
+  (compose runs one gunicorn worker with no PVC; the cluster runs one gunicorn worker with a PVC).
 - **New dependency: gunicorn** (recorded in `pyproject.toml` and `uv.lock`). No other dependency was
   added. `uvicorn.workers` emits an upstream `DeprecationWarning` in favour of the separate
   `uvicorn-worker` distribution; migrating is deferred rather than done, because it would add a

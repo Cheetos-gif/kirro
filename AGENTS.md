@@ -179,9 +179,11 @@ uv sync
 uv run pytest && uv run ruff check . && uv run black --check .
 uv run pre-commit install           # one-time: wires the markdown-formatter commit hook
 uv run pre-commit run --all-files
-uv run uvicorn mock_server.app:app --port 8081      # or:
-bash scripts/dev.sh                 # mock server on :8081 (GET /health)
+uv run uvicorn mock_server.app:app --port 8081 --reload   # or:
+bash scripts/dev.sh                 # mock server on :8081 (GET /health), also --reload
 ```
+
+Dev runs uvicorn; production runs gunicorn from the image's own CMD, one worker (ADR-013, ADR-021).
 
 The voice worker (optional; needs `GNANI_API_KEY`, `AGENTICORG_EMAIL`, `AGENTICORG_PASSWORD`,
 `AGENTICORG_BASE_URL`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` — ADR-017). Against a
