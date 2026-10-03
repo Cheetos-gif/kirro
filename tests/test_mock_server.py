@@ -30,6 +30,30 @@ def test_health_and_catalogue(mock_client):
     assert len(mock_client.get("/venue/catalogue").json()["events"]) == 4
 
 
+def test_admin_routes_are_open_when_no_admin_key_is_configured(mock_client):
+    """The default today, until an operator provisions `MOCK_ADMIN_KEY` (#12 item 2): shipping the
+    guard must not lock an existing deployment out of its own harness."""
+    assert mock_client.post("/__admin/scenario", json={"run_id": "r", "scenario": "success"}).status_code == 200
+    assert mock_client.get("/__admin/state", params={"run_id": "r"}).status_code == 200
+    assert mock_client.post("/__admin/reset", json={"run_id": "r"}).status_code == 200
+
+
+def test_admin_routes_require_the_configured_admin_key(mock_client, monkeypatch):
+    """`/__admin/*` answered unauthenticated on the public mock URL (#12 item 2). With the key set, a
+    call must carry a matching `X-Admin-Key`; the agent is never told this header exists."""
+    monkeypatch.setenv("MOCK_ADMIN_KEY", "harness-secret")
+    no_key = mock_client.get("/__admin/state", params={"run_id": "r"})
+    assert no_key.status_code == 403 and no_key.json()["error"]["code"] == "FORBIDDEN"
+    wrong_key = mock_client.post(
+        "/__admin/scenario", json={"run_id": "r", "scenario": "success"}, headers={"X-Admin-Key": "nope"}
+    )
+    assert wrong_key.status_code == 403
+    assert mock_client.post("/__admin/reset", json={"run_id": "r"}).status_code == 403
+
+    ok = mock_client.get("/__admin/state", params={"run_id": "r"}, headers={"X-Admin-Key": "harness-secret"})
+    assert ok.status_code == 200
+
+
 def test_unknown_scenario_rejected(mock_client):
     r = mock_client.post("/__admin/scenario", json={"run_id": "r", "scenario": "nope"})
     assert r.status_code == 422
@@ -67,17 +91,23 @@ def test_happy_hold_booking_flow_and_idempotency(mock_client):
 
 def test_movie_release_is_bookable(mock_client):
     """ev_movie has a catalogue entry but previously had no release at all -- NOT_FOUND on every call."""
-    assert mock_client.get("/venue/releases", params={"event_id": "ev_movie"}).json()["releases"] == [
-        {
-            "release_id": "rel_movie_fri",
-            "event_id": "ev_movie",
-            "date": "2026-10-03",
-            "opens_at": "2026-10-02T06:00:00Z",
-            "allocation_mode": "fair_draw",
-            "declarations_open": False,
-            "drawn": False,
-        }
-    ]
+    releases = mock_client.get("/venue/releases", params={"event_id": "ev_movie"}).json()["releases"]
+    assert len(releases) == 1
+    r = releases[0]
+    # Fixture dates are seeded relative to this test run's own clock (mock_server/state.py
+    # `_seed_domain`, #12 item 3), not pinned to a calendar date, so a fresh seed is always open.
+    assert r["release_id"] == "rel_movie_fri" and r["event_id"] == "ev_movie"
+    assert r["allocation_mode"] == "fair_draw" and r["declarations_open"] is True and r["drawn"] is False
+    assert r["weekday"] in (
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+    )
+    assert r["opens_at_ist"].endswith("+05:30")
     a = mock_client.post(
         "/venue/releases/rel_movie_fri/holds", json=hold_body(qty=2, slot="mv_1900"), headers=H(key="k1")
     ).json()
@@ -324,6 +354,40 @@ def test_declare_pool_round_trip(mock_client):
     assert mock_client.delete("/venue/releases/rel_badminton_sat/declarations/dec_1", headers=H()).status_code == 404
 
 
+def test_declare_pool_second_call_with_same_declaration_id_is_a_no_op(mock_client):
+    """L09: declaring twice with the same declaration_id must not be indistinguishable from the first
+    call, and must not let a second body silently overwrite the stored bid (#12 item 6)."""
+    body = declare_body()
+    first = mock_client.post("/venue/releases/rel_badminton_sat/declarations", json=body, headers=H(key="d1"))
+    assert first.json() == {"declaration_id": "dec_1", "release_id": "rel_badminton_sat", "status": "DECLARED"}
+
+    second = mock_client.post(
+        "/venue/releases/rel_badminton_sat/declarations", json=declare_body(group_size=99), headers=H(key="d2")
+    )
+    assert second.status_code == 200
+    assert second.json() == {
+        "declaration_id": "dec_1",
+        "release_id": "rel_badminton_sat",
+        "status": "DECLARED",
+        "duplicate": True,
+    }
+    # The second body's group_size must not have overwritten the first declaration.
+    stored = mock_client.get("/venue/releases/rel_badminton_sat/declarations", headers=H()).json()["declarations"]
+    assert stored == [body | {"status": "DECLARED"}]
+
+
+def test_declare_pool_refuses_a_closed_release(mock_client):
+    """`declarations_open` tells the agent a window is shut; the REST route must refuse a bid too,
+    not just advertise the field (#12 item 3)."""
+    closed = instant_release_body(
+        event_id="ev_tennis", date="2000-01-02", opens_at="2000-01-01T06:00:00Z", allocation_mode="fair_draw"
+    )
+    closed_id = mock_client.post("/venue/releases", json=closed, headers=H(key="r1")).json()["release_id"]
+    r = mock_client.post(f"/venue/releases/{closed_id}/declarations", json=declare_body(), headers=H())
+    assert r.status_code == 409 and r.json()["error"]["code"] == "POOL_CLOSED"
+    assert mock_client.get(f"/venue/releases/{closed_id}/declarations", headers=H()).json()["declarations"] == []
+
+
 @pytest.mark.parametrize(
     "over",
     [
@@ -456,21 +520,27 @@ def test_a_release_takes_declarations_only_until_its_window_opens(mock_client):
         event_id="ev_tennis", date="2099-01-02", opens_at="2099-01-01T06:00:00Z", allocation_mode="fair_draw"
     )
     open_id = mock_client.post("/venue/releases", json=future, headers=H(key="r1")).json()["release_id"]
+    # A dedicated past-dated release rather than the catalogue fixture: with #12 item 3, the fixture's
+    # own `opens_at` is seeded relative to "now" and so is always open right after a reset.
+    closed = instant_release_body(
+        event_id="ev_tennis", date="2000-01-02", opens_at="2000-01-01T06:00:00Z", allocation_mode="fair_draw"
+    )
+    closed_id = mock_client.post("/venue/releases", json=closed, headers=H(key="r3")).json()["release_id"]
     instant_id = mock_client.post("/venue/releases", json=instant_release_body(), headers=H(key="r2")).json()[
         "release_id"
     ]
 
     detail = mock_client.get(f"/venue/releases/{open_id}", headers=H()).json()
     assert detail["declarations_open"] is True and detail["date"] == "2099-01-02"
-    past = mock_client.get("/venue/releases/rel_tennis_sat", headers=H()).json()
-    assert past["declarations_open"] is False and past["date"] == "2026-10-03"
+    past = mock_client.get(f"/venue/releases/{closed_id}", headers=H()).json()
+    assert past["declarations_open"] is False and past["date"] == "2000-01-02"
     assert mock_client.get(f"/venue/releases/{instant_id}", headers=H()).json()["declarations_open"] is False
 
     listed = {
         r["release_id"]: r["declarations_open"]
         for r in mock_client.get("/venue/releases", headers=H()).json()["releases"]
     }
-    assert listed[open_id] is True and listed["rel_tennis_sat"] is False and listed[instant_id] is False
+    assert listed[open_id] is True and listed[closed_id] is False and listed[instant_id] is False
 
 
 @pytest.mark.parametrize(

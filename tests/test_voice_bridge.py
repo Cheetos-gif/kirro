@@ -229,6 +229,74 @@ def test_the_llm_adapter_streams_the_agents_answer_to_the_pipeline() -> None:
     _run(llm.aclose())
 
 
+def test_next_turn_text_sends_a_new_utterance_whole() -> None:
+    llm = AgenticOrgChat(client=_Platform().chat())
+    assert llm.next_turn_text("tennis saturday") == "tennis saturday"
+    _run(llm.aclose())
+
+
+def test_next_turn_text_skips_an_exact_repeat() -> None:
+    llm = AgenticOrgChat(client=_Platform().chat())
+    llm.next_turn_text("solah ek")
+    assert llm.next_turn_text("solah ek") is None
+    _run(llm.aclose())
+
+
+def test_next_turn_text_sends_only_the_new_suffix_of_a_growing_transcript() -> None:
+    llm = AgenticOrgChat(client=_Platform().chat())
+    llm.next_turn_text("solah ek")
+    assert llm.next_turn_text("solah ek ek din") == "ek din"
+    _run(llm.aclose())
+
+
+def test_next_turn_text_skips_a_growing_transcript_whose_only_addition_is_whitespace() -> None:
+    llm = AgenticOrgChat(client=_Platform().chat())
+    llm.next_turn_text("solah ek")
+    assert llm.next_turn_text("solah ek  ") is None
+    _run(llm.aclose())
+
+
+def test_next_turn_text_sends_the_whole_thing_when_it_is_not_a_continuation() -> None:
+    llm = AgenticOrgChat(client=_Platform().chat())
+    llm.next_turn_text("solah ek")
+    assert llm.next_turn_text("badminton instead") == "badminton instead"
+    _run(llm.aclose())
+
+
+def test_the_llm_adapter_skips_an_exact_repeat_transcript() -> None:
+    """A re-invoked pipeline turn with the same transcript must not reach AgenticOrg a second time."""
+    platform = _Platform(answer="Shall I go ahead?")
+    llm = AgenticOrgChat(client=platform.chat())
+
+    first = ChatContext()
+    first.add_message(role="user", content="tennis saturday")
+    assert _collect(llm, first) == "Shall I go ahead?"
+
+    second = ChatContext()
+    second.add_message(role="user", content="tennis saturday")
+    assert _collect(llm, second) == ""
+    assert len(platform.queries) == 1
+    _run(llm.aclose())
+
+
+def test_the_llm_adapter_sends_only_the_new_suffix_of_a_growing_transcript() -> None:
+    """A re-invoked pipeline turn with more words appended sends only what is new, not the full
+    transcript again — the fix for 14 scored, repeated-read-back turns on v4 (#12 item 4)."""
+    platform = _Platform(answer="Got it.")
+    llm = AgenticOrgChat(client=platform.chat())
+
+    first = ChatContext()
+    first.add_message(role="user", content="solah ek")
+    _collect(llm, first)
+
+    second = ChatContext()
+    second.add_message(role="user", content="solah ek ek din")
+    _collect(llm, second)
+
+    assert [q["body"]["query"] for q in platform.queries] == ["solah ek", "ek din"]
+    _run(llm.aclose())
+
+
 def test_the_llm_adapter_says_so_when_the_agent_is_unreachable() -> None:
     llm = AgenticOrgChat(client=_Platform(fail_query=True).chat())
     ctx = ChatContext()
