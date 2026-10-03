@@ -28,5 +28,10 @@ export const api = createApiClient(env.MOCK_API_URL);
 
 api.interceptors.request.use(config => {
   config.headers.set('X-Run-Id', env.MOCK_RUN_ID);
+  // The mock's /__admin/* surface is gated behind X-Admin-Key when MOCK_ADMIN_KEY is set
+  // (#22); blank is a no-op on both sides. Scoped to admin URLs only, not every request.
+  if (env.MOCK_ADMIN_KEY && config.url?.startsWith('/__admin')) {
+    config.headers.set('X-Admin-Key', env.MOCK_ADMIN_KEY);
+  }
   return config;
 });

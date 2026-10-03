@@ -19,6 +19,10 @@ export const env = createEnv({
     LIVEKIT_API_SECRET: z.string().default(''),
     // Comma-separated Google emails granted the admin role. Not stored in the mock.
     ADMIN_EMAILS: z.string().default(''),
+    // Matches mock_server's MOCK_ADMIN_KEY (ADR/#22): when set, the portal sends it as
+    // X-Admin-Key on every /__admin/* call. Blank is a no-op on both sides, so this stays
+    // optional until the mock's own key is provisioned.
+    MOCK_ADMIN_KEY: z.string().default(''),
     AUTH_SECRET: z.string().min(1).optional(),
     AUTH_GOOGLE_ID: z.string().min(1).optional(),
     AUTH_GOOGLE_SECRET: z.string().min(1).optional(),
