@@ -279,9 +279,10 @@ Promoted at 26 samples, 0.804 (`POST /agents/{id}/promote` → `active`, version
 (badminton 11 October, 2 people, minimum 2, Rs 300) went `create_mandate` 60000 ACTIVE → `declare_interest` `rel_0003`
 DECLARED, and the agent's claim matched; 28 samples at 0.808 afterwards.
 
-**Voice cutover (2026-10-03):** the bridge now drives v6 (`voice_bridge/config.py` `DEFAULT_AGENT_ID`); v4 stays
-`active` until v6 has carried real calls. The synthetic "Hi" opener is fixed the same day (below); cumulative
-transcript re-sends remain open, tracked in `docs/agenticorg/declare-v6-notes.md`.
+**Voice cutover (2026-10-03):** the bridge now drives v6 (`voice_bridge/config.py` `DEFAULT_AGENT_ID`). `v4` was
+paused then retired the same day (`POST /agents/{id}/pause` → `/retire`) rather than left running — kept, not
+deleted, so its 310 shadow samples stay available as evidence. The synthetic "Hi" opener is fixed the same day
+(below); cumulative transcript re-sends remain open, tracked in `docs/agenticorg/declare-v6-notes.md`.
 
 **L09's mock caveat, fixed (2026-10-03).** `declare_interest`'s fallback `declaration_id` was keyed only on
 `(run_id, release_id)`, so a second caller's bid on the same release overwrote the first's pool entry and inherited

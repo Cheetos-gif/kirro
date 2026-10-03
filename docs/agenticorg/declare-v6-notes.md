@@ -78,9 +78,9 @@ Still open:
 
 ## 5. Operational
 
-- **Retire v4** after v6 has carried real voice traffic cleanly: pause → retire (keep it, do not delete, so its
-  history stays as evidence). Delete `Kirro Declare v6-dev` once no more prompt work is planned, or keep it as the
-  permanent test bed.
+- **Done 2026-10-03: v4 retired.** Paused then retired right after the voice cutover (kept, not deleted, so its
+  history stays as evidence). `Kirro Declare v6-dev` is still around for prompt iteration; delete it once no more
+  prompt work is planned, or keep it as the permanent test bed.
 - **`/__admin/*` answers on the public mock URL** (`https://api-kirro.upayan.dev/__admin/state` returned 200). Anyone
   can arm scenarios or reset state during a demo. Restrict it at the ingress or require a header.
 - **Eval data left in run `default`:** pool entries on `rel_0002` and `rel_0003` and their active mandates. Clear them

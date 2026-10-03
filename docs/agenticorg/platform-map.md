@@ -915,6 +915,7 @@ experiment; both are now trimmed to a demo-ready state:
   four per-surface mocks (`mcp_venue_kirro`, `mcp_pinelabs_kirro`, `mcp_allocator_kirro`, `mcp_delhivery_kirro`), the
   aggregate **`mcp_kirro_all_v21`** the agents link, and the native ones (`whatsapp_kirro`, `pinelabs_plural`,
   `stripe`, `tally`, `zoho_books`, `gstn`, `banking_aa`).
+
 - **Agents:** `Kirro Declare v2`, `v3` and `Kirro` retired and deleted; **`Kirro Declare v4`** (`27ec9d3c`) and
   **`Kirro Allocator`** (`5591e57a`) remain, both `active`. The five platform built-ins are untouched.
   Added 2026-10-03: **`Kirro Declare v6`** (`6596b872-abb5-465a-87d3-fff8de17536d`, `active`, six tools on
@@ -923,6 +924,12 @@ experiment; both are now trimmed to a demo-ready state:
   per the usual recipe) and the development copy `Kirro Declare v6-dev` (`69766e00-a725-40e2-8c46-fbfec611a0e1`,
   `shadow`, still on `v22`). The voice bridge targets v6 since 2026-10-03. `Kirro Declare v4` and `Kirro Allocator`
   are untouched, still on `mcp_kirro_all_v22`.
+
+  **Updated the same day:** `Kirro Declare v4` was paused then retired (`POST /agents/{id}/pause` →
+  `POST /agents/{id}/retire`, both 200) right after the voice cutover, on direct instruction rather than after an
+  observation period — kept, not deleted, so its 310 shadow samples and conversation history stay available as
+  evidence. `Kirro Allocator` was not touched.
+
 - **Workflow:** one, `Kirro Window Allocation`, `Trigger | schedule`.
 
 ## 11. Tool arguments: what arrives, what the mock resolves, and what the platform withholds
