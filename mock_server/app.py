@@ -553,16 +553,33 @@ def create_app(log_dir: str | None = None) -> FastAPI:
     @app.put("/venue/users/{user_contact}/profile")
     async def put_user_profile(user_contact: str, request: Request):
         def h(sc: str, body: dict, run: RunState):
-            digits = normalise_phone(body.get("notify_phone"))
-            if digits is None:
-                return err(
-                    400,
-                    "BAD_REQUEST",
-                    "notify_phone is required and must be an E.164 number (e.g. +919876543210)",
-                )
-            # Portal-facing write (not on the MCP surface): the signed-in user sets the number once,
-            # and every declaration they make afterwards reuses it.
-            run.users[user_contact] = {"user_contact": user_contact, "notify_phone": digits}
+            # Merge rather than overwrite (PWA push notifications, web/src/app/settings): a caller
+            # may update just notify_phone, just push_subscription, or both, and must not clobber
+            # the field it did not send.
+            existing = dict(run.users.get(user_contact) or {"user_contact": user_contact})
+            touched = False
+            if "notify_phone" in body:
+                digits = normalise_phone(body.get("notify_phone"))
+                if digits is None:
+                    return err(
+                        400,
+                        "BAD_REQUEST",
+                        "notify_phone must be an E.164 number (e.g. +919876543210)",
+                    )
+                existing["notify_phone"] = digits
+                touched = True
+            if "push_subscription" in body:
+                sub = body.get("push_subscription")
+                if sub is not None and not isinstance(sub, dict):
+                    return err(400, "BAD_REQUEST", "push_subscription must be an object or null")
+                if sub is None:
+                    existing.pop("push_subscription", None)
+                else:
+                    existing["push_subscription"] = sub
+                touched = True
+            if not touched:
+                return err(400, "BAD_REQUEST", "notify_phone and/or push_subscription is required")
+            run.users[user_contact] = existing
             return 200, dict(run.users[user_contact])
 
         return await serve(request, "venue.user_profile_update", h)

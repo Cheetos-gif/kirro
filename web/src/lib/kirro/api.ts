@@ -113,11 +113,14 @@ export function getUserProfile(userContact: string) {
   });
 }
 
-export function setUserProfile(userContact: string, notifyPhone: string) {
+export function setUserProfile(
+  userContact: string,
+  input: { notify_phone?: string; push_subscription?: s.PushSubscriptionJSON | null }
+) {
   return request({
     method: 'PUT',
     url: `/venue/users/${encodeURIComponent(userContact)}/profile`,
-    data: { notify_phone: notifyPhone },
+    data: input,
     schema: s.userProfileSchema,
   });
 }

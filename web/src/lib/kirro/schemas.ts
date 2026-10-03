@@ -135,8 +135,16 @@ export const adminStateSchema = z.object({
 });
 export type AdminState = z.infer<typeof adminStateSchema>;
 
+export const pushSubscriptionSchema = z.object({
+  endpoint: z.string(),
+  expirationTime: z.number().nullable().optional(),
+  keys: z.object({ p256dh: z.string(), auth: z.string() }),
+});
+export type PushSubscriptionJSON = z.infer<typeof pushSubscriptionSchema>;
+
 export const userProfileSchema = z.object({
   user_contact: z.string(),
   notify_phone: z.string().optional(),
+  push_subscription: pushSubscriptionSchema.optional(),
 });
 export type UserProfile = z.infer<typeof userProfileSchema>;

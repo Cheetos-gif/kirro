@@ -5,6 +5,8 @@ import { revalidatePath } from 'next/cache';
 import { isApiError } from '@/api';
 import { requireRole, requireViewer } from '@/lib/auth/roles';
 import * as api from '@/lib/kirro/api';
+import type { PushSubscriptionJSON } from '@/lib/kirro/schemas';
+import { sendPushNotification } from '@/lib/push/send';
 
 export type ActionState = { ok: boolean; message: string } | null;
 
@@ -51,12 +53,48 @@ export async function savePhoneAction(_prev: ActionState, formData: FormData): P
     return { ok: false, message: 'Enter a number with its country code, e.g. +919876543210.' };
   }
   try {
-    await api.setUserProfile(viewer.email, notifyPhone);
+    await api.setUserProfile(viewer.email, { notify_phone: notifyPhone });
     revalidatePath('/settings');
     return { ok: true, message: `Saved. Draw results go to ${notifyPhone} on WhatsApp.` };
   } catch (error) {
     return { ok: false, message: messageOf(error) };
   }
+}
+
+/** Called from the client right after `pushManager.subscribe()` succeeds, with the browser's own
+ * `PushSubscription.toJSON()` output. */
+export async function savePushSubscriptionAction(subscription: PushSubscriptionJSON): Promise<ActionState> {
+  const viewer = await requireViewer();
+  try {
+    await api.setUserProfile(viewer.email, { push_subscription: subscription });
+    revalidatePath('/settings');
+    return { ok: true, message: 'Push notifications are on for this device.' };
+  } catch (error) {
+    return { ok: false, message: messageOf(error) };
+  }
+}
+
+/** Called after the client's own `subscription.unsubscribe()` succeeds, so the server stops
+ * holding a reference the browser itself already revoked. */
+export async function clearPushSubscriptionAction(): Promise<ActionState> {
+  const viewer = await requireViewer();
+  try {
+    await api.setUserProfile(viewer.email, { push_subscription: null });
+    revalidatePath('/settings');
+    return { ok: true, message: 'Push notifications are off for this device.' };
+  } catch (error) {
+    return { ok: false, message: messageOf(error) };
+  }
+}
+
+export async function sendTestPushAction(): Promise<ActionState> {
+  const viewer = await requireViewer();
+  await sendPushNotification(viewer.email, {
+    title: 'KIRRO test notification',
+    body: 'If you can see this, push is working on this device.',
+    url: '/settings',
+  });
+  return { ok: true, message: 'Sent. It may take a few seconds to arrive.' };
 }
 
 async function myOrganiserId(email: string): Promise<string | null> {
@@ -146,6 +184,13 @@ export async function buyAction(_prev: ActionState, formData: FormData): Promise
     });
     revalidatePath('/dashboard');
     revalidatePath(`/events/${release.event_id}`);
+    // Best-effort: a push failure must never undo or mask a real booking (sendPushNotification
+    // already swallows its own errors internally).
+    void sendPushNotification(viewer.email, {
+      title: 'Booking confirmed',
+      body: `${release.event_id} — reference ${booking.booking_ref}.`,
+      url: '/dashboard',
+    });
     return { ok: true, message: `Booked. Reference ${booking.booking_ref}.` };
   } catch (error) {
     return { ok: false, message: messageOf(error) };

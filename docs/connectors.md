@@ -63,10 +63,15 @@ it). Keyed per run by `release_id → declaration_id → bid`:
 - `GET /venue/releases/{release_id}/declarations` — returns `{release_id, declarations: [...]}`, every entry carrying
   its declared fields plus `status: "DECLARED"` (this is the Workflow's `list_pool_entries`).
 - `DELETE /venue/releases/{release_id}/declarations/{declaration_id}` — removes the entry, 404 `NOT_FOUND` if absent.
-- `GET|PUT /venue/users/{user_contact}/profile` — the portal's per-user settings document, currently
-  `{user_contact, notify_phone?}`. `PUT` takes `{notify_phone}` and applies the same E.164 rule and 400 as the
-  declaration route. The portal reads this instead of asking for a number on every declaration, so a user sets it
-  once in `/settings` and every later bid reuses it. Portal-facing and deliberately **not** on the MCP surface: the
+- `GET|PUT /venue/users/{user_contact}/profile` — the portal's per-user settings document:
+  `{user_contact, notify_phone?, push_subscription?}`. `PUT` merges rather than overwrites — a caller may send
+  `notify_phone`, `push_subscription`, or both, and the field it omits is left as stored; at least one is
+  required. `notify_phone` applies the same E.164 rule and 400 as the declaration route. `push_subscription` is
+  a Web Push `PushSubscription.toJSON()` object (`{endpoint, keys: {p256dh, auth}}`) or `null` to clear it;
+  stored as-is, never validated or dereferenced by the mock — the portal's own Next.js server sends the actual
+  push directly to the browser's push service using it (`web-push`, VAPID), not through this mock. The portal
+  reads this instead of asking for a number on every declaration, so a user sets it once in `/settings` and
+  every later bid reuses it. Portal-facing and deliberately **not** on the MCP surface: the
   agent collects the number in conversation instead (see `agent-spec.md` §3).
 
 The MCP `declare_interest` tool (below) additionally accepts `mandate_id`/`authorization_id` (the id

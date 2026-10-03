@@ -553,6 +553,34 @@ def test_user_profile_rejects_a_number_that_cannot_be_messaged(mock_client, bad)
     assert "notify_phone" not in mock_client.get("/venue/users/me@example.com/profile", headers=H()).json()
 
 
+def test_user_profile_push_subscription_merges_without_clobbering_phone(mock_client):
+    """PWA push notifications (web/settings) and the WhatsApp number (ADR-015) are independent
+    fields on the same per-user profile document; saving one must not erase the other."""
+    mock_client.put("/venue/users/me@example.com/profile", json={"notify_phone": "+919876543210"}, headers=H())
+
+    sub = {"endpoint": "https://push.example/abc", "keys": {"p256dh": "k1", "auth": "k2"}}
+    saved = mock_client.put("/venue/users/me@example.com/profile", json={"push_subscription": sub}, headers=H())
+    assert saved.status_code == 200
+    assert saved.json()["push_subscription"] == sub
+    assert saved.json()["notify_phone"] == "+919876543210"  # untouched by the push-only save
+
+    updated_phone = mock_client.put(
+        "/venue/users/me@example.com/profile", json={"notify_phone": "+911111111111"}, headers=H()
+    )
+    assert updated_phone.status_code == 200
+    assert updated_phone.json()["notify_phone"] == "+911111111111"
+    assert updated_phone.json()["push_subscription"] == sub  # untouched by the phone-only save
+
+    cleared = mock_client.put("/venue/users/me@example.com/profile", json={"push_subscription": None}, headers=H())
+    assert cleared.status_code == 200
+    assert "push_subscription" not in cleared.json()
+
+
+def test_user_profile_rejects_an_empty_body(mock_client):
+    r = mock_client.put("/venue/users/me@example.com/profile", json={}, headers=H())
+    assert r.status_code == 400 and r.json()["error"]["code"] == "BAD_REQUEST"
+
+
 def test_gnani_route_is_gone(mock_client):
     assert mock_client.post("/gnani/extract", json={"transcript": "x"}, headers=H()).status_code == 404
 
