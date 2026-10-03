@@ -524,7 +524,11 @@ def test_declare_window_is_closed_before_its_start(mock_client):
     assert detail["declare_window_starts_at"] == starts_at
     assert detail["declarations_open"] is False
 
-    refused = mock_client.post(f"/venue/releases/{rid}/declarations", json=declare_body(), headers=H())
+    refused = mock_client.post(
+        f"/venue/releases/{rid}/declarations",
+        json=declare_body(acceptable_slot_ids=["ib_a"]),
+        headers=H(),
+    )
     assert refused.status_code == 409 and refused.json()["error"]["code"] == "POOL_CLOSED"
 
 
@@ -536,8 +540,14 @@ def test_declare_window_is_open_once_its_start_has_passed(mock_client):
 
     assert mock_client.get(f"/venue/releases/{rid}", headers=H()).json()["declarations_open"] is True
 
-    accepted = mock_client.post(f"/venue/releases/{rid}/declarations", json=declare_body(), headers=H())
-    assert accepted.status_code == 200
+    # The release's own slot (`ib_a`, ₹200), not the badminton ids `declare_body` defaults to: an
+    # unknown slot id is now a 400 (#35), so a bid against a release has to name its real slots.
+    accepted = mock_client.post(
+        f"/venue/releases/{rid}/declarations",
+        json=declare_body(acceptable_slot_ids=["ib_a"]),
+        headers=H(),
+    )
+    assert accepted.status_code == 200, accepted.json()
     assert accepted.json()["status"] == "DECLARED"
 
 
@@ -597,6 +607,15 @@ def test_create_release_returns_the_same_shape_as_get_release(mock_client):
         {"acceptable_slot_ids": []},
         {"acceptable_slot_ids": "bd_0700"},
         {"min_group_size": 5},
+        # The floors and the cross-checks that #35 added. Each of these was silently accepted before:
+        # a group of nobody, a slot this release does not have, and a ceiling that cannot reach the
+        # cheapest acceptable slot (rel_badminton_sat's cheapest two are ₹250 and ₹280).
+        {"group_size": 0, "min_group_size": 0},
+        {"min_group_size": 0},
+        {"acceptable_slot_ids": ["bd_0700", "not_a_real_slot"]},
+        {"acceptable_slot_ids": ["tn_0900"]},  # a real slot id, but on a different release
+        {"max_price_paise": 24999},
+        {"max_price_paise": 0},
         {"notify_phone": ""},
         {"notify_phone": "9876543210"},  # no country code, and no saved profile to fall back on
         {"notify_phone": "not a number"},
@@ -606,6 +625,37 @@ def test_create_release_returns_the_same_shape_as_get_release(mock_client):
 def test_declare_pool_rejects_bad_bid(mock_client, over):
     r = mock_client.post("/venue/releases/rel_badminton_sat/declarations", json=declare_body(**over), headers=H())
     assert r.status_code == 400 and r.json()["error"]["code"] == "BAD_REQUEST"
+
+
+def test_ceiling_is_measured_against_the_acceptable_slots_only(mock_client):
+    """The ceiling has to clear the cheapest slot the caller said yes to — not the cheapest slot on
+    the release. Someone who only wants the expensive court, and will pay for it, is not rejected for
+    ignoring a cheap one they never named (#35)."""
+    # rel_badminton_sat: bd_0700 = ₹250, bd_0800 = ₹280, bd_1800 = ₹350.
+    only_dear = mock_client.post(
+        "/venue/releases/rel_badminton_sat/declarations",
+        json=declare_body(acceptable_slot_ids=["bd_1800"], max_price_paise=35000),
+        headers=H(key="d1"),
+    )
+    assert only_dear.status_code == 200, only_dear.json()
+
+    # ₹260 would be below the release's dearer slots, but it clears the one slot this bid accepts.
+    above_the_cheap_one = mock_client.post(
+        "/venue/releases/rel_badminton_sat/declarations",
+        json=declare_body(declaration_id="dec_2", acceptable_slot_ids=["bd_0700"], max_price_paise=25000),
+        headers=H(key="d2"),
+    )
+    assert above_the_cheap_one.status_code == 200, above_the_cheap_one.json()
+
+
+def test_ceiling_exactly_at_the_cheapest_acceptable_slot_is_accepted(mock_client):
+    """The boundary, so an off-by-one here can never silently start rejecting a valid bid."""
+    r = mock_client.post(
+        "/venue/releases/rel_badminton_sat/declarations",
+        json=declare_body(acceptable_slot_ids=["bd_0700", "bd_0800"], max_price_paise=25000),
+        headers=H(key="d1"),
+    )
+    assert r.status_code == 200, r.json()
 
 
 def test_declare_pool_falls_back_to_the_number_saved_in_settings(mock_client):

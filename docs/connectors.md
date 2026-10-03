@@ -57,7 +57,13 @@ it). Keyed per run by `release_id → declaration_id → bid`:
   and anything else — empty, no country code, letters, an implausible length — is 400 `BAD_REQUEST`, because a wrong
   number here means a silent delivery failure. Required int fields and a non-empty `acceptable_slot_ids` are
   validated the same way; unknown release → 404 `NOT_FOUND`, a closed release (see `declarations_open` below) →
-  409 `POOL_CLOSED`. Returns `{declaration_id, release_id, status: "DECLARED"}`; a second call with the **same**
+  409 `POOL_CLOSED`. Four more checks reject a bid that was previously stored and silently unwinnable (#35), all
+  400 `BAD_REQUEST`: `group_size`/`min_group_size` below 1 (a group of nobody; `max_price_paise` is deliberately
+  exempt from this floor); `acceptable_slot_ids` naming a slot that is not on **this** release (previously only the
+  list's shape was checked, so a typo'd or foreign slot id was accepted); and `max_price_paise` below the price of
+  the cheapest slot in `acceptable_slot_ids` — measured against the slots the caller actually named, not the
+  cheapest on the release, so only wanting the dear slot is fine. Returns
+  `{declaration_id, release_id, status: "DECLARED"}`; a second call with the **same**
   `declaration_id` is a no-op (the stored bid is not overwritten) and returns the same body plus
   `duplicate: true`, so a caller can tell a retry from a first success.
 - `GET /venue/releases/{release_id}/declarations` — returns `{release_id, declarations: [...]}`, every entry carrying

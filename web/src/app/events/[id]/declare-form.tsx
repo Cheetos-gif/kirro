@@ -24,7 +24,25 @@ export function DeclareForm({
   useActionToast(state);
   const [groupSize, setGroupSize] = useState(2);
   const [maxPriceRupees, setMaxPriceRupees] = useState(300);
+  const [selectedSlots, setSelectedSlots] = useState<string[]>(() => slots.map(slot => slot.slot_id));
   const reservePaise = Math.max(groupSize, 0) * Math.max(maxPriceRupees, 0) * 100;
+
+  // The mock refuses a bid whose ceiling cannot reach the cheapest slot the caller accepted (#35), so
+  // the form says the same thing first rather than letting the submit fail one hop away. Measured
+  // against the *selected* slots, matching the server rule: only wanting the dear slot is fine.
+  function toggleSlot(slotId: string) {
+    setSelectedSlots(previous =>
+      previous.includes(slotId) ? previous.filter(id => id !== slotId) : [...previous, slotId]
+    );
+  }
+
+  const selectedPrices = slots
+    .filter(slot => selectedSlots.includes(slot.slot_id))
+    .map(slot => slot.price_per_person_paise);
+  const cheapestSelectedRupees =
+    selectedPrices.length === 0 ? null : Math.ceil(Math.min(...selectedPrices) / 100);
+  const noSlots = selectedSlots.length === 0;
+  const ceilingTooLow = cheapestSelectedRupees !== null && maxPriceRupees < cheapestSelectedRupees;
 
   return (
     <div className="flex flex-col gap-4">
@@ -42,7 +60,12 @@ export function DeclareForm({
           <legend className="mb-1 text-sm font-medium">Slots you would take</legend>
           {slots.map(slot => (
             <Label key={slot.slot_id} className="flex items-center gap-2 font-normal">
-              <Checkbox name="slot_ids" value={slot.slot_id} defaultChecked />
+              <Checkbox
+                name="slot_ids"
+                value={slot.slot_id}
+                checked={selectedSlots.includes(slot.slot_id)}
+                onCheckedChange={() => toggleSlot(slot.slot_id)}
+              />
               <span>
                 {slot.label}, {formatPaise(slot.price_per_person_paise)}
               </span>
@@ -80,7 +103,7 @@ export function DeclareForm({
               id={`ceiling-${releaseId}`}
               name="max_price_rupees"
               type="number"
-              min={1}
+              min={cheapestSelectedRupees ?? 1}
               value={maxPriceRupees}
               onChange={event => setMaxPriceRupees(Number(event.target.value) || 0)}
               required
@@ -88,13 +111,28 @@ export function DeclareForm({
           </div>
         </div>
 
+        {noSlots ? (
+          <p role="status" className="text-sm text-destructive">
+            Pick at least one slot you would take.
+          </p>
+        ) : ceilingTooLow ? (
+          <p role="status" className="text-sm text-destructive">
+            Your maximum is below the cheapest slot you picked ({formatPaise(Math.min(...selectedPrices))}),
+            so this bid could not win. Raise it or pick a cheaper slot.
+          </p>
+        ) : null}
+
         <p className="text-xs text-muted-foreground">
           We&apos;ll reserve {formatPaise(reservePaise)} now (people &times; your max), against a
           mock Pine Labs mandate. If you lose, it&apos;s released, not charged. The result comes to
           your WhatsApp number from <span className="text-foreground">settings</span>.
         </p>
 
-        <Button type="submit" disabled={pending || disabled} className="w-fit">
+        <Button
+          type="submit"
+          disabled={pending || disabled || noSlots || ceilingTooLow}
+          className="w-fit"
+        >
           {pending ? 'Entering...' : 'Enter the draw'}
         </Button>
       </form>

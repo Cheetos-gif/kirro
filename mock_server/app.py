@@ -554,11 +554,38 @@ def create_app(log_dir: str | None = None) -> FastAPI:
             for f in ("group_size", "min_group_size", "max_price_paise"):
                 if not isinstance(body.get(f), int) or body[f] < 0:
                     return err(400, "BAD_REQUEST", f"{f} must be a non-negative integer")
+            # A group of nobody is not a bid. `max_price_paise` is deliberately not in this check:
+            # a ceiling of 0 is well-formed, and it is rejected below by the test that actually
+            # matters (it cannot reach any slot's price) with a message that says why.
+            for f in ("group_size", "min_group_size"):
+                if body[f] < 1:
+                    return err(400, "BAD_REQUEST", f"{f} must be at least 1")
             if body["min_group_size"] > body["group_size"]:
                 return err(400, "BAD_REQUEST", "min_group_size must not exceed group_size")
             wanted = body.get("acceptable_slot_ids")
             if not isinstance(wanted, list) or not wanted or not all(isinstance(s, str) and s for s in wanted):
                 return err(400, "BAD_REQUEST", "acceptable_slot_ids must be a non-empty list of slot ids")
+            # The slot ids are resolved against the release, not just shape-checked: a bid naming a
+            # slot this release does not have would otherwise sit in the pool forever, and the ceiling
+            # below has to be measured against the price of the slots the caller actually said yes to
+            # (#35 — a bid whose ceiling cannot reach the cheapest of those could never win, and
+            # silently accepting it is worse than saying so now).
+            slots_by_id = {s["slot_id"]: s for s in r["slots"]}
+            unknown = sorted(sid for sid in wanted if sid not in slots_by_id)
+            if unknown:
+                return err(
+                    400,
+                    "BAD_REQUEST",
+                    "acceptable_slot_ids names slots that are not on this release: " + ", ".join(unknown),
+                )
+            cheapest = min(slots_by_id[sid]["price_per_person_paise"] for sid in wanted)
+            if body["max_price_paise"] < cheapest:
+                return err(
+                    400,
+                    "BAD_REQUEST",
+                    f"max_price_paise ({body['max_price_paise']}) is below the cheapest acceptable slot "
+                    f"({cheapest}); this bid could never win",
+                )
             # The delivery address belongs to the user account, not the bid: prefer the number on the
             # declaration, otherwise the one the user saved in settings under this contact. A caller
             # that is signed in (the portal sends the email, the voice bridge knows the caller) is
