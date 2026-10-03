@@ -362,8 +362,17 @@ Memory was the second half of the same problem: the worker was using 586Mi of a 
 **Still outstanding, vendor-side:** during the same call Gnani's TTS returned `500 "We are facing technical difficulties. Please try again later."` four times in a row at 18:37:20–18:37:43, so the agent's last reply was
 never spoken — the transcript shows the text, the caller hears silence. That is Gnani's backend, not the transport
 (the WebSocket was up; the error body is theirs), and the plugin's own retries were exhausted. The graceful part
-already works: the reply text still reaches the caller through the transcript. A second TTS provider behind
-LiveKit's `FallbackAdapter` is the real fix and is not configured.
+already works: the reply text still reaches the caller through the transcript.
+
+**No fallback TTS provider, by design, not by gap.** Gnani is this hackathon's sponsor connector and ADR-010's
+binding brief requirement ("Gnani must be a registered connector; every voice input and reply goes through it") —
+swapping in a second provider (e.g. LiveKit's `FallbackAdapter` with OpenAI/Gemini speech) the moment Gnani hiccups
+would mean KIRRO's voice sometimes isn't Gnani's voice at all, which defeats the requirement. It is Gnani or
+nothing: when Gnani's TTS is down, the caller hears nothing and sees why. `kirro.voice_error`/`kirro.voice_ok`
+(`voice_bridge/agent.py`'s `on_pipeline_error`/`on_metrics_collected`, rendered by `web/src/app/talk/talk-client.tsx`)
+is the permanent mitigation: an honest "KIRRO is having trouble speaking right now" banner the moment an
+unrecoverable TTS failure lands, cleared the moment Gnani synthesizes again — never a second vendor's voice
+standing in for it.
 
 **"No matter how much I talk it can't hear me anymore" — Gnani's 60s idle-session close, fixed
 2026-10-02.** Reported live, mid-call. Production logs for that call:
