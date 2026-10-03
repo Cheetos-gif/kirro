@@ -75,6 +75,7 @@ def test_movie_release_is_bookable(mock_client):
             "opens_at": "2026-10-02T06:00:00Z",
             "allocation_mode": "fair_draw",
             "declarations_open": False,
+            "drawn": False,
         }
     ]
     a = mock_client.post(
@@ -273,6 +274,26 @@ def test_allocator_draw_allocates_then_waitlists_a_full_slot(mock_client):
 def test_allocator_draw_unknown_release(mock_client):
     r = mock_client.post("/allocator/draw", json=draw_body(release="rel_nope"), headers=H())
     assert r.status_code == 404 and r.json()["error"]["code"] == "NOT_FOUND"
+
+
+def test_allocator_draw_marks_the_release_drawn(mock_client):
+    """The allocator-trigger bridge (ADR-018) reads `drawn` back to know a release never needs asking about
+    again; it must flip on a real draw and stay off when the draw never actually ran."""
+    assert mock_client.get("/venue/releases/rel_tennis_sat", headers=H()).json()["drawn"] is False
+    mock_client.post("/allocator/draw", json=draw_body([bid("d1", "u1")]), headers=H(key="k1"))
+    assert mock_client.get("/venue/releases/rel_tennis_sat", headers=H()).json()["drawn"] is True
+    assert any(
+        r["drawn"]
+        for r in mock_client.get("/venue/releases", headers=H()).json()["releases"]
+        if r["release_id"] == "rel_tennis_sat"
+    )
+
+    scenario(mock_client, target="allocator.draw", s="upstream_500")
+    r = mock_client.post(
+        "/allocator/draw", json=draw_body([bid("d2", "u2")], release="rel_badminton_sat"), headers=H(key="k2")
+    )
+    assert r.status_code == 500
+    assert mock_client.get("/venue/releases/rel_badminton_sat", headers=H()).json()["drawn"] is False
 
 
 def declare_body(**over):

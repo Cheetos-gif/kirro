@@ -290,6 +290,7 @@ def create_app(log_dir: str | None = None) -> FastAPI:
                     "opens_at": r["opens_at"],
                     "allocation_mode": r.get("allocation_mode", "fair_draw"),
                     "declarations_open": declarations_open(r),
+                    "drawn": bool(r.get("drawn", False)),
                 }
                 for r in run.releases.values()
                 if (not q.get("event_id") or r["event_id"] == q["event_id"])
@@ -312,6 +313,7 @@ def create_app(log_dir: str | None = None) -> FastAPI:
                 "opens_at": r["opens_at"],
                 "allocation_mode": r.get("allocation_mode", "fair_draw"),
                 "declarations_open": declarations_open(r),
+                "drawn": bool(r.get("drawn", False)),
                 "slots": [slot_view(run, sc, s) for s in r["slots"]],
             }
 
@@ -768,6 +770,10 @@ def create_app(log_dir: str | None = None) -> FastAPI:
                 )
             window_open_iso = body.get("window_open_iso") or rel["opens_at"]
             results = allocate(slots, bids, rel["release_id"], window_open_iso)
+            # The allocator-trigger bridge (ADR-018) reads this back to decide a release never needs asking
+            # about again: the draw ran, for real, against this release's own pool, whatever the agent's
+            # response looked like (malformed/timeout still reach here; only upstream_500 skips the handler).
+            rel["drawn"] = True
             return 200, {"release_id": rel["release_id"], "results": [r.model_dump() for r in results]}
 
         return await serve(request, "allocator.draw", h)

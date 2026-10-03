@@ -1,0 +1,66 @@
+# The allocator-trigger bridge (ADR-018): the native "Kirro Window Allocation" Workflow executes zero
+# steps (docs/agenticorg/platform-bugs.md Bug 2), so this CronJob asks "Kirro Allocator" directly,
+# over its chat API, once per release whose declare window has just closed. It makes no allocation
+# decisions itself — see the ADR and allocator_bridge/__init__.py.
+#
+# Stateless: no PVC. Idempotency is the mock's `drawn` field on each release, not anything this Job
+# remembers between runs, so a missed or doubled run is harmless either way.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: kirro-allocator-trigger
+  labels:
+    app: kirro-allocator-trigger
+spec:
+  # Frequent enough that a release's window rarely sits undrawn for long; cheap enough (one GET per
+  # release, one chat turn per release with a pending bid) that there is no reason to space it out.
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 240
+      template:
+        metadata:
+          labels:
+            app: kirro-allocator-trigger
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          priorityClassName: low-priority
+          containers:
+            - name: kirro-allocator-trigger
+              image: ghcr.io/cheetos-gif/kirro:latest
+              imagePullPolicy: Always
+              command: ["python", "-m", "allocator_bridge"]
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              env:
+                # In-cluster address: this never goes through the public Ingress.
+                - name: MOCK_API_URL
+                  value: http://kirro-mock:8081
+                - name: MOCK_RUN_ID
+                  value: default
+                - name: AGENTICORG_BASE_URL
+                  value: https://agenticorg.hackathon.pinelabs.com
+                # Same credentials the voice worker already uses to drive AgenticOrg (kirro-voice
+                # Secret, ADR-016) — one account, no new secret.
+                - name: AGENTICORG_EMAIL
+                  valueFrom:
+                    secretKeyRef: { name: kirro-voice, key: AGENTICORG_EMAIL }
+                - name: AGENTICORG_PASSWORD
+                  valueFrom:
+                    secretKeyRef: { name: kirro-voice, key: AGENTICORG_PASSWORD }
+              resources:
+                # One-shot batch HTTP calls, no media pipeline: far lighter than the voice worker.
+                requests: { cpu: 50m, memory: 64Mi }
+                limits: { cpu: 200m, memory: 128Mi }

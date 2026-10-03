@@ -33,11 +33,13 @@ the rejected levers).
 
 ## 2. Promises the system cannot keep yet
 
-- **"You will get a WhatsApp message with the result after the draw."** v6 says this on every successful pool
-  entry, but nothing sends it: the Window Allocation Workflow executes zero steps (`platform-bugs.md` Bug 2), and the
-  pool entry carries `user_contact: null`, so even a working Workflow would have no one to message. Options: capture
-  a contact in the declaration (the bridge knows the signed-in email; the chat panel does not), or change the closing
-  line to say the result follows the draw without naming a channel. The second is a one-line prompt change.
+- **Partly resolved 2026-10-03: "You will get a WhatsApp message with the result after the draw."** The draw
+  itself now genuinely runs — `allocator_bridge/` (ADR-018) drives "Kirro Allocator" on a schedule, so a bid is
+  no longer left in the pool forever. The WhatsApp leg is still unsent: the Allocator agent is not granted
+  `whatsapp_kirro__send_text_message`, and the pool entry carries `user_contact: null` regardless (no declare
+  channel collects one yet — the voice bridge knows the signed-in email, the chat panel does not, and neither is
+  a WhatsApp number). Options: grant the Allocator the WhatsApp tool and capture a contact somewhere in the
+  declare flow, or change v6's closing line to say the result follows the draw without naming a channel.
 - **"The window opens at 11:30 AM IST on 9 October."** Correct today (06:00Z + 5:30), but the conversion is the
   model's arithmetic. A mock-provided `opens_at_ist` field would remove it; low priority.
 

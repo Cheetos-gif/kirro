@@ -7,6 +7,7 @@ resources:
   - pvc.yaml
   - configmap.yaml
   - deployments.yaml
+  - allocator-cronjob.yaml
   - services.yaml
   - ingress.yaml
 images:

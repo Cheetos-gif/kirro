@@ -39,8 +39,11 @@ shadow vs. active agent maturity, a stale connector reference on the bound agent
 account — so there is no way to see *why* the engine produces zero steps. Needs `agenticorg:admin` access to this
 tenant, or a platform engineer with run-trace visibility.
 
-**Blocks.** L17–L22 (every eval that specifically exercises the Workflow, not just a chat-driven agent) and the
-daily unattended run this Virtual Employee is meant to perform.
+**Blocks.** L17–L22 (every eval that specifically exercises the Workflow, not just a chat-driven agent) directly.
+The daily unattended run itself is no longer blocked: `allocator_bridge/` (ADR-018, 2026-10-03) drives "Kirro
+Allocator" over its chat API on a k8s CronJob instead of waiting on this Workflow, using the exact chat-driven
+path already proven here. This does not fix the Workflow or this bug; it is a stand-in, documented as such in
+the ADR, to retire if the Workflow is ever unblocked.
 
 ## Bug 3 — no platform-native way to give the agent Gnani-powered voice
 

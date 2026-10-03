@@ -119,7 +119,19 @@ as a tool instead of our Python engine calling it in process:
   read from the mock catalogue's release (with remaining capacity). `window_open_iso` defaults to the release's
   `opens_at` (the seed is `sha256(release_id + window_open_iso)`).
 - Response: `{release_id, results: [{declaration_id, slot_id, group_size_allocated, status, draw_position, seed, reason}]}` — one `allocator/schemas.py::AllocationResult` per bid, in draw order. Unknown release → 404
-  `NOT_FOUND`. See `docs/allocation.md` for the mechanism.
+  `NOT_FOUND`. See `docs/allocation.md` for the mechanism. As a side effect, a release that exists in the mock's
+  own release store gets `drawn: true` — surfaced on `GET /venue/releases` and the detail route (MOCK field,
+  additive alongside `declarations_open`) so the allocator-trigger bridge (ADR-018) never asks for the
+  same release twice. Not set when the handler never ran (e.g. an `upstream_500` scenario), so a draw that
+  genuinely failed is retried on the next pass.
+
+**Nothing calls this automatically on the platform.** The "Kirro Window Allocation" Workflow that was meant to
+(`docs/agenticorg/workflow-spec.md`) executes zero steps (`platform-bugs.md` Bug 2). `allocator_bridge/` — a
+k8s CronJob, ADR-018 — drives "Kirro Allocator" over its chat API instead: once per pass, every release with
+`declarations_open: false`, `drawn: false` and at least one pool entry gets the same sentence
+(`"Run the allocation for release_id <id>: draw its bids and settle every one."`) that was already verified
+against the live agent (`docs/testing.md`). The script decides only *when* to ask; every allocation, hold,
+capture and release decision stays the Allocator agent's.
 
 ### MCP surface
 
