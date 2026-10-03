@@ -48,6 +48,23 @@ pnpm install
 pnpm dev                       # http://localhost:3000
 ```
 
+That native flow is the faster one day to day. The alternative is the compose stack from the repo
+root (`web/Dockerfile`, ADR-021), which brings the portal *and* the mock up together with no host
+Node install:
+
+```bash
+docker compose up --build                            # dev: this directory is bind-mounted, pnpm dev
+docker compose -f docker-compose.yml up --build      # prod-like: the standalone `next start` image
+```
+
+Compose sets `MOCK_API_URL=http://mock:8081` — from inside the portal's container the mock is another
+container, so `127.0.0.1` from `example.env` would be wrong there; `environment` beats `env_file`, so
+the override is automatic. `web/.env.local` is read if present and not required if absent (without
+`AUTH_GOOGLE_*`, sign-in is simply unavailable). No credential is ever baked into the image: the app
+reads its env at runtime, and `web/.dockerignore` keeps `.env*` out of the build context.
+
+`next.config.ts` sets `output: 'standalone'` for that image. Vercel ignores the setting.
+
 Checks:
 
 ```bash

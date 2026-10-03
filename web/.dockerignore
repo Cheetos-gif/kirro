@@ -1,0 +1,13 @@
+# Build context hygiene for web/Dockerfile (ADR-021). The context is ./web, so this file — not the
+# repo-root .dockerignore — is the one that applies.
+#
+# The env exclusion is the load-bearing one: the Dockerfile does `COPY . .`, and web/.env.local
+# holds AUTH_SECRET and the Google OAuth pair. Without this line those values would be baked into a
+# build layer. The app reads its env at runtime, which is the only place it is ever needed.
+node_modules
+.next
+out
+.vercel
+coverage
+.env*
+*.tsbuildinfo

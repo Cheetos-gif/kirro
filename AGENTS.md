@@ -33,7 +33,8 @@ What is here:
 - `web/` — the Next.js web portal (ADR-015): public listings, declared-interest and instant-buy flows, user
   dashboard, organiser surface, admin surface with scenario controls. A second caller of the mock, never a
   decision-maker; server-side only. Deployed to Vercel, not this cluster.
-- `Dockerfile`, `k8s/`, `scripts/dev.sh` — how the mock server is built and run.
+- `Dockerfile`, `Dockerfile.dev`, `docker-compose.yml` (+ override), `gunicorn.conf.py`, `Makefile`, `k8s/`,
+  `scripts/dev.sh` — how the mock server is built and run (ADR-021).
 
 The decision to move the brain out of this repo is ADR-011. It is planning-level: nothing in `docs/agenticorg/` has
 been registered on the live platform yet.
@@ -84,6 +85,11 @@ tests/                 test_mock_server.py (scenarios, incl. a real uvicorn thre
 k8s/                   Deployments (kirro-mock, kirro-livekit, kirro-voice), the allocator-trigger and
                        agent-stats-sync CronJobs, Services, Ingress, NetworkPolicy, ConfigMap, PVC
 scripts/dev.sh         starts the mock server on :8081 in the foreground
+Dockerfile             mock image: multi-stage, gunicorn + uvicorn worker (ADR-021)
+Dockerfile.dev         dev mock image: dev deps + uvicorn --reload (compose override)
+gunicorn.conf.py       bind/worker settings; GUNICORN_WORKERS defaults to 1 (ADR-013)
+docker-compose.yml     prod-like local stack; docker-compose.override.yml makes it the dev stack
+Makefile               thin wrapper: dev, dev-native, build, down, logs, test, lint, fmt
 web/                   Next.js portal (ADR-015): listings, declare/instant-buy, dashboard, organiser, admin,
                        and /talk (the LiveKit voice channel, ADR-017). Server-side only, talks to
                        mock_server over HTTP; deployed to Vercel from the fork.
@@ -194,6 +200,11 @@ cd web && pnpm type-check && pnpm lint && pnpm build
 ```
 
 Fish shell is the user default; scripts are bash (`bash scripts/dev.sh`).
+
+`make` wraps those commands instead of replacing them (ADR-021): `make dev-native` is the
+`scripts/dev.sh` + `pnpm dev` flow above, `make dev` is the compose stack (mock :8081 + portal :3000,
+both reloading), `make build` the prod-like images, and `make test|lint|fmt` the uv/pnpm commands.
+`docker compose up` auto-merges `docker-compose.override.yml`; `docker compose -f docker-compose.yml up` skips it. Neither compose path starts the voice worker or LiveKit.
 
 ## Deploying
 
