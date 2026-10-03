@@ -2,7 +2,8 @@
 
 Three reproducible issues on `agenticorg.hackathon.pinelabs.com` itself, not in this repo's code. Full evidence trail
 is in `platform-map.md`; this file is the short, stable index — what's broken, what was tried, what's needed to fix
-it. Also tracked in [issue #10](https://github.com/Cheetos-gif/kirro/issues/10).
+it. Bug 1 tracked in [issue #15](https://github.com/Cheetos-gif/kirro/issues/15), Bug 2 in
+[issue #16](https://github.com/Cheetos-gif/kirro/issues/16). Bug 3 is resolved (see its entry below).
 
 ## Bug 1 — tool-call arguments arrive corrupted or null, intermittently, per tool
 
@@ -45,7 +46,7 @@ Allocator" over its chat API on a k8s CronJob instead of waiting on this Workflo
 path already proven here. This does not fix the Workflow or this bug; it is a stand-in, documented as such in
 the ADR, to retire if the Workflow is ever unblocked.
 
-## Bug 3 — no platform-native way to give the agent Gnani-powered voice
+## Bug 3 — no platform-native way to give the agent Gnani-powered voice (resolved)
 
 **Symptom.** The user must be able to talk to "Kirro Declare", with Gnani/Vachana doing STT/TTS. No phone number or
 browser-voice deployment is bound to any agent in this tenant; every live eval so far (L01-L08, L10, L12-L16) used
