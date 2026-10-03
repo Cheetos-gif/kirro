@@ -214,7 +214,11 @@ sides *different* run ids, or they will not see each other's pool. Single writer
   `Bearer ` (empty, trailing space) and `httpx`/`h11` reject it before the request leaves the process —
   `mock_server/pinelabs_plural.py` fetches the token with a plain `httpx` POST instead, then hands the SDK a
   real token for every other call. Offline tests stub the transport
-  (`tests/test_mock_server.py::test_pinelabs_real_callout_*`).
+  (`tests/test_mock_server.py::test_pinelabs_real_callout_*`). In the cluster (`kirro` namespace) the two
+  values are the `kirro-pinelabs` Secret (SOPS-encrypted, in the private cluster repo's
+  `k8s/apps/kirro/secrets/secrets.sops.yaml`) and reach `kirro-mock` via `secretKeyRef`, so prod places the
+  real UAT order/refund too; `k8s/deployments.yaml` marks both refs `optional: true`, so a missing Secret
+  just falls back to pure simulation.
 - **Superseded investigation, kept for history**: an earlier pass inspected a different package,
   `pinelabs-online-p3p-server-sdk` 1.3.0 (`pinelabs_p3p_server`), whose server instance exposed
   `create_mandate`/`get_mandate`/`revoke_mandate`/`capture`/`create_refund` against the same UAT base URL. That

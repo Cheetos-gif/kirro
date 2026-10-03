@@ -66,6 +66,22 @@ spec:
             # allowed or every MCP call is a 421 (ADR-012). Update when the host changes.
             - name: MOCK_ALLOWED_HOSTS
               value: api-kirro.upayan.dev,kirro-mock,kirro-mock:*,localhost,localhost:*,127.0.0.1,127.0.0.1:*
+            # Optional real Pine Labs Plural UAT call-out (ADR-019, mock_server/pinelabs_plural.py).
+            # Absent or blank -> capture/refund stay pure simulation (the default, and every offline
+            # test). Set -> a successful capture also places a real UAT sandbox order and a refund a
+            # real UAT refund; a sandbox failure is caught and never changes the mock's own response.
+            # The values live in the `kirro-pinelabs` Secret (cluster repo, ksops/age) -- UAT sandbox
+            # credentials, no real money. `optional: true` so the pod still starts without the Secret.
+            - name: PINELABS_CLIENT_ID
+              valueFrom:
+                secretKeyRef: { name: kirro-pinelabs, key: PINELABS_CLIENT_ID, optional: true }
+            - name: PINELABS_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef: { name: kirro-pinelabs, key: PINELABS_CLIENT_SECRET, optional: true }
+            # The UAT sandbox endpoint; also the client's built-in default (DEFAULT_BASE_URL), set
+            # explicitly here so the manifest records which environment this pod talks to.
+            - name: PINELABS_BASE_URL
+              value: https://pluraluat.v2.pinepg.in
             # Gates /__admin/* behind a matching X-Admin-Key header (#12 item 2: the surface answered
             # unauthenticated on the public mock URL). `optional: true` so this Deployment still comes
             # up before the Secret/key exists; the guard itself (mock_server/app.py) is a no-op until
