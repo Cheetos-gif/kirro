@@ -1,0 +1,3 @@
+kustomize:
+  images:
+  - ghcr.io/cheetos-gif/kirro=ghcr.io/cheetos-gif/kirro:latest@sha256:4d7b6ce4fcaff6bb0344582cb1429cb6ca579141b30083bebfb0528473ef908f
