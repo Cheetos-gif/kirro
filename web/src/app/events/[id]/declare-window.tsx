@@ -2,16 +2,10 @@
 
 import { useSyncExternalStore } from 'react';
 
+import { formatCountdown } from '@/lib/kirro/countdown';
 import type { Slot } from '@/lib/kirro/schemas';
 
 import { DeclareForm } from './declare-form';
-
-function formatRemaining(ms: number): string {
-  const total = Math.max(0, Math.ceil(ms / 1000));
-  const minutes = Math.floor(total / 60);
-  const seconds = total % 60;
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-}
 
 /**
  * A once-a-second clock as an external store, so React re-renders the countdown without an effect
@@ -73,9 +67,9 @@ export function DeclareWindow({
   if (now === null) {
     status = 'Checking the declare window…';
   } else if (startMs !== null && now < startMs) {
-    status = `Opens in ${formatRemaining(startMs - now)}`;
+    status = `Opens in ${formatCountdown(startMs - now)}`;
   } else if (now < endMs) {
-    status = `Closes in ${formatRemaining(endMs - now)}`;
+    status = `Closes in ${formatCountdown(endMs - now)}`;
   } else {
     status = 'Window closed — the draw runs within 5 minutes.';
   }
