@@ -305,6 +305,42 @@ caller 2: "Tennis court on 10th October for 3 people, minimum 3, max 700 each" -
 survived the second (previously it would have been silently overwritten). Offline coverage:
 `test_two_callers_bidding_on_the_same_release_do_not_collide` (`tests/test_mcp_surface.py`).
 
+## The allocator-trigger bridge (ADR-018, 2026-10-03)
+
+The native "Kirro Window Allocation" Workflow executes zero steps on every run
+(`docs/agenticorg/platform-bugs.md` Bug 2) and stays unfixed. `allocator_bridge/`, a k8s CronJob
+(`k8s/allocator-cronjob.yaml`, every 5 minutes), drives "Kirro Allocator" directly over its chat API instead —
+the same sentence, the same agent, already verified by hand in the sections above.
+
+**Offline (`uv run pytest`):** `tests/test_allocator_bridge.py` covers the candidate-release filter (skips a
+release still accepting declarations, one already drawn, and one with an empty pool) and that `run_once` sends
+exactly one trigger message per qualifying release. `tests/test_mock_server.py::test_allocator_draw_marks_the_release_drawn`
+covers the mock side: a real draw sets `drawn: true`; a draw that never ran (`upstream_500`) does not.
+
+**Live, against the deployed cluster.** Two pre-existing closed releases had a real pool entry each and had
+never been drawn: `rel_0001` (1 bid) and `rel_tennis_sat` (1 bid); three other closed releases had empty pools.
+Ran the Job by hand (`kubectl create job --from=cronjob/kirro-allocator-trigger`):
+
+```
+GET /venue/releases -> 7 releases
+checked rel_0001, rel_badminton_sat, rel_f1_sun, rel_movie_fri, rel_tennis_sat (closed, undrawn)
+  rel_badminton_sat, rel_f1_sun, rel_movie_fri: empty pool, skipped, no AgenticOrg call
+triggered allocation: rel_0001 (1 bid)
+triggered allocation: rel_tennis_sat (1 bid)
+```
+
+Both releases went all the way through the Allocator's own tool chain, for real: `draw` → `create_hold` →
+`get_hold` → `execute` → `confirm_booking` → `release` (the unused remainder of the mandate), landing
+**`BK-0001`** and **`BK-0002`** `CONFIRMED`, and both releases now read `drawn: true`. Ran the Job a second
+time immediately after: it checked only the three still-empty releases and made **zero** AgenticOrg calls —
+`rel_0001` and `rel_tennis_sat` were skipped before even listing their pool, exactly the "a second trigger is a
+no-op" property L22 asks for, achieved here at the trigger level since the mock itself (not this script)
+remembers that the draw already happened.
+
+**Not covered by this run:** a release with more bids than capacity (waitlisting), or two releases closing in
+the same 5-minute window (already exercised by this same pass incidentally — both fired in one call, correctly,
+each in its own conversation).
+
 ## The voice channel (ADR-016, ADR-017)
 
 The browser voice channel is a LiveKit room with a `voice_bridge/` worker on the other side: Gnani's own
