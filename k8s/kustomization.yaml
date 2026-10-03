@@ -13,4 +13,4 @@ resources:
 images:
   - name: ghcr.io/cheetos-gif/kirro
     newName: ghcr.io/cheetos-gif/kirro
-    digest: sha256:f3e121ff641c127dd10275c004f213e7264ae08905fb064485f5b1e3aed5db29
+    digest: sha256:b51d25f32ec9fdacd4a11dfd19e93b5fb6306b624a6ba738d58d4d398d4cfdbd
