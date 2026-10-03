@@ -330,6 +330,7 @@ def declare_body(**over):
     return {
         "declaration_id": "dec_1",
         "user_contact": "+91-9000000000",
+        "notify_phone": "+919000000000",
         "mandate_id": "auth_0001",
         "acceptable_slot_ids": ["bd_0700", "bd_0800"],
         "group_size": 4,
@@ -396,11 +397,54 @@ def test_declare_pool_refuses_a_closed_release(mock_client):
         {"acceptable_slot_ids": []},
         {"acceptable_slot_ids": "bd_0700"},
         {"min_group_size": 5},
+        {"notify_phone": None},
+        {"notify_phone": ""},
+        {"notify_phone": "9876543210"},  # no country code
+        {"notify_phone": "not a number"},
+        {"notify_phone": "+91-abc"},
     ],
 )
 def test_declare_pool_rejects_bad_bid(mock_client, over):
     r = mock_client.post("/venue/releases/rel_badminton_sat/declarations", json=declare_body(**over), headers=H())
     assert r.status_code == 400 and r.json()["error"]["code"] == "BAD_REQUEST"
+
+
+def test_declare_pool_normalises_a_phone_number_people_actually_type(mock_client):
+    """The number is the one address the draw's result can be delivered to, so a number written the
+    usual way (spaces, dashes, brackets, a leading 00) is stored as E.164 rather than refused."""
+    r = mock_client.post(
+        "/venue/releases/rel_badminton_sat/declarations",
+        json=declare_body(notify_phone="00 91 (98765) 43210"),
+        headers=H(key="d1"),
+    )
+    assert r.status_code == 200
+    stored = mock_client.get("/venue/releases/rel_badminton_sat/declarations", headers=H()).json()["declarations"]
+    assert stored[0]["notify_phone"] == "+919876543210"
+
+
+def test_user_profile_stores_the_whatsapp_number_once(mock_client):
+    """The portal puts the number in settings rather than on every declaration, so a user sets it
+    once and it is read back for each later bid."""
+    assert mock_client.get("/venue/users/me@example.com/profile", headers=H()).json() == {
+        "user_contact": "me@example.com"
+    }
+
+    saved = mock_client.put(
+        "/venue/users/me@example.com/profile", json={"notify_phone": "00 91 (98765) 43210"}, headers=H()
+    )
+    assert saved.status_code == 200 and saved.json()["notify_phone"] == "+919876543210"
+    assert saved.json()["user_contact"] == "me@example.com"
+
+    assert mock_client.get("/venue/users/me@example.com/profile", headers=H()).json()["notify_phone"] == "+919876543210"
+    # Another user's profile is untouched.
+    assert "notify_phone" not in mock_client.get("/venue/users/other@example.com/profile", headers=H()).json()
+
+
+@pytest.mark.parametrize("bad", [None, "", "9876543210", "nope", "+91-abc"])
+def test_user_profile_rejects_a_number_that_cannot_be_messaged(mock_client, bad):
+    r = mock_client.put("/venue/users/me@example.com/profile", json={"notify_phone": bad}, headers=H())
+    assert r.status_code == 400 and r.json()["error"]["code"] == "BAD_REQUEST"
+    assert "notify_phone" not in mock_client.get("/venue/users/me@example.com/profile", headers=H()).json()
 
 
 def test_gnani_route_is_gone(mock_client):

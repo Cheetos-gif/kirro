@@ -82,7 +82,8 @@ export function DeclareForm({ releaseId, slots }: { releaseId: string; slots: Sl
 
         <p className="text-xs text-muted-foreground">
           We&apos;ll reserve {formatPaise(reservePaise)} now (people &times; your max), against a
-          mock Pine Labs mandate. If you lose, it&apos;s released, not charged.
+          mock Pine Labs mandate. If you lose, it&apos;s released, not charged. The result comes to
+          your WhatsApp number from <span className="text-foreground">settings</span>.
         </p>
 
         <Button type="submit" disabled={pending} className="w-fit">

@@ -134,3 +134,9 @@ export const adminStateSchema = z.object({
     .optional(),
 });
 export type AdminState = z.infer<typeof adminStateSchema>;
+
+export const userProfileSchema = z.object({
+  user_contact: z.string(),
+  notify_phone: z.string().optional(),
+});
+export type UserProfile = z.infer<typeof userProfileSchema>;

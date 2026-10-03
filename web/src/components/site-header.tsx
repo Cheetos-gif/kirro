@@ -36,6 +36,11 @@ export function SiteHeader({ viewer }: { viewer: Viewer | null }) {
               My bookings
             </Link>
           ) : null}
+          {viewer ? (
+            <Link href="/settings" className="text-sm text-muted-foreground hover:text-foreground">
+              Settings
+            </Link>
+          ) : null}
           {isOrganiser ? (
             <Link href="/organiser" className="text-sm text-muted-foreground hover:text-foreground">
               My events

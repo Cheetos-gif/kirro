@@ -340,6 +340,10 @@ class RunState:
         self.organisers = PTable(store, run_id, "organisers")
         self.events = PTable(store, run_id, "events")
         self.releases = PTable(store, run_id, "releases")
+        # Portal user profiles, keyed by contact (the signed-in email): currently just the WhatsApp
+        # number a draw result is delivered to, so the number is set once in settings rather than
+        # re-typed on every declaration.
+        self.users = PTable(store, run_id, "users")
         self.used_capacity = IntTable(store, run_id, "capacity")
         self.counters = IntTable(store, run_id, "counters")
         self.idem = Idem(store, run_id)

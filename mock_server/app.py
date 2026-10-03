@@ -12,6 +12,7 @@ import asyncio
 import contextlib
 import json
 import os
+import re
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
@@ -45,6 +46,24 @@ def _iso(dt: datetime) -> str:
 
 def _parse_iso(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def normalise_phone(raw: Any) -> str | None:
+    """A WhatsApp-addressable number as E.164, or None if the value cannot be one.
+
+    Spaces, dashes, dots, brackets and a leading "00" are tolerated because that is how people
+    write numbers; anything else (letters, a missing country code, an implausible length) is
+    rejected rather than guessed at, since a wrong number here means a silent delivery failure.
+    """
+    if not isinstance(raw, str):
+        return None
+    cleaned = re.sub(r"[\s\-().]", "", raw.strip())
+    if cleaned.startswith("00"):
+        cleaned = "+" + cleaned[2:]
+    if not cleaned.startswith("+"):
+        return None
+    digits = cleaned[1:]
+    return cleaned if digits.isdigit() and 7 <= len(digits) <= 15 else None
 
 
 def money(value: int) -> dict:
@@ -474,6 +493,16 @@ def create_app(log_dir: str | None = None) -> FastAPI:
             wanted = body.get("acceptable_slot_ids")
             if not isinstance(wanted, list) or not wanted or not all(isinstance(s, str) and s for s in wanted):
                 return err(400, "BAD_REQUEST", "acceptable_slot_ids must be a non-empty list of slot ids")
+            # Required: the draw's result is delivered over WhatsApp, and a phone number is the only
+            # address that channel accepts. The Allocator's notify step reads this field, so a bid
+            # without it could never be reported back.
+            digits = normalise_phone(body.get("notify_phone"))
+            if digits is None:
+                return err(
+                    400,
+                    "BAD_REQUEST",
+                    "notify_phone is required and must be an E.164 number (e.g. +919876543210)",
+                )
             did = body.get("declaration_id") or run.next_id("decl")
             existing = run.declarations.get(release_id, {}).get(did)
             if existing is not None and existing.get("status") == "DECLARED":
@@ -486,10 +515,40 @@ def create_app(log_dir: str | None = None) -> FastAPI:
                     "status": "DECLARED",
                     "duplicate": True,
                 }
-            run.declarations.setdefault(release_id, {})[did] = {**body, "declaration_id": did, "status": "DECLARED"}
+            run.declarations.setdefault(release_id, {})[did] = {
+                **body,
+                "declaration_id": did,
+                "notify_phone": digits,
+                "status": "DECLARED",
+            }
             return 200, {"declaration_id": did, "release_id": release_id, "status": "DECLARED"}
 
         return await serve(request, "venue.declare_interest", h)
+
+    @app.get("/venue/users/{user_contact}/profile")
+    async def get_user_profile(user_contact: str, request: Request):
+        def h(sc: str, body: dict, run: RunState):
+            profile = run.users.get(user_contact) or {"user_contact": user_contact}
+            return 200, dict(profile)
+
+        return await serve(request, "venue.user_profile", h, body={})
+
+    @app.put("/venue/users/{user_contact}/profile")
+    async def put_user_profile(user_contact: str, request: Request):
+        def h(sc: str, body: dict, run: RunState):
+            digits = normalise_phone(body.get("notify_phone"))
+            if digits is None:
+                return err(
+                    400,
+                    "BAD_REQUEST",
+                    "notify_phone is required and must be an E.164 number (e.g. +919876543210)",
+                )
+            # Portal-facing write (not on the MCP surface): the signed-in user sets the number once,
+            # and every declaration they make afterwards reuses it.
+            run.users[user_contact] = {"user_contact": user_contact, "notify_phone": digits}
+            return 200, dict(run.users[user_contact])
+
+        return await serve(request, "venue.user_profile_update", h)
 
     @app.get("/venue/releases/{release_id}/declarations")
     async def list_declarations(release_id: str, request: Request):

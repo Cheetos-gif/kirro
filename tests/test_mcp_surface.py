@@ -22,6 +22,10 @@ from mock_server.app import create_app
 
 H = {"X-Run-Id": "mcp"}
 
+# Every declaration must carry a WhatsApp-capable number: the draw's result is delivered there, so the
+# tool refuses a bid without one (mock_server/mcp_surface.py).
+NOTIFY_PHONE = "+919000000000"
+
 
 @pytest.fixture
 def mcp_server(tmp_path):
@@ -118,6 +122,7 @@ def test_declare_via_mcp_is_visible_to_rest(mcp_base):
                         "group_size": 4,
                         "min_group_size": 4,
                         "max_price_paise": 60000,
+                        "notify_phone": NOTIFY_PHONE,
                         "run_id": "mcp",
                     },
                 )
@@ -263,6 +268,7 @@ def test_lookup_and_bid_tools_accept_model_shaped_arguments(mcp_base):
                         "group_size": 4,
                         "min_group_size": 2,
                         "max_price_paise": 30000,
+                        "notify_phone": NOTIFY_PHONE,
                     },
                 )
             )
@@ -292,6 +298,7 @@ def test_lookup_survives_a_misresolved_date_and_a_bid_without_slots(mcp_base):
                         "group_size": 4,
                         "min_group_size": 2,
                         "max_price_paise": 30000,
+                        "notify_phone": NOTIFY_PHONE,
                     },
                 )
             )
@@ -370,7 +377,13 @@ def test_pool_and_draw_resolve_their_release_from_the_bids(mcp_base):
         async with session(f"{mcp_base}/venue/mcp") as s:
             await s.call_tool(
                 "declare_interest",
-                {"release_id": "rel_badminton_sat", "group_size": 4, "min_group_size": 2, "max_price_paise": 30000},
+                {
+                    "release_id": "rel_badminton_sat",
+                    "group_size": 4,
+                    "min_group_size": 2,
+                    "max_price_paise": 30000,
+                    "notify_phone": NOTIFY_PHONE,
+                },
             )
             pool = payload(await s.call_tool("list_pool_entries", {}))
         async with session(f"{mcp_base}/allocator/mcp") as s:
@@ -406,7 +419,13 @@ def test_a_bid_without_a_mandate_id_carries_the_run_s_most_recent_one(mcp_base):
         async with session(f"{mcp_base}/venue/mcp") as v:
             await v.call_tool(
                 "declare_interest",
-                {"release_id": "rel_badminton_sat", "group_size": 4, "min_group_size": 2, "max_price_paise": 30000},
+                {
+                    "release_id": "rel_badminton_sat",
+                    "group_size": 4,
+                    "min_group_size": 2,
+                    "max_price_paise": 30000,
+                    "notify_phone": NOTIFY_PHONE,
+                },
             )
             pool = payload(await v.call_tool("list_pool_entries", {"release_id": "rel_badminton_sat"}))
         return mandate, pool
@@ -438,6 +457,7 @@ def test_two_callers_bidding_on_the_same_release_do_not_collide(mcp_base):
                     "min_group_size": 2,
                     "max_price_paise": 30000,
                     "mandate_id": first_mandate,
+                    "notify_phone": NOTIFY_PHONE,
                 },
             )
             await v.call_tool(
@@ -448,6 +468,7 @@ def test_two_callers_bidding_on_the_same_release_do_not_collide(mcp_base):
                     "min_group_size": 3,
                     "max_price_paise": 30000,
                     "mandate_id": second_mandate,
+                    "notify_phone": NOTIFY_PHONE,
                 },
             )
             pool = payload(await v.call_tool("list_pool_entries", {"release_id": "rel_badminton_sat"}))
@@ -471,7 +492,13 @@ def test_every_tool_invocation_is_logged_with_the_arguments_received(mcp_server)
             await s.call_tool("list_releases", {"event": "badminton"})
             await s.call_tool(
                 "declare_interest",
-                {"release_id": "no-such-release", "group_size": 4, "min_group_size": 2, "max_price_paise": 30000},
+                {
+                    "release_id": "no-such-release",
+                    "group_size": 4,
+                    "min_group_size": 2,
+                    "max_price_paise": 30000,
+                    "notify_phone": NOTIFY_PHONE,
+                },
             )
             # Every one of these is refused by its own guard; each must still leave a trace, or a refusal is
             # indistinguishable from a call the platform never made.
@@ -533,6 +560,7 @@ def test_an_event_word_resolves_to_the_one_release_still_open(mcp_base):
                         "group_size": 2,
                         "min_group_size": 2,
                         "max_price_paise": 60000,
+                        "notify_phone": NOTIFY_PHONE,
                         "run_id": "mcp",
                     },
                 )

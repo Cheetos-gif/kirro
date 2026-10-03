@@ -20,6 +20,45 @@ function intField(formData: FormData, name: string): number | null {
   return Number.isFinite(value) ? Math.trunc(value) : null;
 }
 
+/**
+ * The mock stores a declaration's number as E.164 and refuses anything else, so the form applies the
+ * same rule and reports it here rather than letting the submit fail one hop away.
+ */
+function normalisePhone(raw: string): string | null {
+  const cleaned = raw.trim().replace(/[\s\-().]/g, '');
+  const withPlus = cleaned.startsWith('00') ? `+${cleaned.slice(2)}` : cleaned;
+  const digits = withPlus.startsWith('+') ? withPlus.slice(1) : '';
+  return /^\d{7,15}$/.test(digits) ? withPlus : null;
+}
+
+/** The number saved in settings, or `null` when the user has not set one yet. */
+async function storedNotifyPhone(email: string): Promise<string | null> {
+  try {
+    const profile = await api.getUserProfile(email);
+    return profile.notify_phone ?? null;
+  } catch {
+    // An unreachable profile must read as "not set yet", not as a failed declaration: the message
+    // then points at settings, which is where the fix is.
+    return null;
+  }
+}
+
+export async function savePhoneAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const viewer = await requireViewer();
+  const raw = formData.get('notify_phone');
+  const notifyPhone = typeof raw === 'string' ? normalisePhone(raw) : null;
+  if (notifyPhone === null) {
+    return { ok: false, message: 'Enter a number with its country code, e.g. +919876543210.' };
+  }
+  try {
+    await api.setUserProfile(viewer.email, notifyPhone);
+    revalidatePath('/settings');
+    return { ok: true, message: `Saved. Draw results go to ${notifyPhone} on WhatsApp.` };
+  } catch (error) {
+    return { ok: false, message: messageOf(error) };
+  }
+}
+
 async function myOrganiserId(email: string): Promise<string | null> {
   const organisers = await api.listOrganisers();
   const mine = organisers.find(
@@ -48,12 +87,25 @@ export async function declareAction(_prev: ActionState, formData: FormData): Pro
     return { ok: false, message: 'Minimum group size cannot exceed group size.' };
   if (slotIds.length === 0) return { ok: false, message: 'Pick at least one acceptable slot.' };
 
+  const phoneField = formData.get('notify_phone');
+  const notifyPhone =
+    typeof phoneField === 'string' && phoneField.trim() !== ''
+      ? normalisePhone(phoneField)
+      : await storedNotifyPhone(viewer.email);
+  if (notifyPhone === null) {
+    return {
+      ok: false,
+      message: 'Add a WhatsApp number with its country code in settings before entering the draw.',
+    };
+  }
+
   const maxPricePaise = maxPriceRupees * 100;
   try {
     // Reserve first, exactly like the agent's declare flow: the pool entry is what the draw captures against.
     const mandate = await api.createMandate(groupSize * maxPricePaise);
     const result = await api.declareInterest(releaseId, {
       user_contact: viewer.email,
+      notify_phone: notifyPhone,
       mandate_id: mandate.authorizationId,
       acceptable_slot_ids: slotIds,
       group_size: groupSize,

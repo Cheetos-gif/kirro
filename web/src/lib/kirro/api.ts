@@ -106,10 +106,27 @@ export function listDeclarations(releaseId: string) {
   });
 }
 
+export function getUserProfile(userContact: string) {
+  return request({
+    url: `/venue/users/${encodeURIComponent(userContact)}/profile`,
+    schema: s.userProfileSchema,
+  });
+}
+
+export function setUserProfile(userContact: string, notifyPhone: string) {
+  return request({
+    method: 'PUT',
+    url: `/venue/users/${encodeURIComponent(userContact)}/profile`,
+    data: { notify_phone: notifyPhone },
+    schema: s.userProfileSchema,
+  });
+}
+
 export function declareInterest(
   releaseId: string,
   input: {
     user_contact: string;
+    notify_phone: string;
     mandate_id?: string;
     acceptable_slot_ids: string[];
     group_size: number;

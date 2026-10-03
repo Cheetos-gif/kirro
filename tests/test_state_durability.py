@@ -14,6 +14,7 @@ H = {"X-Run-Id": "r"}
 DECLARE = {
     "declaration_id": "dec_1",
     "user_contact": "+91-9000000000",
+    "notify_phone": "+919000000000",
     "mandate_id": "auth_0001",
     "acceptable_slot_ids": ["tn_0900"],
     "group_size": 4,

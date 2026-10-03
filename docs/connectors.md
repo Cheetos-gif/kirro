@@ -49,15 +49,23 @@ The pool is the store behind ADR-011 §4 item 8 (the Declare Agent writes a bid;
 it). Keyed per run by `release_id → declaration_id → bid`:
 
 - `POST /venue/releases/{release_id}/declarations` — body carries the bid: `declaration_id?` (generated if absent),
-  `user_contact?`, `mandate_id?`, `acceptable_slot_ids[]`, `group_size`, `min_group_size`, `max_price_paise`,
-  plus any extra fields. Required int fields and a non-empty `acceptable_slot_ids` are validated → 400 `BAD_REQUEST`;
-  unknown release → 404 `NOT_FOUND`, a closed release (see `declarations_open` below) → 409 `POOL_CLOSED`.
-  Returns `{declaration_id, release_id, status: "DECLARED"}`; a second call with the **same**
+  `user_contact?`, `notify_phone` (**required**), `mandate_id?`, `acceptable_slot_ids[]`, `group_size`,
+  `min_group_size`, `max_price_paise`, plus any extra fields. `notify_phone` is the number the draw's result is
+  delivered to over WhatsApp: it is normalised to E.164 (spaces, dashes, brackets and a leading `00` are accepted)
+  and anything else — empty, no country code, letters, an implausible length — is 400 `BAD_REQUEST`, because a wrong
+  number here means a silent delivery failure. Required int fields and a non-empty `acceptable_slot_ids` are
+  validated the same way; unknown release → 404 `NOT_FOUND`, a closed release (see `declarations_open` below) →
+  409 `POOL_CLOSED`. Returns `{declaration_id, release_id, status: "DECLARED"}`; a second call with the **same**
   `declaration_id` is a no-op (the stored bid is not overwritten) and returns the same body plus
   `duplicate: true`, so a caller can tell a retry from a first success.
 - `GET /venue/releases/{release_id}/declarations` — returns `{release_id, declarations: [...]}`, every entry carrying
   its declared fields plus `status: "DECLARED"` (this is the Workflow's `list_pool_entries`).
 - `DELETE /venue/releases/{release_id}/declarations/{declaration_id}` — removes the entry, 404 `NOT_FOUND` if absent.
+- `GET|PUT /venue/users/{user_contact}/profile` — the portal's per-user settings document, currently
+  `{user_contact, notify_phone?}`. `PUT` takes `{notify_phone}` and applies the same E.164 rule and 400 as the
+  declaration route. The portal reads this instead of asking for a number on every declaration, so a user sets it
+  once in `/settings` and every later bid reuses it. Portal-facing and deliberately **not** on the MCP surface: the
+  agent collects the number in conversation instead (see `agent-spec.md` §3).
 
 The MCP `declare_interest` tool (below) additionally accepts `mandate_id`/`authorization_id` (the id
 `create_mandate` returned earlier in the same conversation) and keys the fallback `declaration_id` on it —
