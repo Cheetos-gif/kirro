@@ -197,11 +197,17 @@ step in CI beyond the image build:
 
 - `.github/workflows/docker.yml` builds and pushes `ghcr.io/cheetos-gif/kirro:latest` on every push to `main`.
 - The Deployment pulls that tag with `imagePullPolicy: Always`, and ArgoCD reconciles `k8s/` from the same commit.
+- **The image pin is written back into `k8s/kustomization.yaml` by argocd-image-updater** (in the cluster repo's
+  `k8s/argocd/applications/apps/kirro.yaml`), which resolves the mutable `latest` digest and commits it here as
+  `noodle <noodle@upayan.dev>`. Those `build: automatic update of kirro` commits are the intended write-back, not
+  something to revert by hand. A push to `main` therefore rolls out on its own, with no rollout restart — and the
+  running revision is recorded in git, which it was not before 2026-10-03. This depends on the `noodle` write
+  deploy key being installed on this repo; if the updater's commits stop appearing, that key is the thing to check.
 - `kubectl apply -k k8s/` **does not stick**: `selfHeal` reverts it within seconds (this cost real debugging time
   once — a manifest change was applied by hand, silently reverted, and the volume mount never took effect). Commit
   manifest changes instead.
 - `kubectl rollout restart deploy/kirro-mock -n kirro` is still the way to force a pod onto a freshly pushed image
-  without a manifest change.
+  without a manifest change — a manual override, not the normal path.
 
 ## Working on this repo (for Claude sessions)
 
