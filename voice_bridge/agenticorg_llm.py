@@ -80,7 +80,7 @@ class AgenticOrgStream(LLMStream):
             # or nothing new to tell the agent. `next_turn_text` has already logged why.
             return
         try:
-            answer = await chat.ask(to_send)
+            answer = await chat.ask(chat.with_caller(to_send))
         except AgentChatError as exc:
             # The call's own logger, so a failed turn lands in that call's file too: this is the
             # line that says "the caller heard the fallback", and it has to sit beside the turns.
@@ -99,13 +99,26 @@ class AgenticOrgStream(LLMStream):
 class AgenticOrgChat(LLM):
     """An `llm.LLM` whose completions come from the AgenticOrg agent."""
 
-    def __init__(self, *, client: AgentChat, call_id: str | None = None) -> None:
+    def __init__(self, *, client: AgentChat, call_id: str | None = None, caller: str | None = None) -> None:
         super().__init__()
         self._client = client
         self.call_log = CallLogger(log, {"call_id": call_id} if call_id else {})
         # The last text actually sent to AgenticOrg, for `next_turn_text`'s cumulative-transcript
         # collapse. Empty means "no turn sent yet this call".
         self._last_sent_text = ""
+        # The signed-in caller, taken from the LiveKit token the portal minted (identity = email).
+        # The platform's chat API identifies every call as the bridge's own login, so without this
+        # the agent cannot know who it is talking to — and would have to ask for details the account
+        # already holds, like the WhatsApp number. Attached once, as metadata, never read aloud.
+        self._caller = caller
+        self._caller_announced = False
+
+    def with_caller(self, text: str) -> str:
+        """Prefix the first turn with the caller's identity, once per call."""
+        if not self._caller or self._caller_announced:
+            return text
+        self._caller_announced = True
+        return f"[caller: {self._caller}] {text}"
 
     @property
     def model(self) -> str:
@@ -168,11 +181,19 @@ class AgenticOrgChat(LLM):
 
 
 def build_llm(
-    *, base_url: str, email: str, password: str, agent_id: str, timeout_s: float, call_id: str | None = None
+    *,
+    base_url: str,
+    email: str,
+    password: str,
+    agent_id: str,
+    timeout_s: float,
+    call_id: str | None = None,
+    caller: str | None = None,
 ) -> AgenticOrgChat:
     """Wire an `AgenticOrgChat` to a fresh HTTP client."""
     return AgenticOrgChat(
         call_id=call_id,
+        caller=caller,
         client=AgentChat(
             base_url=base_url,
             email=email,

@@ -78,7 +78,7 @@ GREETING_TEXT = (
 )
 
 
-def build_session(config: VoiceConfig, call_id: str | None = None) -> AgentSession:
+def build_session(config: VoiceConfig, call_id: str | None = None, caller: str | None = None) -> AgentSession:
     """The voice pipeline: Gnani in, the AgenticOrg agent in the middle, Gnani out."""
     config.export_plugin_env()
     return AgentSession(
@@ -98,6 +98,7 @@ def build_session(config: VoiceConfig, call_id: str | None = None) -> AgentSessi
             agent_id=config.agent_id,
             timeout_s=config.request_timeout_s,
             call_id=call_id,
+            caller=caller,
         ),
         tts=GnaniTTS(
             voice=config.voice,
@@ -328,9 +329,15 @@ async def entrypoint(ctx: JobContext) -> None:
     call_id = shortuuid("call_")
     call_log = CallLogger(log, {"call_id": call_id})
     started_at = time.monotonic()
+    # The portal mints the caller's token with the signed-in email as its identity (app/api/voice/token),
+    # which is the only authenticated identity in the call. The agent needs it to resolve account
+    # details — the WhatsApp number above all — rather than asking the caller to recite them.
+    caller = next(iter(ctx.room.remote_participants.values()), None)
+    caller_id = caller.identity if caller else None
+    call_log.info("caller identified", extra={"caller": caller_id, "room": ctx.room.name})
     # Built per job, so each call gets its own AgenticOrg conversation. Sharing one would leak the
     # previous caller's declaration into the next one.
-    session = build_session(config, call_id=call_id)
+    session = build_session(config, call_id=call_id, caller=caller_id)
     publish = room_publisher(ctx.room, call_log)
     session.on("error", on_pipeline_error(call_log, publish))
     session.on("close", on_session_close(call_log, started_at, ctx.room.name))

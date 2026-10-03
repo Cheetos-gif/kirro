@@ -397,9 +397,8 @@ def test_declare_pool_refuses_a_closed_release(mock_client):
         {"acceptable_slot_ids": []},
         {"acceptable_slot_ids": "bd_0700"},
         {"min_group_size": 5},
-        {"notify_phone": None},
         {"notify_phone": ""},
-        {"notify_phone": "9876543210"},  # no country code
+        {"notify_phone": "9876543210"},  # no country code, and no saved profile to fall back on
         {"notify_phone": "not a number"},
         {"notify_phone": "+91-abc"},
     ],
@@ -407,6 +406,38 @@ def test_declare_pool_refuses_a_closed_release(mock_client):
 def test_declare_pool_rejects_bad_bid(mock_client, over):
     r = mock_client.post("/venue/releases/rel_badminton_sat/declarations", json=declare_body(**over), headers=H())
     assert r.status_code == 400 and r.json()["error"]["code"] == "BAD_REQUEST"
+
+
+def test_declare_pool_falls_back_to_the_number_saved_in_settings(mock_client):
+    """The delivery address belongs to the account, not the bid: a signed-in caller who saved a number
+    is never asked for it again, and the bid stores the resolved one."""
+    mock_client.put("/venue/users/me@example.com/profile", json={"notify_phone": "+91 85097 01939"}, headers=H())
+    r = mock_client.post(
+        "/venue/releases/rel_badminton_sat/declarations",
+        json=declare_body(notify_phone=None, user_contact="me@example.com"),
+        headers=H(key="d1"),
+    )
+    assert r.status_code == 200
+    stored = mock_client.get("/venue/releases/rel_badminton_sat/declarations", headers=H()).json()["declarations"]
+    assert stored[0]["notify_phone"] == "+918509701939"
+
+    # A number given on the bid itself still wins over the saved one.
+    r = mock_client.post(
+        "/venue/releases/rel_badminton_sat/declarations",
+        json=declare_body(declaration_id="dec_2", user_contact="me@example.com", notify_phone="+919111111111"),
+        headers=H(key="d2"),
+    )
+    assert r.status_code == 200
+    stored = mock_client.get("/venue/releases/rel_badminton_sat/declarations", headers=H()).json()["declarations"]
+    assert {d["declaration_id"]: d["notify_phone"] for d in stored}["dec_2"] == "+919111111111"
+
+    # A contact with nothing saved is still refused.
+    refused = mock_client.post(
+        "/venue/releases/rel_badminton_sat/declarations",
+        json=declare_body(declaration_id="dec_3", user_contact="nobody@example.com", notify_phone=None),
+        headers=H(key="d3"),
+    )
+    assert refused.status_code == 400 and refused.json()["error"]["code"] == "BAD_REQUEST"
 
 
 def test_declare_pool_normalises_a_phone_number_people_actually_type(mock_client):

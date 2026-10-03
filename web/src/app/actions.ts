@@ -87,12 +87,10 @@ export async function declareAction(_prev: ActionState, formData: FormData): Pro
     return { ok: false, message: 'Minimum group size cannot exceed group size.' };
   if (slotIds.length === 0) return { ok: false, message: 'Pick at least one acceptable slot.' };
 
-  const phoneField = formData.get('notify_phone');
-  const notifyPhone =
-    typeof phoneField === 'string' && phoneField.trim() !== ''
-      ? normalisePhone(phoneField)
-      : await storedNotifyPhone(viewer.email);
-  if (notifyPhone === null) {
+  // The number is an account attribute, not a form field: the mock resolves it from what the user saved
+  // in settings, under this contact. Refuse here only so the failure reads as an instruction rather than
+  // a bare API error.
+  if ((await storedNotifyPhone(viewer.email)) === null) {
     return {
       ok: false,
       message: 'Add a WhatsApp number with its country code in settings before entering the draw.',
@@ -105,7 +103,6 @@ export async function declareAction(_prev: ActionState, formData: FormData): Pro
     const mandate = await api.createMandate(groupSize * maxPricePaise);
     const result = await api.declareInterest(releaseId, {
       user_contact: viewer.email,
-      notify_phone: notifyPhone,
       mandate_id: mandate.authorizationId,
       acceptable_slot_ids: slotIds,
       group_size: groupSize,

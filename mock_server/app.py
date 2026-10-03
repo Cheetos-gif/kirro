@@ -493,15 +493,19 @@ def create_app(log_dir: str | None = None) -> FastAPI:
             wanted = body.get("acceptable_slot_ids")
             if not isinstance(wanted, list) or not wanted or not all(isinstance(s, str) and s for s in wanted):
                 return err(400, "BAD_REQUEST", "acceptable_slot_ids must be a non-empty list of slot ids")
-            # Required: the draw's result is delivered over WhatsApp, and a phone number is the only
-            # address that channel accepts. The Allocator's notify step reads this field, so a bid
-            # without it could never be reported back.
-            digits = normalise_phone(body.get("notify_phone"))
+            # The delivery address belongs to the user account, not the bid: prefer the number on the
+            # declaration, otherwise the one the user saved in settings under this contact. A caller
+            # that is signed in (the portal sends the email, the voice bridge knows the caller) is
+            # therefore never asked for it twice. Only a caller with neither is refused.
+            contact = body.get("user_contact") if isinstance(body.get("user_contact"), str) else None
+            profile = run.users.get(contact) if contact else None
+            digits = normalise_phone(body.get("notify_phone")) or normalise_phone((profile or {}).get("notify_phone"))
             if digits is None:
                 return err(
                     400,
                     "BAD_REQUEST",
-                    "notify_phone is required and must be an E.164 number (e.g. +919876543210)",
+                    "no WhatsApp number: pass notify_phone as an E.164 number (e.g. +919876543210) or "
+                    "save one against this user_contact first",
                 )
             did = body.get("declaration_id") or run.next_id("decl")
             existing = run.declarations.get(release_id, {}).get(did)

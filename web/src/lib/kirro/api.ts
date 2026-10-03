@@ -126,7 +126,7 @@ export function declareInterest(
   releaseId: string,
   input: {
     user_contact: string;
-    notify_phone: string;
+    notify_phone?: string;
     mandate_id?: string;
     acceptable_slot_ids: string[];
     group_size: number;

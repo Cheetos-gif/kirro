@@ -241,9 +241,9 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
             "rel_badminton_sat. group_size: how many people are coming. min_group_size: the fewest they would "
             "still accept. max_price_paise: their per-person ceiling in paise, so Rs 300 is 30000. "
             "mandate_id is the authorization id create_mandate returned earlier in this conversation; pass it so "
-            "this bid binds your own reservation, not another caller's. notify_phone is the user's own number "
-            "with its country code (e.g. +919876543210) and is required: the draw's result is sent there over "
-            "WhatsApp, so a bid without it can never be reported back. acceptable_slot_ids is optional; empty "
+            "this bid binds your own reservation, not another caller's. notify_phone is optional: pass the user's "
+            "number with its country code (e.g. +919876543210) if the conversation produced one, otherwise leave "
+            "it out and the user's saved number is used. acceptable_slot_ids is optional; empty "
             "means every slot in the release. Never tell the user they are in the pool unless this returns success."
         )
     )
@@ -306,14 +306,12 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
         # concurrent caller's on the same release; one that does not falls back to the run's most recently
         # created mandate, same as before (single-caller runs, including every eval so far, are unaffected).
         mandate = _first_str(mandate_id, authorization_id) or _LATEST_MANDATE.get(run_id)
-        phone = _first_str(notify_phone, user_contact)
-        if phone is None:
-            # Refused here rather than only at the route, so the model gets a message naming the field it
-            # must collect, not a bare 400 from the mock one hop away.
-            return _bad_request(
-                "notify_phone is required: ask the user for their WhatsApp number with its country code "
-                "(e.g. +919876543210) before entering the bid, then pass it as notify_phone"
-            )
+        # The notification number is an account attribute, not a booking field: the route resolves it from
+        # the user's saved profile by `user_contact`. A number given in the conversation is passed through;
+        # `user_contact` only counts as one when it actually looks like a number (older models put it there),
+        # never when it is the caller's email.
+        contact = _first_str(user_contact)
+        phone = _first_str(notify_phone) or (contact if contact and contact.startswith("+") else None)
         return await _call(
             client,
             "POST",

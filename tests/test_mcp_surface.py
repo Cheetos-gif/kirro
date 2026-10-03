@@ -435,6 +435,38 @@ def test_a_bid_without_a_mandate_id_carries_the_run_s_most_recent_one(mcp_base):
     assert entry["mandate_id"] == mandate["body"]["authorizationId"]
 
 
+def test_a_caller_s_email_is_not_mistaken_for_a_phone_number(mcp_base):
+    """The number is resolved from the account by `user_contact`, so an identified caller who gave
+    nothing must reach the route without a bogus `notify_phone` carrying their email."""
+    httpx.put(
+        f"{mcp_base}/venue/users/caller@example.com/profile",
+        json={"notify_phone": "+919812345678"},
+        headers=H,
+        timeout=10,
+    )
+
+    async def go():
+        async with session(f"{mcp_base}/venue/mcp") as v:
+            return payload(
+                await v.call_tool(
+                    "declare_interest",
+                    {
+                        "release_id": "rel_tennis_sat",
+                        "group_size": 2,
+                        "min_group_size": 2,
+                        "max_price_paise": 60000,
+                        "user_contact": "caller@example.com",
+                        "run_id": "mcp",
+                    },
+                )
+            )
+
+    bid = asyncio.run(go())
+    assert bid["status_code"] == 200 and bid["body"]["status"] == "DECLARED"
+    listed = httpx.get(f"{mcp_base}/venue/releases/rel_tennis_sat/declarations", headers=H, timeout=10).json()
+    assert listed["declarations"][0]["notify_phone"] == "+919812345678"
+
+
 def test_two_callers_bidding_on_the_same_release_do_not_collide(mcp_base):
     """Before, a bid's declaration_id was keyed only on (run, release), so a second caller's `declare_interest`
     overwrote the first's pool entry and inherited whichever mandate was created last. Passing each caller's own
