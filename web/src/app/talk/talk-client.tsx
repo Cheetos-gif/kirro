@@ -32,16 +32,33 @@ const VOICE_OK_TOPIC = 'kirro.voice_ok';
 /** Shown when the worker's failure payload carries no message of its own. */
 const DEFAULT_VOICE_NOTICE = 'KIRRO is having trouble speaking right now. Your words are still being heard.';
 
-/** Kirro's own WhatsApp Business number: the draw result lands here, but only inside a 24-hour window the
- * user opens themselves by messaging first, so the CTA below exists to make that one message easy to send,
- * right after a reservation succeeds. */
+/** Kirro's own WhatsApp Business number. The draw result is delivered here, but only inside a 24-hour
+ * window the user opens themselves by messaging first, so the CTA below exists to make that one message
+ * easy to send, right after a reservation succeeds. */
 const KIRRO_WHATSAPP_NUMBER = '918167312268';
-const KIRRO_WHATSAPP_URL = `https://wa.me/${KIRRO_WHATSAPP_NUMBER}?text=${encodeURIComponent('Hi Kirro')}`;
 
 /** The agent's own wording for a successful declaration (agent-spec.md section 3, STEP 4.4): "Rs <amount> is
  * reserved, not charged". Matching on it is a pure display heuristic: it only decides whether to show a
  * popup, never anything about the booking itself, so a false negative just means no popup. */
 export const RESERVATION_SUCCESS_PATTERN = /reserved,\s*not charged/i;
+
+/** The `wa.me` deep link that opens WhatsApp with the opening message already typed. */
+export function whatsAppLink(text: string): string {
+  return `https://wa.me/${KIRRO_WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`;
+}
+
+/**
+ * What the user's one opening message says. The agent's confirmation names the booking
+ * ("...in the draw for tennis on 10 October..."), so the message repeats that when it is there and
+ * falls back to a plain hello otherwise — the send is what matters (it opens the 24-hour window the
+ * result is delivered inside), but a thread that names the booking is easier to follow.
+ */
+export function whatsAppOpeningMessage(confirmation: string | null): string {
+  const named = confirmation?.match(/in the draw for (.+?) on ([^.,]+)/i);
+  return named
+    ? `Hi Kirro! I've entered the draw for ${named[1].trim()} on ${named[2].trim()}. Please send my result here.`
+    : "Hi Kirro! I've entered the draw. Please send my result here.";
+}
 
 const STATE_LABEL: Record<string, string> = {
   initializing: 'Connecting…',
@@ -102,7 +119,7 @@ function Call({
   onTurn: (line: TranscriptLine) => void;
   onCallId: (id: string) => void;
   onVoiceError: (notice: string | null) => void;
-  onReserved: () => void;
+  onReserved: (confirmation: string) => void;
 }) {
   const { state, audioTrack } = useVoiceAssistant();
   const connection = useConnectionState();
@@ -112,6 +129,7 @@ function Call({
   const transcriptions = useTranscriptions();
   const { localParticipant } = useLocalParticipant();
   const room = useRoomContext();
+  const reservedRef = useRef(false);
 
   // The worker mints one id per call and sends it on `kirro.call_id`, so the id shown here is the
   // one its conversation log is filed under.
@@ -138,8 +156,13 @@ function Call({
         at: line.streamInfo.timestamp ?? 0,
       });
       // A display-only heuristic (see RESERVATION_SUCCESS_PATTERN): the agent's own reservation
-      // wording is what triggers the WhatsApp CTA, never anything this page decides on its own.
-      if (!mine && RESERVATION_SUCCESS_PATTERN.test(line.text)) onReserved();
+      // wording is what triggers the WhatsApp CTA, never anything this page decides on its own. Once
+      // per call — LiveKit re-emits a segment as it is revised, and the popup must not reopen after
+      // the user has dismissed it.
+      if (!mine && !reservedRef.current && RESERVATION_SUCCESS_PATTERN.test(line.text)) {
+        reservedRef.current = true;
+        onReserved(line.text);
+      }
     }
   }, [transcriptions, localParticipant.identity, onTurn, onReserved]);
 
@@ -202,7 +225,7 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
   const [startedAt, setStartedAt] = useState<Date | null>(null);
   const [callId, setCallId] = useState<string | null>(null);
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
-  const [showWhatsAppPopup, setShowWhatsAppPopup] = useState(false);
+  const [whatsAppText, setWhatsAppText] = useState<string | null>(null);
   const scrollBox = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -221,8 +244,8 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
     setVoiceNotice(detail);
   }, []);
 
-  const onReserved = useCallback(() => {
-    setShowWhatsAppPopup(true);
+  const onReserved = useCallback((confirmation: string) => {
+    setWhatsAppText(whatsAppOpeningMessage(confirmation));
   }, []);
 
   const start = useCallback(async () => {
@@ -233,7 +256,7 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
     setCopied(false);
     setCallId(null);
     setVoiceNotice(null);
-    setShowWhatsAppPopup(false);
+    setWhatsAppText(null);
     setStartedAt(new Date());
     try {
       const response = await fetch('/api/voice/token', { method: 'POST' });
@@ -386,7 +409,7 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
         </p>
       </CardContent>
 
-      {showWhatsAppPopup ? (
+      {whatsAppText ? (
         <div
           role="dialog"
           aria-modal="true"
@@ -395,21 +418,25 @@ export function TalkClient({ serverUrl }: { serverUrl: string }) {
         >
           <Card className="w-full max-w-sm">
             <CardHeader>
-              <CardTitle id="wa-popup-title">Your reservation is in the draw</CardTitle>
+              <CardTitle id="wa-popup-title">One tap to get your result</CardTitle>
               <CardDescription>
-                The result arrives on WhatsApp after the window closes — but WhatsApp only lets us
-                message you once you&apos;ve messaged us first. Tap below to open WhatsApp and send
-                the message; that opens the thread we&apos;ll reply on.
+                You&apos;re in the draw. WhatsApp only lets a business message you once you&apos;ve
+                messaged it first, so send this one message and the result will reach you there after
+                the window closes.
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-2">
+            <CardContent className="flex flex-col gap-3">
+              <p className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                {whatsAppText}
+              </p>
               <Button
-                render={<a href={KIRRO_WHATSAPP_URL} target="_blank" rel="noreferrer" />}
+                render={<a href={whatsAppLink(whatsAppText)} target="_blank" rel="noreferrer" />}
                 nativeButton={false}
+                className="w-full"
               >
                 Open WhatsApp
               </Button>
-              <Button variant="ghost" className="w-fit" onClick={() => setShowWhatsAppPopup(false)}>
+              <Button variant="ghost" className="w-fit" onClick={() => setWhatsAppText(null)}>
                 Not now
               </Button>
             </CardContent>

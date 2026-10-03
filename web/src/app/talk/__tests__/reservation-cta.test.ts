@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { RESERVATION_SUCCESS_PATTERN } from '@/app/talk/talk-client';
+import {
+  RESERVATION_SUCCESS_PATTERN,
+  whatsAppLink,
+  whatsAppOpeningMessage,
+} from '@/app/talk/talk-client';
 
 /**
  * The popup that offers to open WhatsApp is triggered by this pattern matching the agent's own
@@ -19,6 +23,16 @@ describe('RESERVATION_SUCCESS_PATTERN', () => {
     ).toBe(true);
   });
 
+  it('matches the wording a real call produced', () => {
+    expect(
+      matches(
+        'Rs 3,000 is reserved, not charged. You are in the draw for tennis on 10 October. The window ' +
+          'opens at 11:30 AM IST on 9 October. The result will reach you on WhatsApp at the number ' +
+          'you provided. Please send one message to +91 81673 12268 first, or the result will not arrive.',
+      ),
+    ).toBe(true);
+  });
+
   it('matches regardless of spacing or case', () => {
     expect(matches('Rs 600 is Reserved,  Not Charged.')).toBe(true);
   });
@@ -32,5 +46,39 @@ describe('RESERVATION_SUCCESS_PATTERN', () => {
   it('does not match a failure or cancellation reply', () => {
     expect(matches('The amount could not be reserved due to insufficient balance.')).toBe(false);
     expect(matches('Your declaration has been cancelled, and Rs 600 has been released.')).toBe(false);
+  });
+});
+
+describe('whatsAppOpeningMessage', () => {
+  it('names the booking the confirmation gave, so the thread is identifiable', () => {
+    const message = whatsAppOpeningMessage(
+      'Rs 3,000 is reserved, not charged. You are in the draw for tennis on 10 October. The window opens...',
+    );
+    expect(message).toBe(
+      "Hi Kirro! I've entered the draw for tennis on 10 October. Please send my result here.",
+    );
+  });
+
+  it('falls back to a plain hello when the confirmation names no booking', () => {
+    expect(whatsAppOpeningMessage(null)).toBe(
+      "Hi Kirro! I've entered the draw. Please send my result here.",
+    );
+    expect(whatsAppOpeningMessage('Rs 600 is reserved, not charged.')).toBe(
+      "Hi Kirro! I've entered the draw. Please send my result here.",
+    );
+  });
+});
+
+describe('whatsAppLink', () => {
+  it('opens WhatsApp on Kirro’s number with the message pre-typed', () => {
+    const link = whatsAppLink('Hi Kirro!');
+    expect(link.startsWith('https://wa.me/918167312268?text=')).toBe(true);
+    expect(decodeURIComponent(link.split('text=')[1])).toBe('Hi Kirro!');
+  });
+
+  it('escapes a message that carries punctuation and spaces', () => {
+    const link = whatsAppLink("Hi Kirro! I've entered the draw for tennis on 10 October.");
+    expect(link).not.toContain(' ');
+    expect(decodeURIComponent(link.split('text=')[1])).toContain("I've entered the draw");
   });
 });
