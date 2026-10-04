@@ -77,8 +77,19 @@ it ever carries concurrent per-release traffic, which it does not (one release a
 **Fixed 2026-10-03** (#12 item 3): the catalogue fixture's dates are now seeded relative to the reset's own clock
 (`mock_server/state.py` `_seed_domain`, `_FIXTURE_ANCHOR`/`_SEED_LEAD`) rather than pinned to a calendar date, so a
 fresh run's releases are open for ~27h regardless of when the reset happens. `POST .../declarations` now refuses a
-closed release with 409 `POOL_CLOSED` (`declarations_open` check in the handler). Still open: wiring this into v6's
-prompt/error handling and a live re-check that the agent surfaces the refusal sensibly.
+closed release with 409 `POOL_CLOSED` (`declarations_open` check in the handler).
+**Verified live 2026-10-04 (issue #25):** asked `v6-dev` about a release closed on purpose for this check
+(`ev_tennis`/`rel_0005`, `opens_at` already past, created directly against the live mock's `default` run — left in
+place, no delete route exists for events/releases), 2/2 distinct phrasings got the same honest, specific refusal:
+*"There is no open booking window for tennis on 12 October. The available date is Monday, 5 October. Would you
+like to proceed with this date?"* — names the event, the date, states plainly there is no window, and offers the
+real alternative with its own `weekday` field. This fires from the STEP 2 lookup-time `declarations_open` check,
+not a live `POOL_CLOSED` 409 from `declare_interest` itself — by design, v6's own pre-check means it should never
+reach that 409 in a normal single-turn conversation (only a mid-conversation race would do it, not reproducible
+from a single live-chat call). **Residual:** one throwaway event (`ev_0002`, "Padel Court" — the model refused to
+recognize "padel" as a supported event at all, a separate behavior quirk not pursued here) and one extra closed
+release on the real `ev_tennis` (`rel_0005`, used for this check) are now permanently in the `default` run's
+catalogue — no `DELETE` route exists for events or releases to clean them up.
 
 **Fixed 2026-10-03** (#12 item 6): a second `declare_interest` call with the same `declaration_id` is now a no-op —
 the stored bid is not overwritten, and the response carries `duplicate: true` so a caller (and L09) can tell a retry
