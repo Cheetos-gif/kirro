@@ -119,13 +119,29 @@ from a first success (`tests/test_mock_server.py::test_declare_pool_second_call_
   `allocator_bridge/run_once.py`) would correctly drop this release from its next pass. **Not covered:** the
   CronJob → AgenticOrg chat → "Kirro Allocator" agent hop itself (blocked on AgenticOrg login, as above) — this
   verifies the draw/waitlist mechanics the agent's call would trigger, not the agent's own tool-calling behaviour.
-- **Fixed 2026-10-03: weekday names and the price-ceiling warning.** Both release routes now carry a mock-computed
-  `weekday` (the model got "Wednesday, 11 October" wrong) and `min_price_per_person_paise` (the cheapest slot's
-  price, so the mock — not the model — can tell a bidder their ceiling is below every slot). Still open: telling
-  v6's prompt to read and repeat these instead of computing or guessing them (live).
-- **Interruption replies are generic (live, open)** ("No problem. Let me know when you're ready…") rather than
-  re-asking the open question. Acceptable, but L04 says "repeats only the open question"; needs a prompt change and
-  a re-run, not a mock-server change.
+- **Fixed 2026-10-04: weekday/opens_at_ist/min_price_per_person_paise wired into v6's prompt (issue #24),
+  verified live on production `v6`.** Both release routes already carried the mock-computed `weekday` (the model
+  got "Wednesday, 11 October" wrong computing its own) and `min_price_per_person_paise` (so the mock, not the
+  model, can tell a bidder their ceiling is below every slot); the prompt didn't yet tell v6 to read and repeat
+  them. Added on `v6-dev` first: (1) the `get_release` tool description now names `weekday` and `opens_at_ist` as
+  already-computed, never-recompute-yourself fields; (2) a new STEP 2 bullet fires a proactive ceiling warning
+  against `min_price_per_person_paise` *before* attempting `create_mandate`, instead of only reacting to a failed
+  `declare_interest`; (3) the STEP 3 read-back states the release's own `weekday` field instead of the prior
+  "never state a weekday" workaround; (4) STEP 4's final confirmation reads `opens_at_ist` verbatim instead of
+  asking the model to convert `opens_at` itself. Live-verified on `v6-dev`: a ceiling of Rs 100 against a release
+  whose cheapest slot was higher got an immediate warning with **zero tool calls** (no wasted `create_mandate`);
+  a full declaration for `rel_tennis_sat` read back "Tennis on Monday, 5 October..." — the weekday matched the
+  release's own field exactly. (The final-confirmation `opens_at_ist` leg was not separately exercised — it needs
+  a caller with a saved WhatsApp number, an orthogonal prerequisite the existing flow already gates on; the fix is
+  the same verbatim-field mechanism as the weekday case, which did verify.) Promoted via pause/PATCH/resume onto
+  the active `v6`; L10 regression-checked clean (still correct, still English) immediately after.
+- **Verified 2026-10-04: interruption replies already correct (issue #20), no prompt change needed.** The
+  2026-10-03 bug report ("No problem. Let me know when you're ready…" instead of re-asking the open question) did
+  not reproduce: 4/4 live samples (3 on `v6-dev`, 1 on production `v6`) — send a partial declaration ("tennis, 4
+  people"), then "wait, sorry" on the same thread — repeated the exact open question verbatim
+  ("Which date do you want, and what is the most you'll pay per person?...") with no generic filler at all. The
+  existing STEP 1(d) rule ("repeat only what is still open, in one short sentence") already covers this; whatever
+  regressed it on 2026-10-03 is gone, possibly incidental to a later prompt edit. No action taken.
 
 ## 5. Operational
 
