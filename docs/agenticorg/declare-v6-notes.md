@@ -131,9 +131,27 @@ from a first success (`tests/test_mock_server.py::test_declare_pool_second_call_
   waitlisted last, behind both bids with 0 prior allocations (weight 1) — `tests/test_allocator.py`'s weighted-
   permutation ordering holds against a real release's pool, not just unit-level fixtures. `rel["drawn"]` flipped to
   `true` as a side effect, confirming the bridge's own idempotency check (`candidate_releases` in
-  `allocator_bridge/run_once.py`) would correctly drop this release from its next pass. **Not covered:** the
-  CronJob → AgenticOrg chat → "Kirro Allocator" agent hop itself (blocked on AgenticOrg login, as above) — this
-  verifies the draw/waitlist mechanics the agent's call would trigger, not the agent's own tool-calling behaviour.
+  `allocator_bridge/run_once.py`) would correctly drop this release from its next pass.
+- **Open defect found 2026-10-04, agent-hop leg of issue #19: the live "Kirro Allocator" chat run produced an
+  inconsistent result on a real multi-bid draw.** With AgenticOrg login now available, ran the actual missing
+  piece above: created `rel_0007` (capacity-1 slot) in the `default` run with a 90s declare window, seeded 3 real
+  `declare_interest` bids with live mandates, waited for the window to close, then sent the exact
+  `allocator_bridge.run_once.TRIGGER_MESSAGE` text to "Kirro Allocator" over `/api/v1/chat/query` — 3 attempts
+  with that exact wording all got the platform's generic "No agent was able to answer that query" router fallback
+  (confidence 0, no `hitl_trigger`); a trivial "hello" to the same agent_id answered normally in between, so this
+  was not a dead agent. A rephrased trigger ("Please draw and settle all bids for the release with id rel_0007
+  now.") went through and the agent replied that all 3 declarations were **Waitlisted**, mandates released.
+  Checking the mock directly after: `rel["drawn"]` is `true` (a real draw ran) but the slot's `capacity` dropped
+  from 1 to **0** while **all three mandates show `RELEASED`**, not one `CAPTURED` — i.e. something held (and
+  never released) the one slot's capacity on behalf of a winner, then that winner's own mandate got released
+  along with the two genuine losers', so nobody is actually booked and the slot is now permanently stuck at
+  zero capacity for this release (no booking record, no `release_hold` to undo the leak). This reproduces the
+  shape of the already-documented platform bugs (#15 tool-call argument corruption; #16 the Workflow trigger
+  executing zero steps) rather than anything in this repo's code: `mock_server/app.py`'s `allocator_draw`,
+  `create_hold`, `execute` and `release_hold` are exercised correctly in isolation by `tests/test_mock_server.py`
+  and by this issue's own mock-only check above — the fault is in the agent's own multi-step tool orchestration
+  (hold → capture → confirm for the winner) on the live platform, not reachable or fixable from here. Needs the
+  same `agenticorg:admin` run-trace access #15/#16 already ask for. Filed as its own issue, #37.
 - **Fixed 2026-10-04: weekday/opens_at_ist/min_price_per_person_paise wired into v6's prompt (issue #24),
   verified live on production `v6`.** Both release routes already carried the mock-computed `weekday` (the model
   got "Wednesday, 11 October" wrong computing its own) and `min_price_per_person_paise` (so the mock, not the
