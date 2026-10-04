@@ -20,10 +20,18 @@ done. Each of those used to go to AgenticOrg as its own scored turn, producing a
 ("solah ek" -> "solah ek ek din" -> ...). `AgenticOrgChat.next_turn_text` collapses that: an exact
 repeat is skipped, a growing transcript sends only the new suffix, and anything else is sent whole.
 Every skip is logged.
+
+That bookkeeping is only honest if a turn it counts as sent actually reaches the agent. LiveKit cancels
+an in-flight generation when the caller keeps talking; cancelling the POST mid-flight left it unknown
+whether AgenticOrg had the words, while the suffix logic assumed it did — the turn vanished from the
+bridge's log (turn numbers 1, 3, 5, 7 on 2026-10-04) and the agent's thread could miss what was said.
+So a dispatched turn is shielded: the stream may be abandoned, the POST always completes, and the
+abandoned turn's outcome is logged.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -79,8 +87,15 @@ class AgenticOrgStream(LLMStream):
             # An exact repeat, or a growing transcript with no new suffix yet: already answered,
             # or nothing new to tell the agent. `next_turn_text` has already logged why.
             return
+        # Shielded (module docstring): once `next_turn_text` has counted this text as sent, it must
+        # really reach the agent even if the pipeline abandons this stream.
+        request = chat.dispatch(chat.with_caller(to_send))
         try:
-            answer = await chat.ask(chat.with_caller(to_send))
+            answer = await asyncio.shield(request)
+        except asyncio.CancelledError:
+            chat.call_log.info("agent turn abandoned by the pipeline; letting it complete", extra={"text": to_send})
+            request.add_done_callback(chat.log_abandoned_turn)
+            raise
         except AgentChatError as exc:
             # The call's own logger, so a failed turn lands in that call's file too: this is the
             # line that says "the caller heard the fallback", and it has to sit beside the turns.
@@ -112,6 +127,9 @@ class AgenticOrgChat(LLM):
         # already holds, like the WhatsApp number. Attached once, as metadata, never read aloud.
         self._caller = caller
         self._caller_announced = False
+        # Turns sent to AgenticOrg that have not answered yet, including ones whose stream the
+        # pipeline abandoned; `aclose` waits for them so the HTTP client never closes under one.
+        self._in_flight: set[asyncio.Task[str]] = set()
 
     def with_caller(self, text: str) -> str:
         """Prefix the first turn with the caller's identity, once per call."""
@@ -203,7 +221,24 @@ class AgenticOrgChat(LLM):
     async def ask(self, text: str) -> str:
         return await self._client.ask(text)
 
+    def dispatch(self, text: str) -> asyncio.Task[str]:
+        """Start one turn as its own task, so cancelling the caller of it cannot abort the POST."""
+        task = asyncio.ensure_future(self.ask(text))
+        self._in_flight.add(task)
+        task.add_done_callback(self._in_flight.discard)
+        return task
+
+    def log_abandoned_turn(self, task: asyncio.Task[str]) -> None:
+        """Outcome of a turn whose stream the pipeline cancelled: nobody else awaits it."""
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            self.call_log.warning("abandoned agent turn failed: %s", exc)
+
     async def aclose(self) -> None:
+        if self._in_flight:
+            await asyncio.gather(*self._in_flight, return_exceptions=True)
         await self._client.aclose()
 
     def chat(

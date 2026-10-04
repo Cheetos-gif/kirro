@@ -316,6 +316,59 @@ def test_the_llm_adapter_sends_only_the_new_suffix_of_a_growing_transcript() -> 
     _run(llm.aclose())
 
 
+def test_a_turn_the_pipeline_abandons_still_reaches_the_agent() -> None:
+    """LiveKit cancels a generation when the caller keeps talking. The words that turn carried are
+    already counted as sent (the next turn sends only the new suffix), so the POST must complete:
+    otherwise the agent never hears them (turns 4 and 6 of call_4134cdcc0d37, 2026-10-04)."""
+    platform = _Platform(answer="Got it.")
+    received = asyncio.Event()
+    release = asyncio.Event()
+    completed: list[str] = []
+
+    async def slow_handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path != "/api/v1/chat/query":
+            return platform.handler(request)
+        received.set()
+        await release.wait()
+        response = platform.handler(request)
+        completed.append(json.loads(request.content)["query"])
+        return response
+
+    async def scenario() -> None:
+        client = AgentChat(
+            base_url="https://agenticorg.example",
+            email="bridge@example.com",
+            password="secret",
+            agent_id="agent-1",
+            client=httpx.AsyncClient(
+                base_url="https://agenticorg.example", transport=httpx.MockTransport(slow_handler)
+            ),
+        )
+        llm = AgenticOrgChat(client=client)
+
+        async def drain(text: str) -> str:
+            # `async with` closes the stream on cancellation, which cancels its `_run` task: that is
+            # how the pipeline abandons a generation.
+            ctx = ChatContext()
+            ctx.add_message(role="user", content=text)
+            async with llm.chat(chat_ctx=ctx) as stream:
+                return "".join([c.delta.content or "" async for c in stream if c.delta])
+
+        first = asyncio.ensure_future(drain("solah ek"))
+        await received.wait()
+        first.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        release.set()
+        assert await drain("solah ek ek din") == "Got it."
+        await llm.aclose()
+
+    _run(scenario())
+    assert completed == ["solah ek", "ek din"]
+    # Same conversation: the second turn carried the thread the abandoned one created.
+    assert platform.threads_created == 1
+
+
 def test_the_llm_adapter_says_so_when_the_agent_is_unreachable() -> None:
     llm = AgenticOrgChat(client=_Platform(fail_query=True).chat())
     ctx = ChatContext()

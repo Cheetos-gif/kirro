@@ -33,6 +33,32 @@ Where tool-less turns still come from:
 Do not chase the score with padded replies, gratuitous tool calls or filler conversations (`docs/testing.md` lists
 the rejected levers).
 
+## 2026-10-04 voice-call failures (fixed)
+
+Four voice calls from the same caller (`call_39828fe9f132` through `call_4134cdcc0d37`, 11:38 to 12:43Z) never got
+into the pool. Audio, STT, TTS and the chat API all worked. These were the causes:
+
+- **Fixed: the bridge dropped turns.** When LiveKit abandoned a generation because the caller kept talking, the
+  POST to AgenticOrg was cancelled mid-flight, but `next_turn_text` had already counted the words as sent. So the
+  next turn sent only the new suffix, and the dropped words may never have reached the agent. The turn numbers in
+  the bridge log skipped (1, 2, 3, 5, 7). `AgenticOrgStream._run` now shields the request (`AgenticOrgChat.dispatch`):
+  an abandoned turn always completes, and `aclose` waits for it. Regression:
+  `test_a_turn_the_pipeline_abandons_still_reaches_the_agent`.
+- **Fixed live: rupees compared with paise.** The early cheapest-slot check compared the ceiling (Rs 1,000) with
+  `min_price_per_person_paise` (60000) and told the caller their maximum was under Rs 600.
+- **Fixed live: a group budget was taken as a ceiling.** "The budget is six k" is now asked back as a per-person
+  question.
+- **Fixed live: 10× under-reservation.** Read back "reserve Rs 40,000" but sent `amount_value: 400000`. The prompt now
+  works the 5 × Rs 8,000 = 4000000 example. v6-dev sent 4000000.
+- **Fixed live: invented cause, mandate left active.** `declare_interest` answered 400 "no WhatsApp number"
+  (`auth_0012`, `auth_0013`). The agent said "below the cheapest slot" and released nothing. Every failure now
+  releases first and reports only what the result says. "No WhatsApp number" now points the caller to Settings.
+  v6-dev, run as a caller with no saved number, released `auth_0016` and said exactly that. The two orphaned
+  mandates were released by hand.
+- **Open, platform-side:** the router's "No agent was able to answer that query" fallback hit 3 of about 12 test
+  turns, on both agents. It hit "…the budget is six k" twice on v6, while v6-dev answered the same text. Over voice the
+  caller hears that sentence. It is not caused by the prompt.
+
 ## 2. The WhatsApp result notification
 
 - **Wired 2026-10-03 (owner authorized): the draw result now leaves over WhatsApp.** The Meta app's own free test
@@ -47,15 +73,15 @@ the rejected levers).
     user declares → taps the CTA / messages `+91 81673 12268` once → the Allocator's result lands inside that
     window. v6's closing line now tells the user to send that first message, and `/talk` shows a popup with a
     `wa.me` link after a successful reservation.
-  - **Drafted 2026-10-04, not yet applied live: v6 stops asking for the number.** The prompt no longer asks
+  - **Live (confirmed in the prompt fetched 2026-10-04 14:10Z): v6 stops asking for the number.** The prompt no longer asks
     verbally for a WhatsApp number. The address is taken from the caller's own account instead: the portal saves
     it once in `/settings`, the mock's declare route already falls back to that saved number keyed by
     `user_contact`, and the voice bridge already injects the signed-in caller's email into the first turn as
     `[caller: <email>]`. A new `CALLER` paragraph in the prompt tells the agent to read that prefix and pass it as
-    `user_contact`, so nothing is asked and nothing is guessed. `docs/agenticorg/agent-spec.md` carries the new
-    wording; the live agents still run the previous wording until the pause → `PATCH system_prompt_text` → resume
-    cycle is run (v6-dev first, then v6).
-  - **Drafted 2026-10-04, not yet applied live: a ceiling that cannot win is explained, not reported as an
+    `user_contact`, so nothing is asked and nothing is guessed. A caller with no saved number now makes
+    `declare_interest` fail with "no WhatsApp number". The prompt then releases the mandate and points the caller to
+    Settings ("2026-10-04 voice-call failures" above).
+  - **Live (confirmed in the prompt fetched 2026-10-04 14:10Z): a ceiling that cannot win is explained, not reported as an
     error.** The mock now refuses a bid whose `max_price_paise` is below the cheapest *acceptable* slot (#35), so
     the prompt gained a matching branch in STEP 4.3: that refusal is not a technical failure — release the mandate,
     say plainly the maximum is under the cheapest slot they would take, and ask for a higher one. The same prompt
