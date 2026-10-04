@@ -78,13 +78,25 @@ from a first success (`tests/test_mock_server.py::test_declare_pool_second_call_
   into English conversations, so any fix needs a description-only rule (e.g. "mirror the caller's register — if they
   mix Hindi and English, answer the same way, without a worked example to copy") and a re-run of L03 and L10 together
   on `Kirro Declare v6-dev` first. Requires live prompt-editing access; not actionable from this repo alone.
-- **Time windows and waitlisting are untested on v6 (live, open).** No eval case gives a window ("7 to 9 am"), so
-  slot filtering by window (`acceptable_slot_ids`/`constraints.start_hour_min|max`) has never been exercised against
-  the live agent — the mechanism itself is covered (`tests/test_allocator.py::test_time_constraint_hard_filter`).
-  Likewise, nothing has run a release with more bids than capacity through the allocator-trigger bridge end to end
-  against the live Allocator agent (the mock's own waitlist behaviour is covered:
-  `tests/test_mock_server.py::test_allocator_draw_allocates_then_waitlists_a_full_slot`). Both need a live eval case,
-  not a mock-server change.
+- **Time windows on v6 are untested (live, open — issue #18).** No eval case gives a window ("7 to 9 am"), so slot
+  filtering by window (`acceptable_slot_ids`/`constraints.start_hour_min|max`) has never been exercised against the
+  live agent — the mechanism itself is covered (`tests/test_allocator.py::test_time_constraint_hard_filter`). Needs a
+  live eval case against the agent, not a mock-server change; blocked here on AgenticOrg login (never stored in this
+  repo, `platform-map.md` §1).
+- **Fixed 2026-10-04: waitlist ordering verified live end to end for a multi-bid release (issue #19).** Previously
+  only single-bid releases had gone through the allocator-trigger bridge for real (ADR-018). Verified directly
+  against the live mock (`api-kirro.upayan.dev`, dedicated run `issue19-verify` — isolated from `default`, no cleanup
+  needed): created an organiser/event/release with one slot at capacity 1, seeded 4 `declare_interest` bids (one
+  with `allocations_last_30d: 5`, three with `0`), read the pool back exactly as the Allocator's `list_pool_entries`
+  tool would, and called `/allocator/draw` with those bids as its body (the same call the "Kirro Allocator" agent
+  makes; see `mock_server/app.py` `allocator_draw` — bids come from the caller, not auto-read from the pool).
+  Result, reproduced twice with the same deterministic seed: the bid with 5 prior allocations (fairness weight 1/6)
+  waitlisted last, behind both bids with 0 prior allocations (weight 1) — `tests/test_allocator.py`'s weighted-
+  permutation ordering holds against a real release's pool, not just unit-level fixtures. `rel["drawn"]` flipped to
+  `true` as a side effect, confirming the bridge's own idempotency check (`candidate_releases` in
+  `allocator_bridge/run_once.py`) would correctly drop this release from its next pass. **Not covered:** the
+  CronJob → AgenticOrg chat → "Kirro Allocator" agent hop itself (blocked on AgenticOrg login, as above) — this
+  verifies the draw/waitlist mechanics the agent's call would trigger, not the agent's own tool-calling behaviour.
 - **Fixed 2026-10-03: weekday names and the price-ceiling warning.** Both release routes now carry a mock-computed
   `weekday` (the model got "Wednesday, 11 October" wrong) and `min_price_per_person_paise` (the cheapest slot's
   price, so the mock — not the model — can tell a bidder their ceiling is below every slot). Still open: telling
@@ -95,19 +107,24 @@ from a first success (`tests/test_mock_server.py::test_declare_pool_second_call_
 
 ## 5. Operational
 
-- **Done 2026-10-03: v4 retired.** Paused then retired right after the voice cutover (kept, not deleted, so its
-  history stays as evidence). `Kirro Declare v6-dev` is still around for prompt iteration; delete it once no more
-  prompt work is planned, or keep it as the permanent test bed.
+- **Done 2026-10-04: `Kirro Declare v6-dev` kept as the permanent test bed, not deleted.** Explicit decision
+  (issue #21): prompt work on v6 is still open (Hinglish mirroring #17, interruption re-asks #20, reading the
+  mock-computed `weekday`/`opens_at_ist`/`min_price_per_person_paise` fields #24), and each of those needs the
+  pause → `PATCH system_prompt_text` → resume cycle on v6-dev first (§1 "How to test any prompt change"). Revisit
+  once all three land and no further prompt iteration is planned.
 - **Fixed 2026-10-03: `/__admin/*` answered on the public mock URL.** `MOCK_ADMIN_KEY`, when set, now gates every
   `/__admin/*` call behind a matching `X-Admin-Key` header (`mock_server/app.py` `_admin_key_denied`,
   `docs/connectors.md`). Still open: the key itself has not been provisioned (needs a human with `sops`/`age` to add
   a `kirro-mock-admin` Secret in the cluster repo, same ksops pattern as `kirro-voice`) — until then this is a no-op
   by design, so the surface is still open on the live cluster.
-- **Eval data left in run `default`.** `rel_0001` and `rel_tennis_sat` were drawn for real by the allocator-trigger
-  bridge's own live verification (`docs/testing.md`, "The allocator-trigger bridge") — `BK-0001`/`BK-0002`
-  `CONFIRMED`, genuine demonstrations, not contamination. `rel_0002` and `rel_0003` still hold test pool entries
-  and active mandates from this session's prompt iteration (not yet drawn, since their windows are still open).
-  Clear them (`DELETE /venue/releases/{id}/declarations/{decl}` and `POST /pinelabs/mandates/{id}/release`)
-  before a demo that relies on their pools being clean when the trigger eventually draws them.
+- **Fixed 2026-10-04: `rel_0002`/`rel_0003` test pools cleared (issue #21).** `rel_0001` and `rel_tennis_sat` stay
+  untouched — drawn for real by the allocator-trigger bridge's own live verification (`docs/testing.md`, "The
+  allocator-trigger bridge"), `BK-0001`/`BK-0002` `CONFIRMED`, genuine demonstrations, not contamination. `rel_0002`
+  (6 declarations, mandates `auth_0016`–`auth_0023`) and `rel_0003` (4 declarations including the stray `probe_b`,
+  mandates `auth_0011`/`auth_0015`/`auth_0016`/`auth_0019`) held test pool entries and active mandates from prompt-
+  iteration sessions. Cleared via `DELETE /venue/releases/{id}/declarations/{decl}` then
+  `POST /pinelabs/mandates/{id}/release` against the live mock (`api-kirro.upayan.dev`); both pools confirmed empty
+  afterward. Both releases are still `declarations_open: true, drawn: false`, so they will accept fresh bids
+  normally — this only removed the stale ones.
 - **`v4`'s stored accuracy looked stale** (0.691 matched the running mean at 18:25Z, not the full mean 0.663).
   `POST /agents/{id}/retest` probably recomputes it; untested, and not worth running on v6.
