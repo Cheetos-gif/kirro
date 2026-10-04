@@ -248,7 +248,13 @@
           screen: 'PLATFORM',
           budget: '0:50',
           title: 'This is the agent, on Pine Labs&rsquo; platform',
-          setup: ['AgenticOrg → Agents → <b>Kirro Declare v6</b> → Persona, Prompt, Authorized Tools → Connectors page.'],
+          setup: [
+            'URL: <code>/dashboard/agents</code> → click <b>Kirro Declare v6</b>',
+            'Tab <b>config</b> → scroll to <b>Authorized Tools</b> (six).',
+            'Tab <b>prompt</b> → scroll slowly, do not read it out.',
+            'Tab <b>cost</b> → $0.88 spent, 65 tasks.',
+            'URL: <code>/dashboard/connectors</code> — <b>wait 5–8 s</b>, it loads 101 cards.',
+          ],
           say: [
             [
               'B',
@@ -273,8 +279,8 @@
           budget: '0:35',
           title: 'It&rsquo;s a phone product — install it',
           setup: [
-            'Handset: open <code>kirro.upayan.dev</code> in the mobile browser.',
-            'Menu → <b>Add to Home screen</b> → open it from the home screen (launches standalone, no browser chrome).',
+            '<b>Before the take:</b> KIRRO already added to the home screen. Start on the home screen.',
+            'On camera: tap the KIRRO icon → opens standalone, <b>no address bar</b>.',
           ],
           say: [
             [
@@ -323,7 +329,11 @@
           screen: 'PLATFORM',
           budget: '0:50',
           title: 'What the agent actually did',
-          setup: ['Platform chat/audit view for that thread, and the terminal tailing the mock.'],
+          setup: [
+            'Platform: the agent&rsquo;s <b>overview</b> tab, latest run, expand <b>&ldquo;Why did the agent do this?&rdquo;</b>',
+            'Terminal: the mock log for that thread.',
+            'Do NOT click 👍 / 👎 / <b>Correct this</b>.',
+          ],
           say: [
             ['B', 'Here&rsquo;s the same turn from the platform&rsquo;s side, and here&rsquo;s every request that reached our connectors.'],
             [
@@ -478,7 +488,12 @@
           screen: 'PLATFORM',
           budget: '1:00',
           title: 'Evidence, and what is honestly broken',
-          setup: ['Four surfaces, ~15 s each: mock log → Grafana → agent page → the honest list.'],
+          setup: [
+            '1. terminal — the mock log.',
+            '2. Grafana — paste the call id.',
+            '3. <code>/dashboard/agents</code> → Kirro Declare v6 → <b>cost</b>.',
+            '4. <code>/dashboard/audit</code> — filter by event type. Do NOT click Export.',
+          ],
           say: [
             ['B', 'Every verdict in this video comes from here, not from what the agent said about itself.'],
             ['B', 'Each call gets an id, and that id reconstructs the whole conversation: every turn, its latency, the thread it ran on, any pipeline error.'],

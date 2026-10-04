@@ -21,12 +21,12 @@ the handoffs explicit and short — "here's what the agent did with that" / "bac
 
 ## OBS scenes to set up before you start
 
-| Scene      | Sources                                                                                                                                                               |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DESKTOP`  | display capture, browser full-screen                                                                                                                                  |
-| `PHONE`    | the handset, either screen-mirrored (scrcpy for Android, QuickTime for iPhone) or a camera on a stand. **Rehearse this one** — it is the shot most likely to go wrong |
-| `PLATFORM` | Upayan's display capture (or a second browser profile signed into AgenticOrg)                                                                                         |
-| `SPLIT`    | `DESKTOP` on the left, terminal tailing the mock log on the right: `kubectl logs -f deploy/kirro-mock -n kirro`                                                       |
+| Scene      | Sources                                                                                                                                                                        |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `DESKTOP`  | display capture, browser full-screen                                                                                                                                           |
+| `PHONE`    | the handset, **mirrored to the laptop over USB** (scrcpy for Android, QuickTime for iPhone), captured as a window source. Rehearse it — it is the shot most likely to go wrong |
+| `PLATFORM` | a browser signed into AgenticOrg. **Sign in before recording** — see `demo-platform-walkthrough.md` for every click                                                            |
+| `SPLIT`    | `DESKTOP` on the left, terminal tailing the mock log on the right: `kubectl logs -f deploy/kirro-mock -n kirro`                                                                |
 
 **Runtime target: 8:30–9:30.** Two voices and a caller: **A** and **B** narrate, **C** is the caller (a teammate
 speaking into the phone). Nothing in this script has a narrator explaining what the agent is about to decide — the
@@ -88,8 +88,9 @@ ______________________________________________________________________
 
 ## Scene 2 — This is the agent, on Pine Labs' platform (B, `PLATFORM`, 0:50)
 
-**Screen:** AgenticOrg → Agents list → open **Kirro Declare v6**. Move through Persona, Prompt, Authorized Tools,
-then the Connectors page.
+**Screen:** AgenticOrg. **`demo-platform-walkthrough.md` has this click by click** — in short:
+`/dashboard/agents` → **Kirro Declare v6** → **config** tab (the six Authorized Tools) → **prompt** tab → **cost**
+tab → then `/dashboard/connectors` (wait 5–8 s for it to settle).
 
 > **B:** "KIRRO isn't a service we host that pretends to be an agent. It's a Virtual Employee on Pine Labs'
 > AgenticOrg platform, and this is it — Kirro Declare, active, with a shadow twin we test every prompt change on
@@ -112,18 +113,24 @@ ______________________________________________________________________
 
 ## Scene 3 — It's a phone product (A, `PHONE`, 0:35)
 
-**Screen:** the handset. Open `kirro.upayan.dev` in the mobile browser.
+**Screen:** the handset, mirrored to the laptop over USB and captured as a window in OBS. Say the phone is a phone —
+the audience can see it is a real device, so do not over-explain the mirroring.
 
-**Actions:** browser menu → **Add to Home screen** → open it from the home screen so it launches **standalone**,
-with no browser chrome.
+**Do this before the take** (the install prompt is not a good live shot): open `kirro.upayan.dev` in the phone's
+browser, menu → **Add to Home screen**, and leave the icon on the home screen. Start the take **on the home
+screen**, with the KIRRO icon visible.
 
-> **A:** "Nobody chases a concert ticket on a laptop. KIRRO installs to the home screen and runs as an app — same
-> server-rendered pages, same agent, no app store. This is the real thing on a real phone, not a resized window."
+**Actions on camera:** tap the KIRRO icon → it opens **standalone**, with no address bar and no browser chrome.
+
+> **A:** "Nobody chases a concert ticket on a laptop. This is my actual phone, and KIRRO is on the home screen —
+> it installs as an app, no app store, no download. Same server-rendered pages, same agent, and the whole booking
+> flow including the voice call runs here. Notice there's no address bar: it's running as a real app, not a website
+> in a browser tab."
 
 **Must be visible:** the KIRRO icon on the home screen, and the app opening **without** a browser address bar.
 
-**Rehearse this.** If the install prompt misbehaves on the day, open the site in the mobile browser and say "on the
-phone" instead of "installed" — do not claim the install if it didn't happen.
+**Rehearse this.** If the icon launches into a browser tab with an address bar on the day, say "on my phone"
+instead of "installed as an app" — do not claim the install if it did not happen.
 
 ______________________________________________________________________
 
