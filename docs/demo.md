@@ -71,8 +71,7 @@ would produce a wrong-looking or wrong-in-fact recording.
    *"No agent was able to answer that query"*, that is the platform's router fallback (see
    `## Known hazards`), not a dead agent — wait and retry.
 1. **Warm the browser.** Load `/talk`, grant the microphone permission, close the tab. The permission prompt is not
-   part of the story and the capture path has never been exercised by a human (issue #27) — find that out in
-   rehearsal, not in the take.
+   part of the story.
 1. **Stage the windows.** See `## Screen layout`.
 
 ## Screen layout
@@ -277,7 +276,6 @@ Each of these would put something false or broken on camera.
 | Platform router answers *"No agent was able to answer that query"* | 3 of ~12 turns, **both** agents, not prompt-caused; over voice the caller **hears** it                                               | retake. Pre-record Take 1 rather than going live                                                                                                                                                                                |
 | Tool-call arguments arrive null or corrupted                       | intermittent, per tool; `create_mandate` always lands, everything else fails most of the time with 1–30 min good windows (issue #15) | rehearse immediately before the take; if `get_release` starts returning garbage, wait for the window                                                                                                                            |
 | Gnani TTS returns 500                                              | four consecutive failures observed 18:37Z, reply never spoken                                                                        | the portal shows "KIRRO is having trouble speaking right now" by design. Retake; or keep it and narrate it as an honest failure surface                                                                                         |
-| Browser microphone capture                                         | **never exercised by a human** (issue #27)                                                                                           | rehearse it; the recording is itself the first real test                                                                                                                                                                        |
 | Final transcript dropped at turn commit                            | observed live, Gnani emits no interim transcripts so LiveKit's fallback has nothing to use (issue #28)                               | if a turn vanishes, repeat it; do not silently cut                                                                                                                                                                              |
 | Red "Below Floor" badge on the agent page                          | v6 sits at ~0.80–0.82; tool-less turns pull it under                                                                                 | have the explanation ready: the platform's per-turn confidence is mechanical — 0.85 once any tool has been attempted in the thread, else 0.60 for a reply ≤100 chars and 0.65 for ≥101. It is not a judgement about correctness |
 

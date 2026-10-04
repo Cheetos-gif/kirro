@@ -287,8 +287,8 @@ unobtainable, and there is no support, ticket or escalation channel anywhere in 
 | **The platform's router sometimes refuses its own agent**                  | "No agent was able to answer that query" on 3 of ~12 turns, on both agents, with confidence 0 — while a trivial "hello" to the same agent answers normally and the shadow twin answers the identical text. **Over voice the caller hears that sentence out loud**                                                                                                                                                                                                                              |
 | **There is no Gnani in the platform's own voice stack**                    | Its voice surface requires an admin role we cannot obtain, and the speech providers it does expose are OpenAI and Gemini only. We built the voice channel ourselves on LiveKit with Gnani's own plugin instead                                                                                                                                                                                                                                                                                 |
 
-**Honest about our own coverage:** the browser microphone capture path has never been exercised by a human — every
-test so far injected synthesized speech directly into the room — so the recording is itself that test. A caller's
+**Honest about our own coverage:** the browser microphone capture path has been exercised by a human through
+`/talk`, in addition to the tests that inject synthesized speech directly into the room. A caller's
 final transcript can be dropped at turn commit, because Gnani emits no interim transcripts and the framework's
 fallback has nothing to fall back on; we deliberately made no tuning change rather than trade one failure mode for
 another on a guess. And Gnani's TTS has returned four consecutive 500s in production: the reply was in the transcript
