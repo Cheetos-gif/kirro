@@ -86,11 +86,20 @@ from a first success (`tests/test_mock_server.py::test_declare_pool_second_call_
 
 ## 4. Conversation quality
 
-- **Hinglish mirroring is weak (live, open).** L03 ("Shanivaar ko court chahiye, char log") was understood correctly
-  but answered in English. An earlier attempt with a literal Hinglish example reply made the model copy that reply
-  into English conversations, so any fix needs a description-only rule (e.g. "mirror the caller's register — if they
-  mix Hindi and English, answer the same way, without a worked example to copy") and a re-run of L03 and L10 together
-  on `Kirro Declare v6-dev` first. Requires live prompt-editing access; not actionable from this repo alone.
+- **Fixed 2026-10-04: Hinglish mirroring (issue #17), verified live on production `v6`.** L03 ("Shanivaar ko court
+  chahiye, char log") was understood correctly but answered in English, inconsistently (one live re-run before this
+  fix: 1 Hinglish / 2 English replies across 3 fresh threads). Landed a description-only rule (no worked example,
+  per the prior failure mode where a literal example got copied verbatim into English conversations) on
+  `Kirro Declare v6-dev` first: **v1** (asymmetric — a reminder near the top of the prompt reinforced the
+  Hindi/Hinglish-triggering direction twice while the English-only direction appeared once, weakly) fixed L03
+  (3/3 Hinglish) but **broke L10** ("badminton or tennis, whichever", pure English) 2/3 of the time into a Hindi
+  reply — caught by re-running L10 as the regression check the plan called for, not shipped. **v2** (symmetric:
+  equal, explicit weight on both "Hindi in → Hinglish out" and "English in → English out", decided fresh every
+  turn) re-tested clean: 3/3 L03 Hinglish, 3/3 L10 English, on `v6-dev`. Promoted via the documented
+  pause → `PATCH system_prompt_text` → resume cycle (`platform-map.md` §11) onto the active `6596b872-…` agent;
+  confirmed live on production immediately after resume (L10 English, L03 Hinglish, both correct). Separately
+  observed, not fixed here (out of scope for #17): L03's event-ambiguity and date-resolution handling were
+  themselves flaky across samples even before this change — worth its own issue if it recurs.
 - **Time windows on v6 are untested (live, open — issue #18).** No eval case gives a window ("7 to 9 am"), so slot
   filtering by window (`acceptable_slot_ids`/`constraints.start_hour_min|max`) has never been exercised against the
   live agent — the mechanism itself is covered (`tests/test_allocator.py::test_time_constraint_hard_filter`). Needs a
