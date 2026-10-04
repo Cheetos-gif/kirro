@@ -1,9 +1,11 @@
-# One image (ghcr.io/cheetos-gif/kirro), three Deployments. KIRRO's decision-making brain lives on
+# One image (ghcr.io/cheetos-gif/kirro), four Deployments. KIRRO's decision-making brain lives on
 # the AgenticOrg platform (docs/decisions/ADR-011-kirro-brain-moves-to-agenticorg.md), not here.
 #
-# kirro-mock   the mock external services the AgenticOrg-hosted agent calls.
-# kirro-livekit  the WebRTC room server the browser publishes its microphone to (ADR-017).
-# kirro-voice    the LiveKit agent worker: Gnani speech around the AgenticOrg agent (ADR-017).
+# kirro-mock      the mock external services the AgenticOrg-hosted agent calls.
+# kirro-livekit   the WebRTC room server the browser publishes its microphone to (ADR-017).
+# kirro-voice     the LiveKit agent worker: Gnani speech around the AgenticOrg agent (ADR-017).
+# kirro-whatsapp  the WhatsApp webhook bridge: acks the /talk popup's opener message without
+#                 going through the scored AgenticOrg agent (ADR-022).
 #
 apiVersion: apps/v1
 kind: Deployment
@@ -284,3 +286,72 @@ spec:
         - name: logs
           persistentVolumeClaim:
             claimName: kirro-voice-logs
+---
+# The WhatsApp bridge (ADR-022): a plain webhook receiver for Meta's Cloud API, no LiveKit/Gnani
+# involved. `replicas: 1` because it is stateless and trivially light — a restart just means an
+# at-most-one-extra-ack window on redelivery (`whatsapp_bridge/webhook.py`'s own in-memory dedup).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kirro-whatsapp
+  labels:
+    app: kirro-whatsapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kirro-whatsapp
+  template:
+    metadata:
+      labels:
+        app: kirro-whatsapp
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      priorityClassName: low-priority
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - vps
+      containers:
+        - name: kirro-whatsapp
+          image: ghcr.io/cheetos-gif/kirro:latest
+          imagePullPolicy: Always
+          command: ["python", "-m", "whatsapp_bridge"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 8083
+          env:
+            - name: WHATSAPP_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef: { name: kirro-whatsapp, key: WHATSAPP_ACCESS_TOKEN }
+            - name: WHATSAPP_PHONE_NUMBER_ID
+              valueFrom:
+                secretKeyRef: { name: kirro-whatsapp, key: WHATSAPP_PHONE_NUMBER_ID }
+            - name: WHATSAPP_VERIFY_TOKEN
+              valueFrom:
+                secretKeyRef: { name: kirro-whatsapp, key: WHATSAPP_VERIFY_TOKEN }
+            - name: WHATSAPP_APP_SECRET
+              valueFrom:
+                secretKeyRef: { name: kirro-whatsapp, key: WHATSAPP_APP_SECRET }
+            - name: WHATSAPP_BRIDGE_PORT
+              value: "8083"
+          readinessProbe:
+            httpGet: { path: /health, port: 8083 }
+            initialDelaySeconds: 3
+          resources:
+            requests: { cpu: 25m, memory: 64Mi }
+            limits: { cpu: 200m, memory: 128Mi }

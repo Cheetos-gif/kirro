@@ -57,3 +57,16 @@ spec:
       port: 7882
       targetPort: 7882
       protocol: UDP
+---
+# The WhatsApp webhook bridge (ADR-022). Reachable through the Ingress on 443 like every other
+# host.
+apiVersion: v1
+kind: Service
+metadata:
+  name: kirro-whatsapp
+spec:
+  selector:
+    app: kirro-whatsapp
+  ports:
+    - port: 8083
+      targetPort: 8083
