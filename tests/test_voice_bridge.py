@@ -242,6 +242,25 @@ def test_next_turn_text_skips_an_exact_repeat() -> None:
     _run(llm.aclose())
 
 
+def test_next_turn_text_sends_a_genuine_short_confirmation_repeat() -> None:
+    """A caller unsure they were heard may deliberately re-say a one-word yes/no; unlike a framework
+    re-invoke with an unrelated repeated transcript, that must still reach the agent."""
+    llm = AgenticOrgChat(client=_Platform().chat())
+    llm.next_turn_text("Haan")
+    assert llm.next_turn_text("Haan") == "Haan"
+    assert llm.next_turn_text("Haan") == "Haan"
+    _run(llm.aclose())
+
+
+def test_next_turn_text_skips_an_exact_repeat_that_is_not_a_short_confirmation() -> None:
+    """The confirmation allowlist must not swallow the framework's unrelated cumulative-transcript
+    re-invokes — only short yes/no-shaped text bypasses the exact-repeat collapse."""
+    llm = AgenticOrgChat(client=_Platform().chat())
+    llm.next_turn_text("Shanivaar ko court chahiye")
+    assert llm.next_turn_text("Shanivaar ko court chahiye") is None
+    _run(llm.aclose())
+
+
 def test_next_turn_text_sends_only_the_new_suffix_of_a_growing_transcript() -> None:
     llm = AgenticOrgChat(client=_Platform().chat())
     llm.next_turn_text("solah ek")
