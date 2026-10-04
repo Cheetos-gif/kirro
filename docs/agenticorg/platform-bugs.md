@@ -1,9 +1,19 @@
 # AgenticOrg platform bugs — confirmed, not fixable from a `developer`-role account
 
+**`agenticorg:admin` is not obtainable for this tenant, permanently, not just "not yet."** This is a hackathon
+tenant ("Ken's Case Competition") with one `developer`-role account and no admin account, no support/escalation
+channel of any kind (checked: no ticket system, no contact-admin link anywhere in the UI, every OAuth-gated
+endpoint confirmed genuinely unreachable by direct API call, not just hidden from the UI — §"What was checked"
+below), and no path to upgrade a `developer` account's role from inside the product. Every "needs
+`agenticorg:admin`" line below is therefore a closed door, not an open request: stop proposing it as the next
+step, and do not re-attempt obtaining it. The actionable alternative, where one exists, is called out per bug.
+
 Three reproducible issues on `agenticorg.hackathon.pinelabs.com` itself, not in this repo's code. Full evidence trail
 is in `platform-map.md`; this file is the short, stable index — what's broken, what was tried, what's needed to fix
 it. Bug 1 tracked in [issue #15](https://github.com/Cheetos-gif/kirro/issues/15), Bug 2 in
-[issue #16](https://github.com/Cheetos-gif/kirro/issues/16). Bug 3 is resolved (see its entry below).
+[issue #16](https://github.com/Cheetos-gif/kirro/issues/16). Bug 3 is resolved (see its entry below). A fourth,
+related defect found live-testing Bug 2's chat-driven stand-in is tracked in
+[issue #37](https://github.com/Cheetos-gif/kirro/issues/37) — same permanent blocker, see its entry below.
 
 ## Bug 1 — tool-call arguments arrive corrupted or null, intermittently, per tool
 
@@ -18,9 +28,10 @@ camelCase id aliases declared on all 11 id-taking tools, a five-parameter vs. se
 one-sentence vs. verbose tool descriptions, a brand-new promoted agent, a fresh conversation, tenant tool-catalogue
 size, load (fails during idle periods too), schema-change timing.
 
-**What's needed.** A platform engineering answer: why does one tool's arguments survive the same request pipeline
-end-to-end while a structurally identical tool's do not? Is there a per-tool or per-connector rate limit, cache, or
-argument-serialization path that treats `create_mandate` differently? Nothing further is testable from this account.
+**Permanently blocked, not "needed."** The only diagnostic path (a platform engineer tracing why one tool's
+arguments survive the same request pipeline end-to-end while a structurally identical tool's do not) requires
+`agenticorg:admin` or vendor-side access this account cannot obtain (see the banner above). Nothing further is
+testable from this account; treat this as closed-end, not pending.
 
 **Blocks.** L09, L14 (before its lucky window), L15, L16 (before their lucky window) — now passing, see
 `docs/testing.md` — plus any future eval run has to work around the same intermittent window.
@@ -36,15 +47,17 @@ correctly, modulo Bug 1. Evidence: `platform-map.md` §12.
 shadow vs. active agent maturity, a stale connector reference on the bound agent, payload shape, an explicit step
 `type` field.
 
-**What's needed.** `GET /api/v1/workflow-runs/{id}` (the run-level step trace) is OAuth-gated — 401 from this
-account — so there is no way to see *why* the engine produces zero steps. Needs `agenticorg:admin` access to this
-tenant, or a platform engineer with run-trace visibility.
+**Permanently blocked, not "needed."** `GET /api/v1/workflow-runs/{id}` (the run-level step trace) is OAuth-gated —
+401 from this account — so there is no way to see *why* the engine produces zero steps, and no path to the
+`agenticorg:admin` or platform-engineer access that would unblock it (see the banner above). The mitigation below
+is the permanent answer, not a stopgap awaiting a fix.
 
-**Blocks.** L17–L22 (every eval that specifically exercises the Workflow, not just a chat-driven agent) directly.
+**Blocks.** L17–L22 (every eval that specifically exercises the Workflow, not just a chat-driven agent) directly —
+permanently, barring a platform-side fix neither requestable nor diagnosable from here.
 The daily unattended run itself is no longer blocked: `allocator_bridge/` (ADR-018, 2026-10-03) drives "Kirro
 Allocator" over its chat API on a k8s CronJob instead of waiting on this Workflow, using the exact chat-driven
-path already proven here. This does not fix the Workflow or this bug; it is a stand-in, documented as such in
-the ADR, to retire if the Workflow is ever unblocked.
+path already proven here. This does not fix the Workflow or this bug; it is the permanent stand-in, documented as
+such in the ADR.
 
 ## Bug 3 — no platform-native way to give the agent Gnani-powered voice (resolved)
 
@@ -89,7 +102,33 @@ the agent answered, and the reply came back as audio.
 
 **Blocks.** L11 until the bridge is live.
 
-## What was checked before concluding these need admin/platform help
+## Bug 4 — the chat-driven stand-in itself leaks slot capacity and releases the winner's mandate (issue #37)
+
+**Symptom.** Exercising Bug 2's own chat-driven mitigation end to end, live, for the first time with a real
+multi-bid release (2026-10-04): seeded a capacity-1 release with 3 bids and live mandates on the deployed mock,
+waited for its declare window to close, then sent `allocator_bridge.run_once.TRIGGER_MESSAGE`'s exact text to
+"Kirro Allocator" over `/api/v1/chat/query`. That exact wording hit the platform's generic "No agent was able to
+answer that query" router fallback 3/3 times (confidence 0); a trivial "hello" to the same `agent_id` answered
+normally in between, so the agent was reachable. A differently-worded trigger went through and the agent reported
+all 3 declarations **Waitlisted**. Checking the mock directly after: `drawn` is `true` (a real draw ran) but the
+slot's `capacity` dropped from 1 to **0** while **all three mandates show `RELEASED`**, not one `CAPTURED` — the
+agent evidently held the winner's slot (consuming capacity), then failed somewhere in capture/confirm and released
+every mandate including the winner's, without ever calling `release_hold` to give the capacity back. Net effect:
+nobody is booked, and the slot is permanently stuck at zero capacity with no booking record. Full evidence:
+`docs/agenticorg/declare-v6-notes.md` §4.
+
+**Permanently blocked, same as Bug 2.** Diagnosing a live multi-step tool-orchestration failure (hold → capture →
+confirm → release) needs the same run-trace visibility `agenticorg:admin` would give, which this account cannot
+obtain (see the banner above). `mock_server/app.py`'s `allocator_draw`, `create_hold`, `execute` and
+`release_hold` are each exercised correctly in isolation (`tests/test_mock_server.py`) and the draw/waitlist
+mechanics were separately verified correct by calling `/allocator/draw` directly (issue #19) — the fault is
+entirely inside the agent's own live tool orchestration, not in this repo's code, and not observable from here.
+
+**Blocks.** Trusting any future chat-driven allocator run to actually book a winner rather than silently waitlist
+everyone while leaking capacity — this is a correctness risk for the demo, not just an untested path, until a
+platform engineer with run-trace access diagnoses it.
+
+## What was checked before concluding admin access is permanently unobtainable
 
 No support, feedback, or contact-platform-admin channel exists anywhere in the `developer`-role UI (checked the
 full left nav; nothing under Support/Help routes to a ticket or escalation). The only OAuth-gated endpoints found
