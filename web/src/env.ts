@@ -19,6 +19,17 @@ export const env = createEnv({
     LIVEKIT_API_SECRET: z.string().default(''),
     // Comma-separated Google emails granted the admin role. Not stored in the mock.
     ADMIN_EMAILS: z.string().default(''),
+    // Matches mock_server's MOCK_ADMIN_KEY (ADR/#22): when set, the portal sends it as
+    // X-Admin-Key on every /__admin/* call. Blank is a no-op on both sides, so this stays
+    // optional until the mock's own key is provisioned.
+    MOCK_ADMIN_KEY: z.string().default(''),
+    // Web Push (PWA push notifications). Blank is a no-op: the subscribe UI hides itself and
+    // sendPushNotification silently skips. VAPID_SUBJECT is a mailto: or https: contact URL the
+    // push service may use to reach the sender; the public key is served to the browser by
+    // GET /api/push/vapid-public-key rather than NEXT_PUBLIC_, to keep every env var here server-only.
+    VAPID_PUBLIC_KEY: z.string().default(''),
+    VAPID_PRIVATE_KEY: z.string().default(''),
+    VAPID_SUBJECT: z.string().default('mailto:kirro@upayan.dev'),
     AUTH_SECRET: z.string().min(1).optional(),
     AUTH_GOOGLE_ID: z.string().min(1).optional(),
     AUTH_GOOGLE_SECRET: z.string().min(1).optional(),

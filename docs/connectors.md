@@ -57,16 +57,27 @@ it). Keyed per run by `release_id → declaration_id → bid`:
   and anything else — empty, no country code, letters, an implausible length — is 400 `BAD_REQUEST`, because a wrong
   number here means a silent delivery failure. Required int fields and a non-empty `acceptable_slot_ids` are
   validated the same way; unknown release → 404 `NOT_FOUND`, a closed release (see `declarations_open` below) →
-  409 `POOL_CLOSED`. Returns `{declaration_id, release_id, status: "DECLARED"}`; a second call with the **same**
+  409 `POOL_CLOSED`. Four more checks reject a bid that was previously stored and silently unwinnable (#35), all
+  400 `BAD_REQUEST`: `group_size`/`min_group_size` below 1 (a group of nobody; `max_price_paise` is deliberately
+  exempt from this floor); `acceptable_slot_ids` naming a slot that is not on **this** release (previously only the
+  list's shape was checked, so a typo'd or foreign slot id was accepted); and `max_price_paise` below the price of
+  the cheapest slot in `acceptable_slot_ids` — measured against the slots the caller actually named, not the
+  cheapest on the release, so only wanting the dear slot is fine. Returns
+  `{declaration_id, release_id, status: "DECLARED"}`; a second call with the **same**
   `declaration_id` is a no-op (the stored bid is not overwritten) and returns the same body plus
   `duplicate: true`, so a caller can tell a retry from a first success.
 - `GET /venue/releases/{release_id}/declarations` — returns `{release_id, declarations: [...]}`, every entry carrying
   its declared fields plus `status: "DECLARED"` (this is the Workflow's `list_pool_entries`).
 - `DELETE /venue/releases/{release_id}/declarations/{declaration_id}` — removes the entry, 404 `NOT_FOUND` if absent.
-- `GET|PUT /venue/users/{user_contact}/profile` — the portal's per-user settings document, currently
-  `{user_contact, notify_phone?}`. `PUT` takes `{notify_phone}` and applies the same E.164 rule and 400 as the
-  declaration route. The portal reads this instead of asking for a number on every declaration, so a user sets it
-  once in `/settings` and every later bid reuses it. Portal-facing and deliberately **not** on the MCP surface: the
+- `GET|PUT /venue/users/{user_contact}/profile` — the portal's per-user settings document:
+  `{user_contact, notify_phone?, push_subscription?}`. `PUT` merges rather than overwrites — a caller may send
+  `notify_phone`, `push_subscription`, or both, and the field it omits is left as stored; at least one is
+  required. `notify_phone` applies the same E.164 rule and 400 as the declaration route. `push_subscription` is
+  a Web Push `PushSubscription.toJSON()` object (`{endpoint, keys: {p256dh, auth}}`) or `null` to clear it;
+  stored as-is, never validated or dereferenced by the mock — the portal's own Next.js server sends the actual
+  push directly to the browser's push service using it (`web-push`, VAPID), not through this mock. The portal
+  reads this instead of asking for a number on every declaration, so a user sets it once in `/settings` and
+  every later bid reuses it. Portal-facing and deliberately **not** on the MCP surface: the
   agent collects the number in conversation instead (see `agent-spec.md` §3).
 
 The MCP `declare_interest` tool (below) additionally accepts `mandate_id`/`authorization_id` (the id
@@ -84,9 +95,13 @@ Each event carries an `organiser_id` and a `status` (`draft`|`published`); each 
 `GET /venue/releases/{release_id}`.
 
 Both release routes also carry `declarations_open` (MOCK field): `true` only for a `fair_draw` release whose
-`opens_at` is still in the future, computed from the wall clock at request time. The draw runs when the window
-opens, so a release past `opens_at` can no longer be declared on — the agent reads this field instead of doing
-date arithmetic, and `POST .../declarations` enforces it server-side (409 `POOL_CLOSED` above). A fresh run's
+declare window is currently open, computed from the wall clock at request time. The window is the optional
+`declare_window_starts_at` up to `opens_at`: a release with no `declare_window_starts_at` is open from creation
+(every seeded and organiser-created release, unchanged), while one that sets it stays closed until that instant —
+which is what the portal's quick-demo action uses to script "opens in 2 minutes, closes 3 minutes later". The
+draw runs when the window opens, so a release past `opens_at` can no longer be declared on — the agent reads this
+field instead of doing date arithmetic, and `POST .../declarations` enforces it server-side (409 `POOL_CLOSED`
+above, whose message says "not open right now" because a single boolean covers both edges). A fresh run's
 catalogue fixture is seeded with dates computed relative to that seed's own clock (`mock_server/state.py`
 `_seed_domain`), not pinned to a calendar date, so its releases are open right after a reset regardless of when
 that happens to be. The detail and listing routes also carry: the release's `date`; `weekday` (its day name,
@@ -108,8 +123,11 @@ included.
   `status: "draft"` unless `status` is given.
 - `PATCH /venue/events/{id}` — partial update of `name|aliases|generic_aliases|fulfilment|status`; any other key →
   400 `BAD_REQUEST`; unknown id → 404.
-- `POST /venue/releases` — body `{event_id, date, opens_at, slots: [{slot_id?, label, starts_at, capacity, price_per_person_paise}], allocation_mode?}`. Unknown event → 404; invalid mode/empty slots/non-positive
-  capacity or price → 400. `slot_id` is generated when omitted.
+- `POST /venue/releases` — body `{event_id, date, opens_at, slots: [{slot_id?, label, starts_at, capacity, price_per_person_paise}], allocation_mode?, declare_window_starts_at?}`. Unknown event → 404; invalid mode/empty slots/non-positive
+  capacity or price → 400. `slot_id` is generated when omitted. `declare_window_starts_at` is optional and
+  delays the window start (see `declarations_open` below). `opens_at` and `declare_window_starts_at` must each
+  be a **parseable** ISO timestamp: an unreadable one would be stored and then read as "closed" forever, so a
+  release created with a typo'd timestamp would silently never accept a declaration.
 - `POST /venue/releases/{id}/buy` — **instant_buy only.** One call: checks capacity, creates the hold, captures
   `quantity x price_per_person_paise` against the `mandate_id` in the body, confirms the booking. Returns
   `{release_id, slot_id, quantity, hold_id, payment_id, booking_ref, status: "CONFIRMED", amount_paise}`. A
@@ -185,6 +203,19 @@ the Workflow. Both fall back to `default`, which is also shared, so omitting it 
 sides *different* run ids, or they will not see each other's pool. Single writer: the Deployment runs one replica.
 `POST /__admin/reset` clears one run (with `run_id`) or all state.
 
+### Agent stats (ADR-020)
+
+The two live agents' accuracy/sample numbers exist only on AgenticOrg; `agent_stats_sync/` mirrors them in
+every 5 minutes. The mock stores each snapshot verbatim, keyed by agent id — it validates the envelope, never
+the numbers, and never invents a field the platform stopped exposing.
+
+- `PUT /__admin/agent-stats/{agent_id}` — writes one agent's snapshot (body is an arbitrary JSON object, e.g.
+  `{status, accuracy, shadow_accuracy_current, shadow_sample_count, synced_at}`). Admin-key gated like the rest
+  of `/__admin/*`.
+- `GET /venue/agent-stats` — **public**, for the portal's stat strip: `{"agents": [{agent_id, …, synced_at}]}`,
+  one entry per synced agent, or `{"agents": []}` before the first sync. `synced_at` is what lets the UI say how
+  old a number is; a caller must render absence as "—", never as zero.
+
 ## Pine Labs
 
 - **AgenticOrg's own `pinelabs_plural` connector is registered but not actually wired.** Live `GET /api/v1/connectors` on the tenant (2026-10-03, `docs/agenticorg/platform-map.md` §14): `status: active` but
@@ -214,7 +245,11 @@ sides *different* run ids, or they will not see each other's pool. Single writer
   `Bearer ` (empty, trailing space) and `httpx`/`h11` reject it before the request leaves the process —
   `mock_server/pinelabs_plural.py` fetches the token with a plain `httpx` POST instead, then hands the SDK a
   real token for every other call. Offline tests stub the transport
-  (`tests/test_mock_server.py::test_pinelabs_real_callout_*`).
+  (`tests/test_mock_server.py::test_pinelabs_real_callout_*`). In the cluster (`kirro` namespace) the two
+  values are the `kirro-pinelabs` Secret (SOPS-encrypted, in the private cluster repo's
+  `k8s/apps/kirro/secrets/secrets.sops.yaml`) and reach `kirro-mock` via `secretKeyRef`, so prod places the
+  real UAT order/refund too; `k8s/deployments.yaml` marks both refs `optional: true`, so a missing Secret
+  just falls back to pure simulation.
 - **Superseded investigation, kept for history**: an earlier pass inspected a different package,
   `pinelabs-online-p3p-server-sdk` 1.3.0 (`pinelabs_p3p_server`), whose server instance exposed
   `create_mandate`/`get_mandate`/`revoke_mandate`/`capture`/`create_refund` against the same UAT base URL. That

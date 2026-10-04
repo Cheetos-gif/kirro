@@ -35,12 +35,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # ghcr.io requires an all-lowercase path, and a fork's owner/repo (github.repository) is not
+      # necessarily lowercase. A hardcoded "cheetos-gif" here breaks every fork's build. Compute the
+      # image repo dynamically instead.
+      - name: Set image repository
+        run: echo "IMAGE_REPO=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
       - uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: |
-            ghcr.io/cheetos-gif/kirro:latest
-            ghcr.io/cheetos-gif/kirro:${{ github.sha }}
+            ${{ env.IMAGE_REPO }}:latest
+            ${{ env.IMAGE_REPO }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

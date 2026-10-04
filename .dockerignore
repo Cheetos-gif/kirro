@@ -20,3 +20,17 @@ tests/
 .pre-commit-config.yaml
 *.md
 kirro.png
+
+# The portal is a separate application with its own image (web/Dockerfile) and is deployed to
+# Vercel; nothing in mock_server, voice_bridge or allocator_bridge imports it. Excluding it keeps
+# the mock image small and stops the web build context (node_modules) from bloating this one.
+web/
+
+# Compose/Make and the dev image are host tooling, not image content. gunicorn.conf.py is
+# deliberately NOT excluded: the production CMD reads it.
+Dockerfile.dev
+docker-compose.yml
+docker-compose.override.yml
+Makefile
+.vercel
+data/

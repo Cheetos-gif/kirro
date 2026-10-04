@@ -344,6 +344,10 @@ class RunState:
         # number a draw result is delivered to, so the number is set once in settings rather than
         # re-typed on every declaration.
         self.users = PTable(store, run_id, "users")
+        # Last-known AgenticOrg agent stats, keyed by agent id (ADR-020). Written only by the
+        # stats-sync CronJob through the admin-key-gated route, read by the portal; never seeded, so
+        # a run that has never synced answers honestly empty rather than with invented numbers.
+        self.agent_stats = PTable(store, run_id, "agent_stats")
         self.used_capacity = IntTable(store, run_id, "capacity")
         self.counters = IntTable(store, run_id, "counters")
         self.idem = Idem(store, run_id)

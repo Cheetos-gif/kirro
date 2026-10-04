@@ -23,6 +23,9 @@ What is here:
   Allocator" to draw a release once its declare window closes, because the platform's own Window Allocation
   Workflow executes zero steps. A relay, not a decision-maker, same shape as `voice_bridge/`.
 - `allocator/` — the DIFD seeded fair draw, the reference the mock's `/allocator/draw` transcribes.
+- `agent_stats_sync/` — the agent-stats mirror (ADR-020): a scheduled k8s CronJob that copies the two live
+  agents' accuracy/sample numbers from AgenticOrg into the mock, for the portal to display with a
+  "last synced" stamp. Read-only against the platform; writes no decisions.
 - `logging_/redact.py` — key/token/phone redaction shared by the mock request log.
 - `tests/` — mock-server scenarios and allocator properties.
 - `docs/` — the spec: `docs/agenticorg/` (agent, workflow, runbook, evals), `docs/decisions/` (ADRs), plus
@@ -30,7 +33,8 @@ What is here:
 - `web/` — the Next.js web portal (ADR-015): public listings, declared-interest and instant-buy flows, user
   dashboard, organiser surface, admin surface with scenario controls. A second caller of the mock, never a
   decision-maker; server-side only. Deployed to Vercel, not this cluster.
-- `Dockerfile`, `k8s/`, `scripts/dev.sh` — how the mock server is built and run.
+- `Dockerfile`, `Dockerfile.dev`, `docker-compose.yml` (+ override), `gunicorn.conf.py`, `Makefile`, `k8s/`,
+  `scripts/dev.sh` — how the mock server is built and run (ADR-021).
 
 The decision to move the brain out of this repo is ADR-011. It is planning-level: nothing in `docs/agenticorg/` has
 been registered on the live platform yet.
@@ -69,15 +73,23 @@ voice_bridge/agenticorg_llm.py  exposes that agent as the pipeline's llm.LLM (ne
 allocator_bridge/run_once.py    finds closed, undrawn releases with bids; asks "Kirro Allocator" to draw each
                        (ADR-018); drawn-ness is the mock's own `drawn` field, not state this script keeps
 allocator_bridge/__main__.py    python -m allocator_bridge — one pass, run by k8s/allocator-cronjob.yaml
+agent_stats_sync/run_once.py    reads each agent's record and stores the displayable fields (ADR-020)
+agent_stats_sync/__main__.py    python -m agent_stats_sync — one pass, run by k8s/agent-stats-sync-cronjob.yaml
 logging_/redact.py     key/token/phone redaction applied before anything is logged
 tests/                 test_mock_server.py (scenarios, incl. a real uvicorn thread), test_allocator.py,
                        test_mcp_surface.py (MCP tool catalogs + REST/MCP state parity),
                        test_state_durability.py, test_voice_bridge.py (AgenticOrg client + LLM adapter,
                        no network, no LiveKit server), test_allocator_bridge.py (candidate/trigger logic,
-                       no network, no AgenticOrg)
-k8s/                   Deployments (kirro-mock, kirro-livekit, kirro-voice), the allocator-trigger CronJob,
-                       Services, Ingress, NetworkPolicy, ConfigMap, PVC
+                       no network, no AgenticOrg), test_agent_stats_sync.py (config + extract/store,
+                       no network)
+k8s/                   Deployments (kirro-mock, kirro-livekit, kirro-voice), the allocator-trigger and
+                       agent-stats-sync CronJobs, Services, Ingress, NetworkPolicy, ConfigMap, PVC
 scripts/dev.sh         starts the mock server on :8081 in the foreground
+Dockerfile             mock image: multi-stage, gunicorn + uvicorn worker (ADR-021)
+Dockerfile.dev         dev mock image: dev deps + uvicorn --reload (compose override)
+gunicorn.conf.py       bind/worker settings; GUNICORN_WORKERS defaults to 1 (ADR-013)
+docker-compose.yml     prod-like local stack; docker-compose.override.yml makes it the dev stack
+Makefile               thin wrapper: dev, dev-native, build, down, logs, test, lint, fmt
 web/                   Next.js portal (ADR-015): listings, declare/instant-buy, dashboard, organiser, admin,
                        and /talk (the LiveKit voice channel, ADR-017). Server-side only, talks to
                        mock_server over HTTP; deployed to Vercel from the fork.
@@ -167,9 +179,11 @@ uv sync
 uv run pytest && uv run ruff check . && uv run black --check .
 uv run pre-commit install           # one-time: wires the markdown-formatter commit hook
 uv run pre-commit run --all-files
-uv run uvicorn mock_server.app:app --port 8081      # or:
-bash scripts/dev.sh                 # mock server on :8081 (GET /health)
+uv run uvicorn mock_server.app:app --port 8081 --reload   # or:
+bash scripts/dev.sh                 # mock server on :8081 (GET /health), also --reload
 ```
+
+Dev runs uvicorn; production runs gunicorn from the image's own CMD, one worker (ADR-013, ADR-021).
 
 The voice worker (optional; needs `GNANI_API_KEY`, `AGENTICORG_EMAIL`, `AGENTICORG_PASSWORD`,
 `AGENTICORG_BASE_URL`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` — ADR-017). Against a
@@ -188,6 +202,11 @@ cd web && pnpm type-check && pnpm lint && pnpm build
 ```
 
 Fish shell is the user default; scripts are bash (`bash scripts/dev.sh`).
+
+`make` wraps those commands instead of replacing them (ADR-021): `make dev-native` is the
+`scripts/dev.sh` + `pnpm dev` flow above, `make dev` is the compose stack (mock :8081 + portal :3000,
+both reloading), `make build` the prod-like images, and `make test|lint|fmt` the uv/pnpm commands.
+`docker compose up` auto-merges `docker-compose.override.yml`; `docker compose -f docker-compose.yml up` skips it. Neither compose path starts the voice worker or LiveKit.
 
 ## Deploying
 

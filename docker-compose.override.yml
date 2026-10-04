@@ -1,0 +1,42 @@
+# Dev override (ADR-021). Compose merges this into docker-compose.yml automatically when you run
+# `docker compose` with no -f in this directory, so:
+#
+#     docker compose up            -> THIS file: dev images, source bind-mounted, hot reload
+#     docker compose -f docker-compose.yml up   -> the prod-like build: images only, no mounts
+#
+# Everything the base file defines that is not restated here still applies (ports, env files,
+# healthcheck, the mock-data volume, depends_on).
+#
+# The commands that run are the dev images' own CMDs, so there is exactly one definition of each:
+#   mock: Dockerfile.dev   -> uvicorn mock_server.app:app --host 0.0.0.0 --port 8081 --reload ...
+#   web:  web/Dockerfile   -> pnpm dev --hostname 0.0.0.0        (the `dev` stage)
+
+services:
+  mock:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    image: kirro-mock:dev
+    volumes:
+      # The checked-out source, so --reload sees host edits immediately. The venv is at /opt/venv in
+      # the image, outside /app, so the mount does not hide the interpreter.
+      - .:/app
+      # mock-data:/app/data from the base file still wins for that path (longest prefix), so dev
+      # state lives in the named volume, not in a host ./data directory. Docker does create ./data in
+      # the repo root as the (shadowed) mount target — it is empty, root-owned and git-ignored.
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      target: dev
+    image: kirro-web:dev
+    volumes:
+      - ./web:/app
+      # Anonymous, so the host's directories do not clobber the container's:
+      #   node_modules — host installs are for the host's Node/arch, not this container's
+      #   .next        — host dev-server cache from the native `pnpm dev` flow
+      # After changing web/package.json (or a lockfile), the anonymous node_modules volume is stale;
+      # `docker compose up --build --renew-anon-volumes` rebuilds it instead of reusing it.
+      - /app/node_modules
+      - /app/.next

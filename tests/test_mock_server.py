@@ -2,6 +2,7 @@ import json
 import socket
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -52,6 +53,43 @@ def test_admin_routes_require_the_configured_admin_key(mock_client, monkeypatch)
 
     ok = mock_client.get("/__admin/state", params={"run_id": "r"}, headers={"X-Admin-Key": "harness-secret"})
     assert ok.status_code == 200
+
+
+def test_agent_stats_round_trip(mock_client):
+    """The sync job writes, the portal reads (#33). Stored verbatim: the mock does not know which
+    fields AgenticOrg exposes, so it must not drop or invent any."""
+    assert mock_client.get("/venue/agent-stats", headers=H()).json() == {"agents": []}
+
+    stats = {
+        "status": "active",
+        "shadow_accuracy_current": 0.804,
+        "shadow_sample_count": 26,
+        "synced_at": "2026-10-04T00:00:00Z",
+    }
+    wrote = mock_client.put("/__admin/agent-stats/agent-abc", json=stats, headers=H())
+    assert wrote.status_code == 200
+
+    listed = mock_client.get("/venue/agent-stats", headers=H()).json()["agents"]
+    assert listed == [{"agent_id": "agent-abc", **stats}]
+
+    # A second sync overwrites the previous snapshot for the same agent rather than appending.
+    mock_client.put("/__admin/agent-stats/agent-abc", json={**stats, "shadow_sample_count": 27}, headers=H())
+    listed = mock_client.get("/venue/agent-stats", headers=H()).json()["agents"]
+    assert len(listed) == 1 and listed[0]["shadow_sample_count"] == 27
+
+
+def test_agent_stats_write_needs_the_admin_key_when_configured(mock_client, monkeypatch):
+    """The read is public (a homepage stat card); the write is harness-only, like the rest of
+    `/__admin/*`."""
+    monkeypatch.setenv("MOCK_ADMIN_KEY", "harness-secret")
+    assert mock_client.put("/__admin/agent-stats/agent-abc", json={"status": "active"}, headers=H()).status_code == 403
+    assert mock_client.get("/venue/agent-stats", headers=H()).status_code == 200
+    allowed = mock_client.put(
+        "/__admin/agent-stats/agent-abc",
+        json={"status": "active"},
+        headers={**H(), "X-Admin-Key": "harness-secret"},
+    )
+    assert allowed.status_code == 200
 
 
 def test_unknown_scenario_rejected(mock_client):
@@ -464,6 +502,119 @@ def test_declare_pool_refuses_a_closed_release(mock_client):
     assert mock_client.get(f"/venue/releases/{closed_id}/declarations", headers=H()).json()["declarations"] == []
 
 
+def _windowed_draw_release(mock_client, *, starts_at, opens_at, key="r1"):
+    body = instant_release_body(
+        event_id="ev_tennis",
+        date="2026-11-01",
+        opens_at=opens_at,
+        allocation_mode="fair_draw",
+        declare_window_starts_at=starts_at,
+    )
+    return mock_client.post("/venue/releases", json=body, headers=H(key=key)).json()["release_id"]
+
+
+def test_declare_window_is_closed_before_its_start(mock_client):
+    """A release created for a near-future demo declares `declarations_open: false` until its window
+    starts, and the REST route refuses a bid in that state (#32)."""
+    now = datetime.now(timezone.utc)
+    starts_at = (now + timedelta(minutes=2)).isoformat()
+    rid = _windowed_draw_release(mock_client, starts_at=starts_at, opens_at=(now + timedelta(minutes=5)).isoformat())
+
+    detail = mock_client.get(f"/venue/releases/{rid}", headers=H()).json()
+    assert detail["declare_window_starts_at"] == starts_at
+    assert detail["declarations_open"] is False
+
+    refused = mock_client.post(
+        f"/venue/releases/{rid}/declarations",
+        json=declare_body(acceptable_slot_ids=["ib_a"]),
+        headers=H(),
+    )
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "POOL_CLOSED"
+
+
+def test_declare_window_is_open_once_its_start_has_passed(mock_client):
+    """Same release shape, but the window start is already behind us: open, and the bid is accepted."""
+    now = datetime.now(timezone.utc)
+    starts_at = (now - timedelta(minutes=1)).isoformat()
+    rid = _windowed_draw_release(mock_client, starts_at=starts_at, opens_at=(now + timedelta(minutes=5)).isoformat())
+
+    assert mock_client.get(f"/venue/releases/{rid}", headers=H()).json()["declarations_open"] is True
+
+    # The release's own slot (`ib_a`, ₹200), not the badminton ids `declare_body` defaults to: an
+    # unknown slot id is now a 400 (#35), so a bid against a release has to name its real slots.
+    accepted = mock_client.post(
+        f"/venue/releases/{rid}/declarations",
+        json=declare_body(acceptable_slot_ids=["ib_a"]),
+        headers=H(),
+    )
+    assert accepted.status_code == 200, accepted.json()
+    assert accepted.json()["status"] == "DECLARED"
+
+
+def test_release_without_a_window_start_is_open_immediately(mock_client):
+    """The field is optional, so every pre-existing fixture and organiser-created release keeps the
+    "open from creation" behaviour it had before #32 — the regression guard for this change."""
+    now = datetime.now(timezone.utc)
+    body = instant_release_body(
+        event_id="ev_tennis",
+        date="2026-11-01",
+        opens_at=(now + timedelta(days=1)).isoformat(),
+        allocation_mode="fair_draw",
+    )
+    rid = mock_client.post("/venue/releases", json=body, headers=H(key="r1")).json()["release_id"]
+
+    detail = mock_client.get(f"/venue/releases/{rid}", headers=H()).json()
+    assert "declare_window_starts_at" not in detail or detail["declare_window_starts_at"] is None
+    assert detail["declarations_open"] is True
+
+
+def test_release_rejects_a_non_string_window_start(mock_client):
+    body = instant_release_body(
+        event_id="ev_tennis", date="2026-11-01", allocation_mode="fair_draw", declare_window_starts_at=123
+    )
+    r = mock_client.post("/venue/releases", json=body, headers=H(key="r1"))
+    assert r.status_code == 400 and r.json()["error"]["code"] == "BAD_REQUEST"
+
+
+@pytest.mark.parametrize(
+    "over",
+    [
+        {"opens_at": "next Tuesday"},
+        {"declare_window_starts_at": "soon"},
+    ],
+)
+def test_release_rejects_a_timestamp_that_does_not_parse(mock_client, over):
+    """An unreadable `opens_at` is not cosmetic: `declarations_open` treats a bad timestamp as closed,
+    so the release would silently never accept a declaration (#35's class of bug). Rejected at
+    creation, where the caller can still fix it."""
+    body = instant_release_body(event_id="ev_tennis", date="2026-11-01", allocation_mode="fair_draw", **over)
+    r = mock_client.post("/venue/releases", json=body, headers=H(key="r1"))
+    assert r.status_code == 400 and r.json()["error"]["code"] == "BAD_REQUEST"
+
+
+def test_create_release_returns_the_same_shape_as_get_release(mock_client):
+    """The create response carries the computed fields (`declarations_open`, `weekday`, …) too, not
+    the raw stored document — otherwise a caller has to re-read a release it just made to find out
+    whether its own declare window is open (#32)."""
+    now = datetime.now(timezone.utc)
+    body = instant_release_body(
+        event_id="ev_tennis",
+        date="2026-11-01",
+        opens_at=(now + timedelta(minutes=5)).isoformat(),
+        allocation_mode="fair_draw",
+        declare_window_starts_at=(now + timedelta(minutes=2)).isoformat(),
+    )
+    created = mock_client.post("/venue/releases", json=body, headers=H(key="r1")).json()
+
+    assert created["declarations_open"] is False
+    assert created["declare_window_starts_at"] == body["declare_window_starts_at"]
+    assert "weekday" in created and "min_price_per_person_paise" in created
+    assert created["slots"][0]["capacity"] == 4
+
+    fetched = mock_client.get(f"/venue/releases/{created['release_id']}", headers=H()).json()
+    assert created == fetched
+
+
 @pytest.mark.parametrize(
     "over",
     [
@@ -472,6 +623,15 @@ def test_declare_pool_refuses_a_closed_release(mock_client):
         {"acceptable_slot_ids": []},
         {"acceptable_slot_ids": "bd_0700"},
         {"min_group_size": 5},
+        # The floors and the cross-checks that #35 added. Each of these was silently accepted before:
+        # a group of nobody, a slot this release does not have, and a ceiling that cannot reach the
+        # cheapest acceptable slot (rel_badminton_sat's cheapest two are ₹250 and ₹280).
+        {"group_size": 0, "min_group_size": 0},
+        {"min_group_size": 0},
+        {"acceptable_slot_ids": ["bd_0700", "not_a_real_slot"]},
+        {"acceptable_slot_ids": ["tn_0900"]},  # a real slot id, but on a different release
+        {"max_price_paise": 24999},
+        {"max_price_paise": 0},
         {"notify_phone": ""},
         {"notify_phone": "9876543210"},  # no country code, and no saved profile to fall back on
         {"notify_phone": "not a number"},
@@ -481,6 +641,37 @@ def test_declare_pool_refuses_a_closed_release(mock_client):
 def test_declare_pool_rejects_bad_bid(mock_client, over):
     r = mock_client.post("/venue/releases/rel_badminton_sat/declarations", json=declare_body(**over), headers=H())
     assert r.status_code == 400 and r.json()["error"]["code"] == "BAD_REQUEST"
+
+
+def test_ceiling_is_measured_against_the_acceptable_slots_only(mock_client):
+    """The ceiling has to clear the cheapest slot the caller said yes to — not the cheapest slot on
+    the release. Someone who only wants the expensive court, and will pay for it, is not rejected for
+    ignoring a cheap one they never named (#35)."""
+    # rel_badminton_sat: bd_0700 = ₹250, bd_0800 = ₹280, bd_1800 = ₹350.
+    only_dear = mock_client.post(
+        "/venue/releases/rel_badminton_sat/declarations",
+        json=declare_body(acceptable_slot_ids=["bd_1800"], max_price_paise=35000),
+        headers=H(key="d1"),
+    )
+    assert only_dear.status_code == 200, only_dear.json()
+
+    # ₹260 would be below the release's dearer slots, but it clears the one slot this bid accepts.
+    above_the_cheap_one = mock_client.post(
+        "/venue/releases/rel_badminton_sat/declarations",
+        json=declare_body(declaration_id="dec_2", acceptable_slot_ids=["bd_0700"], max_price_paise=25000),
+        headers=H(key="d2"),
+    )
+    assert above_the_cheap_one.status_code == 200, above_the_cheap_one.json()
+
+
+def test_ceiling_exactly_at_the_cheapest_acceptable_slot_is_accepted(mock_client):
+    """The boundary, so an off-by-one here can never silently start rejecting a valid bid."""
+    r = mock_client.post(
+        "/venue/releases/rel_badminton_sat/declarations",
+        json=declare_body(acceptable_slot_ids=["bd_0700", "bd_0800"], max_price_paise=25000),
+        headers=H(key="d1"),
+    )
+    assert r.status_code == 200, r.json()
 
 
 def test_declare_pool_falls_back_to_the_number_saved_in_settings(mock_client):
@@ -551,6 +742,34 @@ def test_user_profile_rejects_a_number_that_cannot_be_messaged(mock_client, bad)
     r = mock_client.put("/venue/users/me@example.com/profile", json={"notify_phone": bad}, headers=H())
     assert r.status_code == 400 and r.json()["error"]["code"] == "BAD_REQUEST"
     assert "notify_phone" not in mock_client.get("/venue/users/me@example.com/profile", headers=H()).json()
+
+
+def test_user_profile_push_subscription_merges_without_clobbering_phone(mock_client):
+    """PWA push notifications (web/settings) and the WhatsApp number (ADR-015) are independent
+    fields on the same per-user profile document; saving one must not erase the other."""
+    mock_client.put("/venue/users/me@example.com/profile", json={"notify_phone": "+919876543210"}, headers=H())
+
+    sub = {"endpoint": "https://push.example/abc", "keys": {"p256dh": "k1", "auth": "k2"}}
+    saved = mock_client.put("/venue/users/me@example.com/profile", json={"push_subscription": sub}, headers=H())
+    assert saved.status_code == 200
+    assert saved.json()["push_subscription"] == sub
+    assert saved.json()["notify_phone"] == "+919876543210"  # untouched by the push-only save
+
+    updated_phone = mock_client.put(
+        "/venue/users/me@example.com/profile", json={"notify_phone": "+911111111111"}, headers=H()
+    )
+    assert updated_phone.status_code == 200
+    assert updated_phone.json()["notify_phone"] == "+911111111111"
+    assert updated_phone.json()["push_subscription"] == sub  # untouched by the phone-only save
+
+    cleared = mock_client.put("/venue/users/me@example.com/profile", json={"push_subscription": None}, headers=H())
+    assert cleared.status_code == 200
+    assert "push_subscription" not in cleared.json()
+
+
+def test_user_profile_rejects_an_empty_body(mock_client):
+    r = mock_client.put("/venue/users/me@example.com/profile", json={}, headers=H())
+    assert r.status_code == 400 and r.json()["error"]["code"] == "BAD_REQUEST"
 
 
 def test_gnani_route_is_gone(mock_client):

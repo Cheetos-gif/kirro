@@ -1,0 +1,71 @@
+# The agent-stats sync (ADR-020): AgenticOrg holds the only real accuracy/sample numbers for the two
+# live agents, and this CronJob copies them into the mock so the portal can show them with a "last
+# synced" timestamp instead of a hardcoded claim. It writes nothing back to AgenticOrg — a mirror,
+# not a source of truth — see agent_stats_sync/__init__.py.
+#
+# Stateless: no PVC. Each pass overwrites the previous snapshot for an agent, and a failed pass leaves
+# the previous snapshot in place rather than blanking it.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: kirro-agent-stats-sync
+  labels:
+    app: kirro-agent-stats-sync
+spec:
+  # Stats move at the pace of a chat turn, not a request, so this is far less urgent than the
+  # allocator trigger's 5 minutes; it is still cheap (two GETs, two PUTs per pass).
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 120
+      template:
+        metadata:
+          labels:
+            app: kirro-agent-stats-sync
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          priorityClassName: low-priority
+          containers:
+            - name: kirro-agent-stats-sync
+              image: ghcr.io/cheetos-gif/kirro:latest
+              imagePullPolicy: Always
+              command: ["python", "-m", "agent_stats_sync"]
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              env:
+                # In-cluster address: this never goes through the public Ingress.
+                - name: MOCK_API_URL
+                  value: http://kirro-mock:8081
+                - name: MOCK_RUN_ID
+                  value: default
+                - name: AGENTICORG_BASE_URL
+                  value: https://agenticorg.hackathon.pinelabs.com
+                # Same credentials the voice worker and the allocator trigger already use
+                # (kirro-voice Secret, ADR-016) — one account, no new secret.
+                - name: AGENTICORG_EMAIL
+                  valueFrom:
+                    secretKeyRef: { name: kirro-voice, key: AGENTICORG_EMAIL }
+                - name: AGENTICORG_PASSWORD
+                  valueFrom:
+                    secretKeyRef: { name: kirro-voice, key: AGENTICORG_PASSWORD }
+                # Same key the mock's own /__admin guard checks (#22). `optional: true` so this Job
+                # still runs (and simply is not authenticated) before the Secret exists.
+                - name: MOCK_ADMIN_KEY
+                  valueFrom:
+                    secretKeyRef: { name: kirro-mock-admin, key: MOCK_ADMIN_KEY, optional: true }
+              resources:
+                # A handful of HTTP calls, no media pipeline.
+                requests: { cpu: 25m, memory: 48Mi }
+                limits: { cpu: 100m, memory: 96Mi }

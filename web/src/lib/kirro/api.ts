@@ -63,6 +63,8 @@ export function createEvent(input: {
   organiser_id: string;
   status?: 'draft' | 'published';
   fulfilment?: string;
+  aliases?: string[];
+  generic_aliases?: string[];
 }) {
   return request({ method: 'POST', url: '/venue/events', data: input, schema: s.eventSchema });
 }
@@ -84,6 +86,7 @@ export function createRelease(input: {
   date: string;
   opens_at: string;
   allocation_mode: s.AllocationMode;
+  declare_window_starts_at?: string;
   slots: Array<{
     label: string;
     starts_at: string;
@@ -113,11 +116,14 @@ export function getUserProfile(userContact: string) {
   });
 }
 
-export function setUserProfile(userContact: string, notifyPhone: string) {
+export function setUserProfile(
+  userContact: string,
+  input: { notify_phone?: string; push_subscription?: s.PushSubscriptionJSON | null }
+) {
   return request({
     method: 'PUT',
     url: `/venue/users/${encodeURIComponent(userContact)}/profile`,
-    data: { notify_phone: notifyPhone },
+    data: input,
     schema: s.userProfileSchema,
   });
 }
@@ -192,4 +198,14 @@ export function resetRun() {
     data: { run_id: env.MOCK_RUN_ID },
     schema: z.object({ ok: z.boolean() }),
   });
+}
+
+/** Last-known agent stats mirrored from AgenticOrg (ADR-020). Empty until the sync job has run, which
+ * the caller must render honestly rather than as zeroes. */
+export async function getAgentStats() {
+  const body = await request({
+    url: '/venue/agent-stats',
+    schema: z.object({ agents: z.array(s.agentStatSchema) }),
+  });
+  return body.agents;
 }

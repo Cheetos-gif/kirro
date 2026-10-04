@@ -35,7 +35,11 @@ logging_/redact.py   key/token/phone redaction shared by the mock request log
 tests/               mock scenarios (real uvicorn thread), MCP catalogs/parity, allocator, durability
 docs/                spec (agenticorg/), decisions/ (ADRs), architecture, connectors, testing, submission
 scripts/dev.sh       start the mock server on :8081
-Dockerfile           the mock server image
+Dockerfile           the mock server image (multi-stage; gunicorn + uvicorn worker, ADR-021)
+Dockerfile.dev       the dev image: dev deps + uvicorn --reload, used by docker-compose.override.yml
+gunicorn.conf.py     gunicorn settings: bind, uvicorn worker, GUNICORN_WORKERS (default 1, ADR-013)
+docker-compose.yml   prod-like local stack (mock + web); override file turns it into the dev stack
+Makefile             thin wrapper: dev, dev-native, build, down, logs, test, lint, fmt
 k8s/                 Deployment, Service, Ingress, NetworkPolicy, PVC for the hosted mock
 ```
 
@@ -51,6 +55,34 @@ bash scripts/dev.sh            # mock server on :8081
 ```
 
 `pytest`, `ruff` and `black` run entirely offline — no API keys and no network are needed.
+
+`make` wraps the same commands rather than replacing them (`Makefile`, ADR-021). `make dev-native`
+is the `scripts/dev.sh` + `pnpm dev` flow above; `make dev` is the compose one; `make test`,
+`make lint` and `make fmt` are exactly the uv/pnpm commands in this section. `make` with no target
+lists them.
+
+## Docker (alternative to the native flow)
+
+The commands above are the day-to-day path, and the faster one. `docker compose` exists so the mock
+and the portal can be started together without a host uv/Node install, and so the production image
+shape is exercised locally (ADR-021):
+
+```
+docker compose up --build                            # dev: mock :8081 + portal :3000, both reloading
+docker compose -f docker-compose.yml up --build      # prod-like images, no source mounts
+```
+
+`docker compose` with no `-f` auto-merges `docker-compose.override.yml`, which builds
+`Dockerfile.dev` for the mock and `web/Dockerfile`'s `dev` stage for the portal and bind-mounts the
+source; passing `-f docker-compose.yml` skips that merge and gives the prod-like stack. Portal
+`:3000`, mock `:8081`; mock state lives on the `mock-data` volume at `/app/data`, so `down` does not
+wipe a demo's declarations. `.env` and `web/.env.local` are picked up if present and optional if not.
+
+Neither route starts the voice bridge or LiveKit: the voice channel needs real LiveKit/Gnani
+credentials and a signed-in browser session, which a bare `docker compose up` cannot fake.
+
+**The containers are not the deploy.** The cluster is still GitOps from `k8s/` (see "Deploying");
+this is a local dev/eval convenience and a second deployment path it is not.
 
 ## Deploying
 

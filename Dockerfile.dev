@@ -1,0 +1,47 @@
+# Dev-only mock-server image (ADR-021). Not built by CI, not deployed: docker-compose.override.yml
+# targets it so `docker compose up` gives a reloading mock against the checked-out source.
+#
+# Same base interpreter and the same lock as the production image, but the dev dependency group is
+# installed too (so `pytest`, `ruff` and `black` are runnable inside the container) and the command
+# is uvicorn --reload. The source itself comes from a bind mount at runtime, so the `COPY . .` here
+# exists only for the case where someone runs this image without the override.
+#
+# The venv lives at /opt/venv, outside the /app bind mount, so mounting the repo over /app does not
+# hide the interpreter.
+FROM python:3.13-slim
+
+RUN pip install --no-cache-dir uv
+
+ENV UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    PATH="/opt/venv/bin:${PATH}"
+
+WORKDIR /app
+
+# Dependencies first, on their own layer, so a source edit does not re-resolve the lock.
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project
+
+COPY . .
+# No --no-dev: this image is for running the test suite and the linters as well as the server.
+RUN uv sync --frozen
+
+# Same uid as production, so ownership/permission bugs (the ADR-013 root-owned-/app failure) show
+# up locally instead of only in the cluster.
+RUN useradd --create-home --uid 10001 kirro \
+    && mkdir -p /app/logs /app/data \
+    && chown -R kirro:kirro /app
+
+USER kirro
+
+ENV MOCK_LOG_DIR=/app/logs \
+    MOCK_DB_PATH=/app/logs/mock.db
+
+EXPOSE 8081
+
+# --reload watches the bind-mounted tree; --proxy-headers/--forwarded-allow-ips matches the
+# production gunicorn setting so header handling is not a dev-only difference.
+CMD ["uvicorn", "mock_server.app:app", \
+     "--host", "0.0.0.0", "--port", "8081", \
+     "--reload", "--proxy-headers", "--forwarded-allow-ips", "*"]

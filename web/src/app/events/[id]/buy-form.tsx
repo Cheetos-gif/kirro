@@ -6,6 +6,13 @@ import { buyAction, type ActionState } from '@/app/actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useActionToast } from '@/hooks/use-action-toast';
 import { formatPaise } from '@/lib/kirro/format';
 import type { Slot } from '@/lib/kirro/schemas';
@@ -13,6 +20,8 @@ import type { Slot } from '@/lib/kirro/schemas';
 export function BuyForm({ releaseId, slots }: { releaseId: string; slots: Slot[] }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(buyAction, null);
   useActionToast(state);
+  // Preselect the first slot that actually has seats, so the common case needs no interaction.
+  const firstAvailable = slots.find(slot => slot.capacity > 0)?.slot_id;
 
   return (
     <div className="flex flex-col gap-4">
@@ -28,19 +37,18 @@ export function BuyForm({ releaseId, slots }: { releaseId: string; slots: Slot[]
         <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={`slot-${releaseId}`}>Slot</Label>
-            {/* Native select: it submits its value with the form unconditionally. */}
-            <select
-              id={`slot-${releaseId}`}
-              name="slot_id"
-              required
-              className="h-9 w-full rounded-3xl border border-transparent bg-input/50 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
-            >
-              {slots.map(slot => (
-                <option key={slot.slot_id} value={slot.slot_id} disabled={slot.capacity < 1}>
-                  {slot.label}, {formatPaise(slot.price_per_person_paise)}, {slot.capacity} left
-                </option>
-              ))}
-            </select>
+            <Select name="slot_id" required defaultValue={firstAvailable}>
+              <SelectTrigger id={`slot-${releaseId}`} className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {slots.map(slot => (
+                  <SelectItem key={slot.slot_id} value={slot.slot_id} disabled={slot.capacity < 1}>
+                    {slot.label}, {formatPaise(slot.price_per_person_paise)}, {slot.capacity} left
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={`qty-${releaseId}`}>How many</Label>

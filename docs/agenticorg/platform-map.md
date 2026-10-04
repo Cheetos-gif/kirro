@@ -1,9 +1,10 @@
 # AgenticOrg platform map
 
 Reference for the platform KIRRO runs on: `https://agenticorg.hackathon.pinelabs.com` ("AgenticOrg" by Pine Labs).
-Written from live inspection on 2026-10-02; **keep it current as we work** — anything not directly observed is
-labelled. Companion docs: `setup-runbook.md` (how to register/build KIRRO there), `agent-spec.md` and
-`workflow-spec.md` (what to build), ADR-010/011 (decisions).
+Written from live inspection starting 2026-10-02, most recently re-scouted end-to-end on 2026-10-04 (§15);
+**keep it current as we work** — anything not directly observed is labelled. Companion docs: `setup-runbook.md`
+(how to register/build KIRRO there), `agent-spec.md` and `workflow-spec.md` (what to build), ADR-010/011
+(decisions).
 
 ## 1. Tenant and access
 
@@ -182,7 +183,11 @@ The base skeleton the builder starts from is
 delegating to an Agent step. What `action` references (a connector tool, and its exact id syntax) is still to be
 confirmed while authoring the allocation steps.
 
-## 7. Still open / not yet inspected
+## 7. Still open / not yet inspected (2026-10-02 snapshot)
+
+> All four items below are now resolved elsewhere in this file: wizard steps and tool-id syntax in §8, non-MCP
+> connectors in §11's "non-MCP connector" row and the Vachana section (§8), workflow `action` syntax in §9,
+> and Audit Log/Observatory export mechanics (and their shared-tenant caveats) in §15. Kept for history.
 
 - The Agent creation wizard's Role/Prompt/Behavior/Review steps, and the exact shape of the **Authorized Tools**
   checklist (dot vs `__` identifiers) — the next thing to inspect.
@@ -1338,3 +1343,261 @@ in this repo has ever called it, credentialed or not.
 ADR-019 wires a real Pine Labs call-out a different way: directly from `mock_server` against Pine Labs' own
 UAT sandbox via the official `pinelabs-python` SDK, independent of this (uncredentialed, unused) AgenticOrg
 connector.
+
+## 15. Re-scout 2026-10-04: every sidebar route, fully walked and scrolled
+
+The 2026-10-02/03 passes above were written mostly from targeted API probing plus a handful of UI visits; several
+routes were never opened in depth (just named in §2's table) and the Audit Log's pagination was never clicked past
+page 1. This pass opened **every** sidebar route via a relay tab on the real signed-in session, captured the full
+accessibility tree (`ariaSnapshot`, which reads the whole DOM regardless of scroll position — confirmed against the
+101-card connector catalog and the 559-row tool checklist, both render in full, not virtualized), and clicked
+pagination/notification controls that a screenshot-only pass would miss.
+
+### The tenant is shared across competition teams — three surfaces leak other teams' data
+
+This is the single biggest correction. Connectors are per-registering-user (`docs/agenticorg/platform-map.md` §3.1's
+MCP tooltip already said "only visible to you"), but three governance/knowledge surfaces are **tenant-wide**, not
+scoped to this account, and now show artifacts from other Case-Build Competition teams:
+
+- **Schema Registry** (`/dashboard/schemas`): 28 schemas, not the 21 (18 default + 3 custom) recorded 2026-10-02.
+  18 are still platform defaults; the other **14 are custom**, and only a few are ours. Unrecognised ones:
+  `TelegramBotSchema`, `StakeMateDecision`, `StakeMateCommitment`, `Payment`, `Ticket`, `Invoice`,
+  `FinAgent_Health_Schema` (×2, different versions), `Employee`, `AcuDiagEscrowContractV1` ("Pine Labs Plural Escrow
+  & Warranty Split Contract"), `AcousticDiagnosticReportV1` ("AcuDiag Acoustic DSP Telemetry"). Ours:
+  `PaymentIntent`, `WhatsAppMessage`, `FinancialMemoryEventV01`.
+- **Knowledge Base** (`/dashboard/knowledge`): now **1 document / 207 chunks**, not the 8 documents / 18 chunks
+  recorded 2026-10-02. The one file present is `pacto_knowledge_base_v3.txt` (5.0 KB, indexed 2026-10-03) — not a
+  KIRRO artifact, so the earlier 8 documents were other teams' uploads that have since been superseded/cleared by
+  someone else's `/__admin`-equivalent action, and this one will churn the same way.
+- **Audit Log** (`/dashboard/audit`): tenant-wide, not account-scoped. Page 2 (reached by clicking "Next" — the
+  earlier read never paginated past the first batch) contains
+  `agent.create user "Created agent 'ss-planner-agent' (household_planner)" success` at 03/10/2026 22:40:52 — not a
+  KIRRO agent type. Treat every count or timestamp pulled from this page as **tenant noise mixed with signal**,
+  not a clean KIRRO trail; filter by the known agent ids/types (`declared_interest_booking`, `kirro_allocator`)
+  before trusting a row.
+
+Consequence for the submission write-up: any screenshot or count taken from Schemas, Knowledge Base or Audit Log
+needs a caption noting shared-tenant contamination, and Q1.2's audit-trail reconstruction (ADR-011 §7) should filter
+on agent type/id rather than trust raw row counts.
+
+### Audit Log is paginated (50 rows/page), with real controls not seen before
+
+`/dashboard/audit` has a free-text "Filter by event type" box, **Export Evidence Package** and **Download CSV**
+buttons (both un-clicked — exporting was not attempted to avoid an unreviewed side effect), and
+Previous/Next/"Page N" controls. Page 1 showed rows from today (2026-10-04) back through 2026-10-03 23:41; clicking
+Next reached page 2 (2026-10-03 23:37 → 22:27) with **Next still active**, so the log is materially longer than one
+page and was never fully walked in either pass — nor should it be; the point is the control exists and was unused
+before.
+
+### Scope Dashboard and the Connectors stat cards read zero despite real activity
+
+`/dashboard/scopes` shows `Total Agents: 0`, `Tool Calls (24h): 0`, `Denials (24h): 0`, `Denial Rate: 0.0%`, and
+"No scope entries found" — even though §10 proved real tool calls landed and the Agent Fleet page (below) shows two
+active agents. Similarly `/dashboard/connectors`'s own stat cards read `Total connected: 12`, `Healthy: 0`,
+`Unhealthy: 1` while the per-card badges below show most of those 12 as `active` and the API's own
+`/connectors/{id}/health` has returned `healthy: true` for several (§8–§10). **Read these top-of-page stat cards as
+unreliable** (plausibly a rolling-window or cache-population bug) and prefer the per-item list/API for ground truth,
+not the summary numbers.
+
+The same pattern shows on `/dashboard` itself: the five top stat cards (Total/Active/Shadow Agents, Pending
+Approvals, Approvals Resolved) all read **"0"** in a snapshot taken right after navigation, while the page's own
+"Recent Activity" and "Pending Approvals" lists below show real rows and `/dashboard/agents` on the same session
+shows the true fleet (4 agents: `Kirro Declare v6` active/65 samples/81.6%, `Kirro Declare v6-dev` shadow/50/80.5%,
+`Kirro Declare v4` retired "Below Floor"/310/69.1%, `Kirro Allocator` active/75/83.4%). These look like animated
+counters that had not finished their count-up tween when the DOM was read, not a real-state bug — but it means a
+**single snapshot of the dashboard's stat cards is not trustworthy**; cross-check against the dedicated list page.
+
+### Observatory and the marketing homepage both show canned demo content, not KIRRO data
+
+`/dashboard/observatory` ("Agent Observatory", "1 agents active") displays a fixed **"Invoice Processing Pipeline"**
+demo — steps Receive Invoice → Extract Fields → GSTIN Validation → 3-Way Match → Payment Queue, a "Live Agent Feed"
+cycling canned outcomes (reject/defer/apply/approve/request/execute), and static-looking counters ("50 Transactions
+Today", "6 Events Received", "-- HITL Escalations"). None of this names KIRRO, the Declare agent, or the Allocator.
+**This page does not show the tenant's real workflow execution** — it is AgenticOrg's own product-demo content, the
+same pattern as the marketing homepage (`/`, logged out), whose "Live Agent Activity" panel shows a fixed roster
+(Priya/Arjun/Maya/CS Bot/Riya, AP/Recon/Onboarding/CS/Tax-Compliance demo agents) that has nothing to do with this
+tenant either. Do not cite Observatory as evidence of a real KIRRO run for the submission; cite the Audit Log
+(filtered per the note above) or the mock's own request log instead.
+
+### Routes previously only named in §2's table, now walked
+
+- **Agent Templates** (`/dashboard/agent-templates`): a single-page form, not a wizard — Name, Description,
+  Assistant Display Name, Template Type (Buyer/Seller), Agent Type (slug), Domain, Prompt Template (dropdown,
+  currently empty — no prompt templates exist, see below), an **Authorized Tools** checklist that is the same
+  flat 559-entry native tool list as the agent ACL picker (§8), and a **Grantex Policy** block (`Grantex Policy JSON` textarea pre-filled with an example allowlist/cap shape, `Grantex Policy Ref`, `Instantiation Policy`
+  text input defaulting to `self_service`, and a `Self-service allowed` checkbox). A banner reads
+  `"Missing scope: agenticorg:admin"` and `Create Template` is **disabled** — so this is another admin-gated
+  surface a developer account can see but not use, same shape as Report Schedules. "Templates: No templates yet."
+- **Prompt Templates** (`/dashboard/prompt-templates`): domain filter (Finance/Hr/Marketing/Ops/Engineering/
+  Backoffice), `0 templates`, empty state. This is why Agent Templates' "Prompt Template" dropdown above is empty.
+- **Create from SOP** (`/dashboard/agents/from-sop`): one step reachable without a file —
+  Upload File / Paste Text toggle, a file picker, a Domain Hint dropdown (Auto-detect default), `Parse SOP` button.
+  Steps past 1 were not reached (no SOP document was uploaded, to avoid creating tenant-wide artifacts).
+- **My Schedules** (`/dashboard/agent-schedules`, labelled "Scheduled Agent Tasks" on-page): status filter
+  (All/Active/Paused/Running/Completed/Failed/Cancelled, default Active), `By Merchant` / `General Schedules` tabs,
+  `Refresh` button, empty under both tabs for this account.
+- **RPA Scripts** (`/dashboard/rpa`): four scripts, none KIRRO-related — **Cora — I4C Settled Case Closure**
+  (compliance, human-in-loop, 0 params), **epfo_ecr_download** (hr_compliance, built-in, ~60s, 3 params),
+  **Generic Portal Automator** (general, built-in, ~60s, 10 params — "Automate any web portal that doesn't have
+  APIs… auto-detection of login forms, data extraction, file downloads, and screenshots"), **mca_company_search**
+  (compliance, built-in, ~60s, 1 param), **RBI.org.in Scraper** (research, built-in, ~90s, 3 params, "feeds the
+  knowledge base" — explaining where some of the Knowledge Base churn above comes from). An **Execution History**
+  list below showed two completed runs from other teams (`RBI.org.in Scraper`, `mca_company_search`,
+  2026-10-01/09-30). These are platform/tenant seed scripts, not something KIRRO registered.
+- **RPA Schedules** (`/dashboard/rpa-schedules`): empty, tagline "Target vector-embedding quality: 4.8 / 5" —
+  confirms RPA output feeds the shared Knowledge Base (another source of the churn noted above).
+- **A2A / MCP** (`/dashboard/integrations`, labelled "External Integrations"): previously summarised as one line;
+  it is a static documentation page with copy-paste snippets, not a console — Python SDK (`pip install agenticorg`,
+  `client.agents.run(...)`, `client.agents.generate(...)`, `client.knowledge.search(...)`), TypeScript SDK
+  (`npm i agenticorg-sdk`), a CLI (`agenticorg agents list/run`, `agenticorg sop parse`, `agenticorg a2a card`,
+  `agenticorg mcp tools`), an **A2A Protocol** block listing all **55 available skills** by name (platform-wide
+  agent types — `ap_processor`, `ar_collections`, …, `buyer_assistant`, `travel_buyer`, `ecommerce_seller`, …;
+  KIRRO's own types are not in this list since they are tenant-custom, not platform skills), an **MCP** block
+  listing the first 6 of 55 tools plus "+49 more tools" (not expanded), and an **Authentication** summary
+  (`api_key` for dashboard users, `grantex_token` for scoped external agents, `AGENTICORG_API_KEY` env var) that
+  matches §13's finding that none of these are self-service for a `developer`-role account.
+- **Industry Packs** (`/dashboard/packs`): confirmed still empty — "No industry packs available."
+- **Notifications flyout** (bell icon, header): a panel, not a route — a `Push Notifications` toggle ("Enable to
+  get instant approval alerts"), the 5 most recent notifications (title + priority + date, each linking to
+  `/dashboard/approvals`), and a `View all` link to the same page. Mirrors the approval queue; no separate data.
+- **SLA Monitor** (`/dashboard/sla`): beyond the `/health/checks` and `/health/uptime` 403s already recorded, the
+  page also shows `API P95 Latency: N/A`, `Agent Success Rate: N/A`, `HITL Response Time: N/A` (all badged "OK"
+  despite being N/A) and an uptime-check history table with one row (`healthy`) — so the whole page runs on
+  fallback/placeholder values for this tenant, not real telemetry.
+
+### Follow-up same day: the second-level surfaces (§16)
+
+The Marketplace tab and the "CMO Sandbox Setup" button mentioned as unopened above were both opened later the same
+day in a strictly read-only follow-up pass — see §16, which also covers agent detail tabs, the workflow detail
+page, connector edit forms, and the Register Connector form. The wizard's Review step remains unopened (reaching it
+requires progressing a real multi-step form with no draft persistence, i.e. it's a write-adjacent action).
+
+## 16. Read-only follow-up 2026-10-04: every form, modal and detail page one click deeper
+
+A second pass the same day went one level deeper than §15 — into the pages, tabs, and modals reachable *from* each
+sidebar route — under an explicit "don't modify existing config" constraint: forms were opened and read, never
+submitted; buttons that fire a real action (Archive, Run Now, Run on an RPA script, Approve/Reject/Defer, Health
+Check, KB upload, SOP parse, Register/Save) were left unclicked. Two exceptions, both genuinely read-only and
+confirmed so before use: the Knowledge Base "Test a query" search box, and expanding an already-decided approval's
+"Reasoning Trace".
+
+### Agent detail page has 10 tabs, not previously enumerated
+
+Opening an agent (e.g. `Kirro Declare v6`, `6596b872-abb5-465a-87d3-fff8de17536d`) lands on a tab strip:
+**overview, workspace, config, Workflow Config, prompt, shadow, cost, scopes, learning, voice**. Only `voice` had
+been documented before (§8's Vachana section). The others, each confirmed live:
+
+- **overview** — the summary already described in §8, plus a collapsed **"▸ Why did the agent do this?"**
+  explainability panel on the latest run, not previously found. Expanded, it shows: the step list ("No tool calls
+  were required for this run." / "Agent response: …" / "HITL gate triggered — condition matched: …"), a
+  **Confidence** percentage for that specific run, and feedback controls (👍 / 👎 / **Correct this**) that feed the
+  `learning` tab below.
+- **workspace** — "Generate Workspace from Prompt": a free-text box + disabled `Generate draft` button. Unrelated
+  to KIRRO's booking workspace; this is the platform's generic workspace-scaffolding feature, unused here.
+- **config** — a read view of the same fields `overview` shows (LLM Model, Max Retries, Retry Backoff
+  `exponential`, HITL Condition, Confidence Floor, Authorized Tools) plus **"Workflow Bindings — No workflow
+  bindings configured"**, and an `Edit` button (not opened/saved).
+- **Workflow Config** — a **separate concept from the `/dashboard/workflows` entity** in §6/§9/§12. This is a
+  free-form JSON blob stored at `agent.config.workflow`, read by the agent's own LangGraph at
+  `state["workflow_config"]` to switch from "the standard ReAct graph" to a custom graph. **Empty on both KIRRO
+  agents** (`Kirro Declare v6` and `Kirro Allocator` both show the placeholder, not real content) — confirms
+  neither agent uses a custom LangGraph, they run the default ReAct loop. The placeholder example
+  (`datasource_map`/`repo_map`/`trace_flows` wired to Grafana/GitHub) is generic platform boilerplate, not a KIRRO
+  hint.
+- **prompt** — the live prompt text, matches `agent-spec.md` §3 (not re-diffed character-by-character this pass,
+  but same opening/structure).
+- **shadow** — sample-count and accuracy-vs-threshold UI (`Samples generated`, `Promotion target`, pass/fail
+  checklist). On the already-`active` v6 agent this reads "Ready to promote" with both checks green
+  (sample count 65/20 ✓, accuracy 81.6%/80.0% ✓) even though `Promote` is disabled (already active) — this tab is
+  clearly meant for a still-`shadow` agent and is informational-only once promoted.
+- **cost** — real per-agent cost telemetry, not documented anywhere before: `Kirro Declare v6`'s Monthly Cap
+  **$200.00**, Current Spend **$0.8765**, Tokens Used (Month) **2,337,921**, Tasks Run (Month) **65**, Budget
+  Utilization **0.4%**. Useful for the submission's cost narrative — the whole KIRRO declare leg has cost under a
+  dollar this competition.
+- **scopes** — a **Grantex Scopes** table, one row per authorized tool, with Tool/Permission/Connector/Scope
+  String/Status/Grant Token columns. Every row on the live, working `Kirro Declare v6` reads **`not issued` /
+  `Not issued`** for Status and Grant Token — despite §10 proving real tool calls succeed through this exact agent.
+  Below it, **"Enforcement Log — No enforcement decisions recorded for this agent yet."** This is the same
+  pattern as the tenant-wide Scope Dashboard reading all-zero in §15: **Grantex scope issuance/enforcement tracking
+  does not reflect real tool-call activity for this tenant**, on a per-agent view as well as the aggregate one. Do
+  not use either as evidence of what an agent can or has done — use the mock's own request log instead.
+- **learning** — "Learned Rules (Amendments)" (empty, with an `Analyze Feedback` button) and "Feedback Timeline"
+  (empty). This is where the overview tab's 👍/👎/"Correct this" buttons would feed data; none submitted yet.
+
+### Workflow detail page: step buttons are inert
+
+`/dashboard/workflows/{id}` (`Kirro Window Allocation`) matches §9/§12's description (7 steps, step 7 rendering
+"Agent: undefined"). New: each step is rendered as a `button`, suggesting a detail popover, but clicking one
+(verified on step 1) does nothing — no navigation, no modal, no state change. The only interactive controls on this
+page are `▶ Run Pipeline` (top) and `← Back to Workflows` (bottom); neither was clicked.
+
+### Connectors: a global name uniqueness constraint, and the Marketplace/CMO-Sandbox surfaces
+
+- **`/dashboard/connectors/new` (Register Connector form)**, read in full: confirms §3.1's field table, and adds
+  one load-bearing sentence from the Connector Name field's own helper text: **"Connector names must be unique
+  across the whole organization — registering a name that's already in use (even by another user) will be
+  rejected, since credentials are shared per name."** This is new and matters for the shared-tenant finding in
+  §15 — connector **visibility** is per-user (confirmed earlier), but the connector **namespace** is tenant-wide,
+  so another competition team registering e.g. `mcp_kirro_all_v24` first would have blocked ours, and recreating a
+  connector under a name another team already claimed will 422. Explains why this investigation's connector names
+  keep incrementing (`_v21`…`_v24`) rather than reusing a name after archiving.
+- **A connector's `Edit` button** (tried on `mcp_kirro_all_v24`) does not open a form inline on the list — it
+  navigates to `/dashboard/connectors/{id}`, a read-only **Connector Info** page (Name, Category, Base URL, Auth
+  Type, Rate Limit, Timeout, Created, full **Registered Tools** list — 18, matching §10) with its own nested `Edit`
+  button under "Authentication Configuration" that reveals an inline Auth Type / Base URL / Rate Limit form with
+  `Save`/`Cancel`. Opened and read, then **Cancel**'d — not saved.
+- **Marketplace tab** (`/dashboard/connectors` → `Marketplace`): two providers — **Composio** ("1,000+ apps",
+  `Browse apps`) and **Zapier** ("Coming soon", disabled). Clicking `Browse apps` opens a Composio app browser
+  (search box, category filter) that reads **"Showing 0 of 0 apps"** — so the dashboard's "1,000+ native
+  connectors + 1000+ via Composio" marketing figure (§15's dashboard section) is the Composio catalog's *advertised*
+  size, not what's actually available in this tenant; Composio is registered as a provider but not populated/
+  authorized here.
+- **"CMO Sandbox Setup"** (new button next to `Register Connector`, flagged unopened in §15): it's a bulk
+  credential-entry modal for the platform's CMO/marketing demo persona — sections for **Google Ads** (Developer
+  Token/Refresh Token/Customer ID/Client ID/Client Secret), **Analytics** (GA4 Sandbox Property — Property ID/
+  Refresh Token/Client ID/Client Secret), and **Email** (SendGrid Sandbox or Mailchimp Test Account — API Key/
+  Sender Identity), each a provider dropdown plus `oauth2`/`api_key` fields, with a footer note "Values are
+  encrypted server-side and never returned by the API" and a `Save CMO Sandbox Connectors` button. **Entirely
+  unrelated to KIRRO** — it's a CMO-domain sandbox provisioning shortcut, presumably seeded for a different
+  competition team's use case. Viewed, not saved.
+
+### Approvals: the Decided tab is also tenant-wide, and has its own explainability trace
+
+`Approval Queue` → **Decided (3)** tab (not opened in §15) shows three rows, **none of them KIRRO's**: two
+`contract_intelligence` HITL rejections and one `vendor_manager` HITL approval, all dated 2026-10-02 — the same
+shared-tenant pattern as Audit Log/Schemas/Knowledge Base in §15, now confirmed on Approvals too. Each decided row
+has an expandable **"Reasoning Trace (N steps)"** (read-only; expanded on the `vendor_manager` row): a short step
+list (`Calling tenant-configured LLM` → `LLM responded (AIMessage) in 4549ms` → `Confidence: 0.700`) plus the
+Decision and timestamp. The live **Pending (20)** rows (all KIRRO's `chat_policy` HITL gates) were not expanded or
+decided — approving/rejecting/deferring any of them is a real state change on live KIRRO conversations and was
+out of scope for a read-only pass.
+
+### Knowledge Base search is read-only and confirms further tenant churn
+
+Querying `kirro` in the "Test a query" box returned **"No matching chunks in the knowledge base for this
+query"** — confirms the single indexed file (§15) has nothing to do with KIRRO. The file list had already grown to
+**two documents** within the same session: `pacto_knowledge_base_v3.txt` (from §15, still there) plus a newly
+appeared `us_visa_requirements.txt` (4.0 KB, indexed 04/10/2026 00:15:41) — real-time confirmation that the shared
+Knowledge Base is actively being written to by other teams while this investigation runs, not just stale from
+2026-10-02.
+
+### Schema cards are display-only
+
+The Schema Registry's cards (`/dashboard/schemas`) have no click handler — clicking a card's heading does nothing
+(no modal, no navigation). The full schema name/version/description already captured in §15 is everything the UI
+exposes; there is no per-schema detail view (e.g. the actual JSON Schema body) reachable from this account.
+
+### Left deliberately unclicked this pass, and why
+
+| Control                                                                 | Where                           | Why not clicked                                                                                                                                                                    |
+| ----------------------------------------------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Archive`                                                               | Connectors list                 | Native `window.confirm`, known to silently archive on a stray automated click (§3.4)                                                                                               |
+| `Register Connector` / `Save` (CMO Sandbox) / `Save` (Auth Config edit) | Connectors                      | Would create/mutate a tenant-wide-namespaced connector or credential                                                                                                               |
+| `Run Pipeline`                                                          | Workflow detail                 | Fires the real DIFD draw → hold → mandate → booking chain on live state                                                                                                            |
+| `Run`                                                                   | RPA Scripts                     | Fires real external automation against live government portals (EPFO, MCA, RBI) — out of scope for this pass regardless of "read-only" framing, and flagged separately to the user |
+| `Approve` / `Reject` / `Defer`                                          | Approvals (Pending)             | Real decision on a live KIRRO HITL gate                                                                                                                                            |
+| `Health Check`                                                          | Connectors                      | Writes `health_check_at`; not destructive but still a state change                                                                                                                 |
+| `Parse SOP` / file upload                                               | Create from SOP, Knowledge Base | Creates a tenant-wide artifact other teams would see                                                                                                                               |
+| `Correct this` / 👍 / 👎                                                | Agent overview tab              | Writes feedback that seeds the `learning` tab's amendment pipeline                                                                                                                 |
+| `Export Evidence Package` / `Download CSV`                              | Audit Log, Enforce Audit        | Likely harmless downloads, but untested — no reason to trigger an unreviewed file save in the user's real browser session                                                          |
+| `Ask Anything` send                                                     | Global dock                     | Opens a real chat thread with a routed agent; a write, and of unclear tenant visibility                                                                                            |

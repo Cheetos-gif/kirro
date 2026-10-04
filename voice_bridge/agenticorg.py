@@ -145,6 +145,36 @@ class AgentChat:
             )
             return reply
 
+    async def get_json(self, path: str) -> dict:
+        """GET any AgenticOrg API path on this logged-in session, parsed as JSON.
+
+        The agent record (`/api/v1/agents/{id}`) is the case this exists for (ADR-020's stats sync):
+        it needs the same cookie session and CSRF handling as `ask`, but is a plain read rather than a
+        chat turn, so reusing this client keeps one login/CSRF implementation instead of a second.
+        """
+        async with self._lock:
+            if not self._logged_in:
+                await self.login()
+            response = await self._get(path)
+            if response.status_code in (401, 403):
+                self._log.info("agenticorg session expired; re-authenticating", extra={"path": path})
+                await self.login()
+                response = await self._get(path)
+            if response.status_code != 200:
+                self._log.error(
+                    "agenticorg read failed",
+                    extra={"path": path, "status": response.status_code, "body": redact_text(response.text[:200])},
+                )
+                raise AgentChatError(f"GET {path} failed: {response.status_code} {response.text[:200]}")
+            try:
+                return response.json()
+            except ValueError:
+                raise AgentChatError(f"GET {path} returned a non-JSON body") from None
+
+    async def _get(self, path: str) -> httpx.Response:
+        headers, _ = self._csrf_fields()
+        return await self._client.get(path, headers=headers)
+
     async def _post(self, text: str) -> tuple[str, int, str | None]:
         headers, extra = self._csrf_fields()
         body: dict[str, object] = {"query": text, "agent_id": self._agent_id, **extra}

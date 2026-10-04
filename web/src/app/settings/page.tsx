@@ -6,6 +6,7 @@ import { requireViewer } from '@/lib/auth/roles';
 import * as api from '@/lib/kirro/api';
 
 import { PhoneSettingsForm } from './phone-form';
+import { PushNotificationsForm } from './push-form';
 
 export default async function SettingsPage() {
   const viewer = await requireViewer();
@@ -49,6 +50,15 @@ export default async function SettingsPage() {
           page offers that first message once a reservation is in.
         </p>
         <PhoneSettingsForm defaultPhone={notifyPhone} />
+      </section>
+
+      <section className="border-t border-border py-8">
+        <h2 className="font-heading text-lg font-medium text-foreground">Browser notifications</h2>
+        <p className="mt-1 mb-4 max-w-prose text-sm text-muted-foreground">
+          Get a notification on this device when an instant-buy booking confirms &mdash; on top of,
+          not instead of, the WhatsApp result above.
+        </p>
+        <PushNotificationsForm />
       </section>
 
       <section className="border-t border-border py-8">

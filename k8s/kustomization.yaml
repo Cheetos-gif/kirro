@@ -8,9 +8,10 @@ resources:
   - configmap.yaml
   - deployments.yaml
   - allocator-cronjob.yaml
+  - agent-stats-sync-cronjob.yaml
   - services.yaml
   - ingress.yaml
 images:
   - name: ghcr.io/cheetos-gif/kirro
     newName: ghcr.io/cheetos-gif/kirro
-    digest: sha256:1d54e2d262723c9ee568abe9486b59e106e7fffeb5aea9cb996d2f73e55ad6fa
+    digest: sha256:408579110c099a17c9ceaca74b243ce6dfbc25aafe451e88ec137a8b2f2c0519

@@ -10,4 +10,7 @@ __pycache__/
 logs/*
 !logs/.gitkeep
 *.jsonl.tmp
+# docker compose mounts the mock's named volume at /app/data; with the dev override's `.:/app`
+# bind mount that mount target also exists on the host as an empty directory. Never tracked.
+data/
 .DS_Store

@@ -1,0 +1,79 @@
+# Prod-like local stack (ADR-021): the mock server and the portal, each from its own image.
+#
+# This file alone is the prod-shaped stack:
+#     docker compose -f docker-compose.yml up --build
+# Running `docker compose` with no -f auto-merges docker-compose.override.yml on top, which is the
+# dev-with-reload stack. See that file for the difference.
+#
+# This is a local dev/eval convenience, not a second deployment path. The cluster is still deployed
+# from k8s/ by ArgoCD, and nothing here changes that (ADR-021, AGENTS.md "Deploying").
+#
+# Deliberately absent: LiveKit and voice_bridge. The voice channel needs a real LiveKit server, real
+# Gnani/AgenticOrg credentials and a signed-in browser session, none of which a bare
+# `docker compose up` can fake; a half-configured voice service would be worse than none. The k8s
+# manifests remain the only thing that runs voice.
+
+name: kirro
+
+services:
+  mock:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kirro-mock:local
+    ports:
+      - "8081:8081"
+    environment:
+      # Durable state on the named volume, in the same layout the cluster uses on its PVC
+      # (ADR-013): the DB and the request log survive `docker compose restart`/`down`.
+      MOCK_DB_PATH: /app/data/mock.db
+      MOCK_LOG_DIR: /app/data/logs
+    volumes:
+      - mock-data:/app/data
+    # The mock's real .env holds MOCK_ADMIN_KEY and friends. `required: false` because every one of
+    # them has a working default and the mock must still start on a fresh clone.
+    env_file:
+      - path: .env
+        required: false
+    healthcheck:
+      # Spelled out here (identical to the image's HEALTHCHECK) so depends_on can wait on it.
+      # python, not curl: python:3.13-slim does not ship curl.
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=3).status == 200 else 1)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    image: kirro-web:local
+    ports:
+      - "3000:3000"
+    environment:
+      # The compose service name, not 127.0.0.1: the portal calls the mock server-side from inside
+      # its own container, where localhost is the portal. `environment` beats `env_file`, so this
+      # wins over whatever MOCK_API_URL web/.env.local sets for the native flow.
+      MOCK_API_URL: http://mock:8081
+    # Same file the native flow uses; optional for the same reason (the portal defaults to a local
+    # mock and an anonymous viewer). Without AUTH_GOOGLE_* sign-in is unavailable, which is fine.
+    env_file:
+      - path: web/.env.local
+        required: false
+    depends_on:
+      mock:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  # Named, not bind: keeps the mock's volatile state on the host out of the working tree while
+  # still surviving a restart.
+  mock-data:
