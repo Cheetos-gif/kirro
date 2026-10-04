@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>KIRRO demo — cue cards</title>
+    <!--
+      Reference cards for the demo shoot. Open this file on a second screen, a tablet or a phone while
+      recording; it is a single self-contained file with no network dependency, so it also works on a
+      laptop that is offline or on a phone over a local file share.
+
+      It is a reduction of docs/demo-script.md, not a second source of truth. If the script changes,
+      change the CARDS array below in the same edit.
+
+      Keys:  ->/space next   <-/backspace previous   F filter by presenter   T start/pause clock
+             R reset clock   +/- text size           ? toggle this help
+    -->
+    <style>
+      :root {
+        --bg: #0a0a0a;
+        --fg: #ededed;
+        --dim: #8a8a8a;
+        --line: #262626;
+        --a: #2dd4a7;
+        --b: #7aa2f7;
+        --warn: #f0a868;
+        --scale: 1;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--fg);
+        font: 400 calc(17px * var(--scale)) / 1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        -webkit-text-size-adjust: 100%;
+      }
+      body { display: flex; flex-direction: column; overflow: hidden; }
+
+      header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.75rem 1.25rem;
+        border-bottom: 1px solid var(--line);
+        flex: 0 0 auto;
+      }
+      .pos { color: var(--dim); font-variant-numeric: tabular-nums; font-size: 0.85em; }
+      .who {
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-size: 0.8em;
+        padding: 0.15rem 0.55rem;
+        border: 1px solid currentColor;
+        border-radius: 999px;
+      }
+      .who[data-who="A"] { color: var(--a); }
+      .who[data-who="B"] { color: var(--b); }
+      .who[data-who="AB"] { color: var(--warn); }
+      .screen { color: var(--dim); font-size: 0.85em; letter-spacing: 0.04em; }
+      .spacer { flex: 1; }
+      .clock {
+        font-variant-numeric: tabular-nums;
+        font-size: 1.1em;
+        color: var(--dim);
+        cursor: pointer;
+        user-select: none;
+      }
+      .clock.running { color: var(--a); }
+      .budget { color: var(--dim); font-size: 0.85em; font-variant-numeric: tabular-nums; }
+
+      main { flex: 1; overflow-y: auto; padding: 1.5rem 1.25rem 4rem; }
+      .wrap { max-width: 60rem; margin: 0 auto; }
+      h1 { font-size: 1.5em; line-height: 1.25; margin: 0 0 1rem; font-weight: 600; }
+      h2 {
+        font-size: 0.8em;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--dim);
+        margin: 1.75rem 0 0.5rem;
+        font-weight: 600;
+      }
+      ul { margin: 0.25rem 0 0; padding-left: 1.1rem; }
+      li { margin: 0.3rem 0; }
+      .say {
+        border-left: 3px solid var(--a);
+        padding: 0.35rem 0 0.35rem 1rem;
+        margin: 0.6rem 0;
+        font-size: 1.12em;
+        line-height: 1.6;
+      }
+      .say[data-who="B"] { border-color: var(--b); }
+      .say[data-who="C"] { border-color: var(--warn); font-style: italic; }
+      .say .lbl {
+        display: block;
+        font-size: 0.68em;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--dim);
+        margin-bottom: 0.2rem;
+        font-style: normal;
+      }
+      .proof { color: var(--a); }
+      .never { color: var(--warn); }
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.9em;
+        background: #161616;
+        padding: 0.1em 0.35em;
+        border-radius: 3px;
+      }
+      footer {
+        flex: 0 0 auto;
+        border-top: 1px solid var(--line);
+        padding: 0.5rem 1.25rem;
+        color: var(--dim);
+        font-size: 0.78em;
+        display: flex;
+        gap: 1.25rem;
+        flex-wrap: wrap;
+      }
+      kbd {
+        font-family: inherit;
+        border: 1px solid var(--line);
+        border-bottom-width: 2px;
+        border-radius: 4px;
+        padding: 0 0.3em;
+        color: var(--fg);
+      }
+      .tap {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        width: 28%;
+        z-index: 5;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .tap.prev { left: 0; }
+      .tap.next { right: 0; }
+      #help {
+        position: fixed;
+        inset: 0;
+        background: rgba(10, 10, 10, 0.96);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+        padding: 2rem;
+      }
+      #help.on { display: flex; }
+      #help div { max-width: 32rem; }
+      @media (max-width: 640px) {
+        header { gap: 0.6rem; padding: 0.6rem 0.9rem; }
+        .screen { display: none; }
+        main { padding: 1rem 0.9rem 3rem; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span class="pos" id="pos">1/13</span>
+      <span class="who" id="who" data-who="A">A</span>
+      <span class="screen" id="screen">DESKTOP</span>
+      <span class="spacer"></span>
+      <span class="budget" id="budget">0:35</span>
+      <span class="clock" id="clock" title="click or press T">00:00</span>
+    </header>
+
+    <main id="main">
+      <div class="wrap" id="card"></div>
+    </main>
+
+    <footer>
+      <span><kbd>&larr;</kbd> <kbd>&rarr;</kbd> cards</span>
+      <span><kbd>F</kbd> <span id="filterState">all presenters</span></span>
+      <span><kbd>T</kbd> clock</span>
+      <span><kbd>R</kbd> reset</span>
+      <span><kbd>+</kbd> <kbd>-</kbd> size</span>
+      <span><kbd>?</kbd> help</span>
+    </footer>
+
+    <div class="tap prev" id="tapPrev"></div>
+    <div class="tap next" id="tapNext"></div>
+
+    <div id="help">
+      <div>
+        <h1>Cue cards</h1>
+        <p>
+          One card per scene from <code>docs/demo-script.md</code>. Tap the left or right edge of the screen, or use
+          the arrow keys, to move. <kbd>F</kbd> cycles all &rarr; A only &rarr; B only, so each presenter can keep
+          their own cards up. The clock is a running total, not a per-scene timer; the number beside it is the scene's
+          time budget.
+        </p>
+        <p class="never">
+          If something breaks on camera, keep rolling and narrate it. The only takes worth discarding are the ones
+          where we said something untrue.
+        </p>
+        <p><kbd>?</kbd> closes this.</p>
+      </div>
+    </div>
+
+    <script>
+      // Reduction of docs/demo-script.md. who: A (product/phone), B (platform), AB (both), C lines are the caller.
+      const CARDS = [
+        {
+          n: 0,
+          who: 'A',
+          screen: 'DESKTOP',
+          budget: '0:35',
+          title: 'Cold open — the problem',
+          setup: ['<code>kirro.upayan.dev</code>, scroll hero → draw visualiser → live inventory. Click nothing.'],
+          say: [
+            [
+              'A',
+              'A stadium concert puts ten front-standing places on sale. Four thousand people want them. Today those ten go to whoever&rsquo;s browser renders the Buy button first — which means they go to bots, to the fastest connection, to luck dressed up as fairness.',
+            ],
+            [
+              'A',
+              'KIRRO does something else. You <em>declare</em> what you want and what you&rsquo;ll pay. Your money is blocked, not spent. When the window closes, one seeded draw decides, once. Speed buys you nothing, because there&rsquo;s nothing to race for.',
+            ],
+          ],
+          proof: ['Hero line, draw visualiser animating, live inventory cards (from the mock, not markup).'],
+        },
+        {
+          n: 1,
+          who: 'A',
+          screen: 'DESKTOP',
+          budget: '0:45',
+          title: 'An organiser puts a concert up for a draw',
+          setup: [
+            '<code>/organiser</code>, signed in as an approved organiser.',
+            '<b>New event</b> → <code>Stadium Concert (Front Standing)</code> → <b>published</b>.',
+            '<b>New release</b> → the concert → <b>Draw</b> → today → opens in ~6 min → slot <code>Front Standing, 20:00</code> → <b>10</b> seats → <b>4500</b>.',
+          ],
+          say: [
+            ['A', 'This is the organiser&rsquo;s side. I&rsquo;m creating the concert now, live — nothing seeded, nothing pre-baked.'],
+            [
+              'A',
+              'Ten places. A declare window that closes in six minutes, and a draw that runs the moment it does. The organiser never picks a winner — they pick a <em>rule</em>. Upayan, over to you: where does the agent actually live?',
+            ],
+          ],
+          proof: ['Release row renders as <b>Draw · 0 in the draw</b>.'],
+        },
+        {
+          n: 2,
+          who: 'B',
+          screen: 'PLATFORM',
+          budget: '0:50',
+          title: 'This is the agent, on Pine Labs&rsquo; platform',
+          setup: ['AgenticOrg → Agents → <b>Kirro Declare v6</b> → Persona, Prompt, Authorized Tools → Connectors page.'],
+          say: [
+            [
+              'B',
+              'KIRRO isn&rsquo;t a service we host that pretends to be an agent. It&rsquo;s a Virtual Employee on Pine Labs&rsquo; AgenticOrg platform, and this is it — Kirro Declare, active, with a shadow twin we test every prompt change on before it ever reaches a caller.',
+            ],
+            [
+              'B',
+              'It has exactly six tools. It can look up a release, reserve money, enter the pool, cancel that entry and release the money. It <em>cannot</em> charge anyone, it cannot create a booking, and it cannot run the draw — a second agent does that, after the conversation is over. That split is deliberate: the platform&rsquo;s tool permissions are static, so the only way to enforce least privilege is to not grant the tool.',
+            ],
+            [
+              'B',
+              'And everything it touches goes through connectors. WhatsApp is the real WhatsApp Business connector. Speech is Gnani. Our four mocked surfaces come in as one MCP connector with eighteen tools.',
+            ],
+            ['B', 'Back to you — let&rsquo;s watch someone actually use it.'],
+          ],
+          proof: ['<code>active</code> status, the Authorized Tools list, <code>mcp_kirro_all_v24</code> healthy / 18 tools, <code>whatsapp_kirro</code>.'],
+        },
+        {
+          n: 3,
+          who: 'A',
+          screen: 'PHONE',
+          budget: '0:35',
+          title: 'It&rsquo;s a phone product — install it',
+          setup: [
+            'Handset: open <code>kirro.upayan.dev</code> in the mobile browser.',
+            'Menu → <b>Add to Home screen</b> → open it from the home screen (launches standalone, no browser chrome).',
+          ],
+          say: [
+            [
+              'A',
+              'Nobody chases a concert ticket on a laptop. KIRRO installs to the home screen and runs as an app — same server-rendered pages, same agent, no app store. This is the real thing on a real phone, not a resized window.',
+            ],
+          ],
+          proof: ['The icon on the home screen, and the app opening with <b>no address bar</b>.'],
+          never: ['Do not say &ldquo;installed&rdquo; if the install prompt misbehaved. Say &ldquo;on the phone&rdquo; instead.'],
+        },
+        {
+          n: 4,
+          who: 'A',
+          screen: 'PHONE',
+          budget: '1:40',
+          title: 'The declaration, by voice, on the phone',
+          setup: ['Phone on <code>/talk</code> → start. Wait for the call-id badge and <b>Listening</b> before anyone speaks.'],
+          say: [
+            [
+              'A',
+              'Every word, both directions, goes through Gnani — speech-to-text on the way in, text-to-speech on the way back. In between is the agent Upayan just showed you.',
+            ],
+            [
+              'C',
+              'I want the concert tonight. Front standing. Four of us, but three would still work. I&rsquo;ll pay up to four and a half thousand rupees each.',
+            ],
+            [
+              'A',
+              'Three things in that sentence are load-bearing. It read the date and weekday straight back from the release&rsquo;s own record — it&rsquo;s forbidden from doing its own calendar arithmetic, because it used to get that wrong. It said <em>reserve</em>, not charge. And it&rsquo;s asking for an explicit yes. Nothing has touched money yet.',
+            ],
+            ['C', 'Yes.'],
+            [
+              'A',
+              'WhatsApp only allows a free-form business message inside a window the user opens. So she opens it. That one tap is the only reason the result can reach her later — and that&rsquo;s a real WhatsApp Business number.',
+            ],
+            ['A', 'Upayan — what did it actually do?'],
+          ],
+          proof: [
+            'Expected read-back: &ldquo;Stadium Concert on [weekday], [date], any slot, 4 people, minimum 3, up to Rs 4,500 per person, so I will reserve Rs 18,000, not charge it. Shall I go ahead?&rdquo;',
+            'Live transcript on the phone, call-id badge, the <code>wa.me</code> popup, the WhatsApp thread. <b>Tap the popup on the same phone.</b>',
+          ],
+        },
+        {
+          n: 5,
+          who: 'B',
+          screen: 'PLATFORM',
+          budget: '0:50',
+          title: 'What the agent actually did',
+          setup: ['Platform chat/audit view for that thread, and the terminal tailing the mock.'],
+          say: [
+            ['B', 'Here&rsquo;s the same turn from the platform&rsquo;s side, and here&rsquo;s every request that reached our connectors.'],
+            [
+              'B',
+              'Watch the order. <code>create_mandate</code> first, on its own — eighteen thousand rupees, in paise, one million eight hundred thousand. It waits for an authorization id and an ACTIVE status. Only <em>then</em> does it enter the pool. The prompt forbids running those two in parallel, because an early version did exactly that and attached the wrong mandate to the bid.',
+            ],
+            [
+              'B',
+              'And one more thing worth saying out loud: we trust this log, not the agent&rsquo;s own sentences. An early version once announced it had pooled someone&rsquo;s bid when the log showed the call had never been sent. That&rsquo;s why every tool call is logged with the arguments that actually arrived, before we validate them.',
+            ],
+          ],
+          proof: ['<code>mcp.create_mandate</code> then <code>mcp.declare_interest</code>, in that order, with arguments.'],
+        },
+        {
+          n: 6,
+          who: 'A',
+          screen: 'DESKTOP',
+          budget: '0:25',
+          title: 'The pool, from the organiser&rsquo;s side',
+          setup: ['<code>/admin</code>.'],
+          say: [
+            [
+              'A',
+              'Same bid, seen by the organiser. One entry in the draw. No booking, no payment — because nothing has been allocated and nothing has been charged. Eighteen thousand rupees are blocked in her account, and that&rsquo;s all that&rsquo;s happened so far.',
+            ],
+          ],
+          proof: ['<b>Draw entries</b> 1, <b>Captured</b> 0, Releases table <code>Entries = 1</code>.'],
+        },
+        {
+          n: 7,
+          who: 'AB',
+          screen: 'SPLIT',
+          budget: '1:10',
+          title: 'The window closes, the draw runs',
+          setup: [
+            '<code>/events/&lt;concert id&gt;</code> countdown left, terminal right.',
+            'Force the job if needed: <code>kubectl create job --from=cronjob/kirro-allocator-trigger draw-now -n kirro</code>',
+          ],
+          say: [
+            ['A', 'The window&rsquo;s closing. Nobody can improve their position in the last ten seconds, because there&rsquo;s no position to improve.'],
+            [
+              'B',
+              'A scheduled job now notices a release whose window has shut and whose draw hasn&rsquo;t run, and asks the allocator agent to settle it. That job decides <em>when</em> to ask. It never decides what to do — the agent does.',
+            ],
+            [
+              'B',
+              'And I&rsquo;ll be straight about why that job exists. The platform&rsquo;s own scheduled Workflow executes zero steps on every run. Seven steps defined, the trigger fires, and not one connector call comes out. We ruled out six causes, and the endpoint that would tell us why needs an admin role this tenant can&rsquo;t get. So we wrote a five-minute cron job that asks the same agent the same question over the chat API. It&rsquo;s a stand-in, and we file it as a platform bug — not as architecture.',
+            ],
+            [
+              'B',
+              'Draw. Hold. Verify the hold is actually active — <em>before</em> charging anything. Capture. Confirm. Then release the unused part of the mandate in the same run, because &ldquo;losing claims aren&rsquo;t released quickly&rdquo; is exactly the failure this product exists to fix.',
+            ],
+          ],
+          proof: [
+            'Countdown → &ldquo;Window closed — the draw runs within 5 minutes.&rdquo;',
+            '<code>allocator.draw → create_hold → get_hold → execute → confirm_booking → release</code>, in order, with the booking reference.',
+          ],
+        },
+        {
+          n: 8,
+          who: 'A',
+          screen: 'PHONE',
+          budget: '0:40',
+          title: 'The outcome, on her phone',
+          setup: ['Handset: WhatsApp first, then <code>/dashboard</code> in the installed app.'],
+          say: [
+            ['A', 'And it arrives where she actually is.'],
+            [
+              'A',
+              'Sent by the agent, through the real WhatsApp connector, to the number she saved. And in the app: booking reference, hold, payment. Charged for three — her own stated minimum — with the rest of the reservation released. She never refreshed anything, never raced anyone, and never had money taken before she had a seat.',
+            ],
+          ],
+          proof: ['The WhatsApp message, then the <code>BK-####</code> row and payment SUCCESS, on the phone.'],
+        },
+        {
+          n: 9,
+          who: 'A',
+          screen: 'DESKTOP',
+          budget: '0:50',
+          title: 'Different input: she says no',
+          setup: ['<code>/talk</code>, fresh call, same concert release.'],
+          say: [
+            ['C', 'Concert tonight, two of us, up to three thousand each.'],
+            ['C', 'Actually make it four of us.'],
+            [
+              'A',
+              '&ldquo;Actually&rdquo; is a correction signal. It changes the field immediately and reads back again. A different number with <em>no</em> correction signal gets a question instead — &ldquo;you said two earlier, do you want to change it?&rdquo; — because a misheard number and a changed mind sound identical over a phone line.',
+            ],
+            ['C', 'No.'],
+            [
+              'A',
+              'And here&rsquo;s the part worth pausing on. Search the whole log for this conversation. No <code>create_mandate</code>. No <code>declare_interest</code>. Not one rupee was blocked, because she never said yes. Declining costs the user exactly nothing — which is the only reason declaring interest is a reasonable thing to ask a person to do.',
+            ],
+          ],
+          proof: ['The cancellation line, and <b>no money tool at all</b> in the log for that thread.'],
+        },
+        {
+          n: 10,
+          who: 'AB',
+          screen: 'SPLIT',
+          budget: '1:30',
+          title: 'Hinglish, a vague price, and a rail that fails',
+          setup: [
+            '<code>/talk</code>, fresh call, the courts.',
+            'Mid-scene: <code>/admin</code> → Demo controls → Target <code>pinelabs.create_mandate</code> → <code>insufficient_balance</code> → Set scenario.',
+            '<b>Disarm after the take:</b> Target <code>*</code> → <code>success</code>.',
+          ],
+          say: [
+            ['C', 'Tennis court Saturday, two of us, budget eight to ten thousand, ideally eight.'],
+            [
+              'A',
+              'It stored nothing. Not eight, not ten. On a real phone call in September, an earlier version took exactly that sentence, read back ten thousand, accepted &ldquo;yes I do need it&rdquo; as confirmation, and closed the declaration. The read-back ran perfectly and confirmed the wrong number. That failure is why this rule exists.',
+            ],
+            ['C', 'Shanivaar ko court chahiye, char log.'],
+            [
+              'A',
+              'It mirrored the language, and it refused to guess the sport. The language is decided fresh from the newest message every single turn — our first attempt at that fix leaned on the Hindi side, fixed the Hinglish case three out of three, and broke the English case into Hindi two out of three. We caught it by re-running the English case as a regression check, and we threw the fix away.',
+            ],
+            [
+              'A',
+              'The mock is going to fail the next mandate, and the agent isn&rsquo;t told. Scenario control is out of band — its requests carry a business payload and a correlation header, no response ever names a scenario, and the switch isn&rsquo;t reachable from the tool surface at all. As far as the agent knows, a payment rail just broke.',
+            ],
+            [
+              'B',
+              'Four-oh-two, insufficient balance. Zero mandates in state. And notice what it did <em>not</em> say — it never said &ldquo;reserved&rdquo;, and it never put her in the draw. An agent that reports a success it can&rsquo;t prove is worse than one that fails.',
+            ],
+          ],
+          proof: ['The 402 in the log, <code>mandates: 0</code>, and no <code>declare_interest</code>.'],
+        },
+        {
+          n: 11,
+          who: 'A',
+          screen: 'DESKTOP',
+          budget: '0:40',
+          title: 'The same agent, a very different event',
+          setup: ['<code>/</code> listings, then the three Delhivery calls in the terminal.'],
+          say: [
+            [
+              'A',
+              'None of this is specific to concerts. The same mechanism runs a society badminton court at two fifty a head, a club tennis slot, an opening-night screening — and an F1 paddock pass, where the thing you win is physical and has to be shipped.',
+            ],
+            [
+              'A',
+              'Delhivery, at the documented endpoint names: pincode serviceability, order creation, package tracking. And it behaves like the real thing when the request is bad — an unserviceable pincode comes back as an empty list with a two hundred, not an error, and a repeated order id comes back as a duplicate. Those response bodies are our mock&rsquo;s shapes: the paths and the serviceability fields come from Delhivery&rsquo;s own documentation, the rest we couldn&rsquo;t verify without a merchant account, and we&rsquo;re not going to claim otherwise.',
+            ],
+          ],
+          proof: ['The three Delhivery paths and the empty <code>delivery_codes</code> list.'],
+        },
+        {
+          n: 12,
+          who: 'B',
+          screen: 'PLATFORM',
+          budget: '1:00',
+          title: 'Evidence, and what is honestly broken',
+          setup: ['Four surfaces, ~15 s each: mock log → Grafana → agent page → the honest list.'],
+          say: [
+            ['B', 'Every verdict in this video comes from here, not from what the agent said about itself.'],
+            ['B', 'Each call gets an id, and that id reconstructs the whole conversation: every turn, its latency, the thread it ran on, any pipeline error.'],
+            ['B', 'The agent itself — active, with its shadow twin. And the cost: the entire declare side of this product has spent eighty-seven cents.'],
+            ['B', 'Three things are broken, and none of them are in a footnote.'],
+            ['B', 'The platform&rsquo;s scheduled Workflow executes zero steps. We replaced it with a cron job.'],
+            ['B', 'Tool-call arguments arrive null or corrupted, intermittently, per tool — we disproved nine possible causes on our side before filing it.'],
+            [
+              'B',
+              'And the one that matters most: a contested draw with three bidders left nobody booked. The draw ran, the slot&rsquo;s capacity went to zero, and all three mandates — including the winner&rsquo;s — were released. Each piece is correct on its own; the agent&rsquo;s live orchestration of them is not. We found it two days ago, we filed it, and the honest position is that the single-bid path is proven and the multi-bid path is not.',
+            ],
+            ['B', 'We&rsquo;d rather show you that than a demo that quietly avoided it.'],
+            ['A', 'Declare. Draw. Book. No racing.'],
+          ],
+          proof: ['Close on the homepage or the booking reference from scene 8.'],
+          never: ['Never cite the platform&rsquo;s Observatory screen — it is a canned invoice-processing demo naming neither agent.'],
+        },
+        {
+          n: 13,
+          who: 'AB',
+          screen: 'AFTER',
+          budget: '—',
+          title: 'Before you tear the setup down',
+          setup: ['The written answers are built from these. Collect all of it.'],
+          proof: [
+            'The <b>run id</b> and date.',
+            'The mock log: <code>kubectl exec deploy/kirro-mock -n kirro -- cat /app/data/logs/mock/default.jsonl &gt; run.jsonl</code>',
+            'Every <b>call id</b> from the <code>/talk</code> badge.',
+            'Every <b>transcript</b> (Copy/Download on <code>/talk</code>).',
+            '<b>Which eval case each conversation was</b> — label as you go: L01 price, L03 Hinglish, L05 the &ldquo;no&rdquo;, L06 insufficient balance, L10 two events.',
+            '<code>GET /__admin/state?run_id=default</code> after each take.',
+            'The ids: <code>rel_…</code>, <code>BK-…</code>, <code>auth_…</code>, <code>decl_…</code>.',
+            'Platform screenshots: agent page, Authorized Tools, connector list, filtered Audit Log.',
+            '<b>Anything that went wrong</b>, including discarded takes and why.',
+          ],
+        },
+      ];
+
+      const $ = id => document.getElementById(id);
+      const FILTERS = [
+        { key: 'all', label: 'all presenters', test: () => true },
+        { key: 'A', label: 'A only (product + phone)', test: c => c.who === 'A' || c.who === 'AB' },
+        { key: 'B', label: 'B only (platform)', test: c => c.who === 'B' || c.who === 'AB' },
+      ];
+
+      let filter = 0;
+      let index = 0;
+      let scale = 1;
+
+      const visible = () => CARDS.filter(FILTERS[filter].test);
+
+      function render() {
+        const list = visible();
+        if (index >= list.length) index = list.length - 1;
+        if (index < 0) index = 0;
+        const c = list[index];
+        $('pos').textContent = `${index + 1}/${list.length}`;
+        $('who').textContent = c.who === 'AB' ? 'A + B' : c.who;
+        $('who').dataset.who = c.who;
+        $('screen').textContent = c.screen;
+        $('budget').textContent = c.budget;
+        $('filterState').textContent = FILTERS[filter].label;
+
+        const part = (heading, items, cls) =>
+          items && items.length
+            ? `<h2>${heading}</h2><ul class="${cls || ''}">${items.map(i => `<li>${i}</li>`).join('')}</ul>`
+            : '';
+
+        const says = (c.say || [])
+          .map(
+            ([who, text]) =>
+              `<p class="say" data-who="${who}"><span class="lbl">${
+                who === 'C' ? 'caller' : who
+              }</span>${text}</p>`
+          )
+          .join('');
+
+        $('card').innerHTML =
+          `<h1>${c.n}. ${c.title}</h1>` +
+          part('Set up', c.setup) +
+          (says ? `<h2>Say</h2>${says}` : '') +
+          part('Must be visible', c.proof, 'proof') +
+          part('Never', c.never, 'never');
+        $('main').scrollTop = 0;
+      }
+
+      function move(by) {
+        index += by;
+        render();
+      }
+
+      // Clock: a running total for the whole take, not a per-scene timer.
+      let started = null;
+      let elapsed = 0;
+      setInterval(() => {
+        const ms = elapsed + (started ? Date.now() - started : 0);
+        const s = Math.floor(ms / 1000);
+        $('clock').textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+      }, 250);
+
+      function toggleClock() {
+        if (started) {
+          elapsed += Date.now() - started;
+          started = null;
+        } else {
+          started = Date.now();
+        }
+        $('clock').classList.toggle('running', Boolean(started));
+      }
+
+      document.addEventListener('keydown', e => {
+        if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+          e.preventDefault();
+          move(1);
+        } else if (e.key === 'ArrowLeft' || e.key === 'Backspace' || e.key === 'PageUp') {
+          e.preventDefault();
+          move(-1);
+        } else if (e.key === 'f' || e.key === 'F') {
+          filter = (filter + 1) % FILTERS.length;
+          index = 0;
+          render();
+        } else if (e.key === 't' || e.key === 'T') {
+          toggleClock();
+        } else if (e.key === 'r' || e.key === 'R') {
+          started = null;
+          elapsed = 0;
+          $('clock').classList.remove('running');
+        } else if (e.key === '+' || e.key === '=') {
+          scale = Math.min(2, scale + 0.1);
+          document.documentElement.style.setProperty('--scale', scale);
+        } else if (e.key === '-' || e.key === '_') {
+          scale = Math.max(0.7, scale - 0.1);
+          document.documentElement.style.setProperty('--scale', scale);
+        } else if (e.key === '?') {
+          $('help').classList.toggle('on');
+        } else if (e.key === 'Escape') {
+          $('help').classList.remove('on');
+        }
+      });
+
+      $('clock').addEventListener('click', toggleClock);
+      $('tapNext').addEventListener('click', () => move(1));
+      $('tapPrev').addEventListener('click', () => move(-1));
+      $('help').addEventListener('click', () => $('help').classList.remove('on'));
+
+      render();
+    </script>
+  </body>
+</html>

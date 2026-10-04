@@ -4,13 +4,27 @@
 the video; it has to stand on its own without anyone reading the answers, so nothing in it says "as explained in the
 write-up". The answers live in `submission/round-3-answers.md` and are not narrated here.
 
-Three files, three jobs:
+Four files, four jobs:
 
-- **`demo-script.md`** — the shooting script. Scene by scene: the page on screen, the exact words spoken, and the
-  frame that has to be visible. Shoot from that.
-- **this file** — the operational plan behind it: pre-flight, screen layout, what each take has to prove, what must
-  never be filmed, and what to do when the platform misbehaves mid-take.
+- **`demo-script.md`** — the shooting script. Scene by scene: who presents it, the page on screen, the exact words
+  spoken, and the frame that has to be visible. Shoot from that.
+- **`demo-cue-card.html`** — the same script reduced to cue cards, to keep open on a second screen, a tablet or a
+  phone while recording. One card per scene, colour-coded by presenter, with a running clock. Arrow keys move,
+  `F` filters to one presenter's cards, `T` starts the clock, `+`/`-` resize. Self-contained: open the file, no
+  server, works offline.
+- **this file** — the operational plan: pre-flight, screen layout, what each take has to prove, what must never be
+  filmed, and what to do when the platform misbehaves mid-take.
 - **`submission/round-3-answers.md`** — the separate written submission.
+
+**Two presenters.** **A** (the product: the hosted portal, the organiser surface, `/talk`, `/admin`, and the phone)
+and **B** (the platform: the agents, their prompt and tools, the connectors and the audit trail on
+`agenticorg.hackathon.pinelabs.com`, plus the mock's request log). A hands to B whenever the agent has to decide
+something and B hands back once the platform has shown it. The split is in `demo-script.md`'s scene table.
+
+**The phone is a first-class shot, not a cutaway.** KIRRO installs to the home screen and runs standalone, so the
+declaration, the WhatsApp result and the booking are all shown on a real handset. Set up an OBS `PHONE` scene
+(scrcpy for Android, QuickTime for iPhone, or a camera on a stand) and **rehearse it** — it is the shot most likely
+to go wrong on the day.
 
 The brief: record the screen while the agent runs **on the Pine Labs platform**, from the first thing that happens to
 the moment the outcome is achieved, then run it again with **at least two different human inputs** and show how the
