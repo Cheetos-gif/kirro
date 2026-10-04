@@ -1,8 +1,8 @@
 import webpush, { WebPushError } from 'web-push';
 
+import { isApiError } from '@/api';
 import { env } from '@/env';
 import * as api from '@/lib/kirro/api';
-import { isApiError } from '@/api';
 
 /** True once VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY are both set. Blank (the default) disables every
  * push code path rather than throwing, matching MOCK_ADMIN_KEY's and the Pine Labs call-out's
@@ -27,7 +27,10 @@ export type PushPayload = { title: string; body: string; url?: string };
  * (the browser unsubscribed on its own); that is cleaned up here so a stale subscription does not
  * keep failing silently forever.
  */
-export async function sendPushNotification(userContact: string, payload: PushPayload): Promise<void> {
+export async function sendPushNotification(
+  userContact: string,
+  payload: PushPayload
+): Promise<void> {
   if (!pushEnabled()) return;
   ensureConfigured();
 

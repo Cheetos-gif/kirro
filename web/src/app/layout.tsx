@@ -5,8 +5,8 @@ import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import './globals.css';
 
 import { MotionProvider } from '@/components/motion';
-import { ServiceWorkerRegister } from '@/components/pwa/service-worker-register';
 import { QueryProvider, ThemeProvider } from '@/components/providers';
+import { ServiceWorkerRegister } from '@/components/pwa/service-worker-register';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteHeader } from '@/components/site-header';
 import { Toaster } from '@/components/ui/sonner';

@@ -49,7 +49,7 @@ pnpm dev                       # http://localhost:3000
 ```
 
 That native flow is the faster one day to day. The alternative is the compose stack from the repo
-root (`web/Dockerfile`, ADR-021), which brings the portal *and* the mock up together with no host
+root (`web/Dockerfile`, ADR-021), which brings the portal _and_ the mock up together with no host
 Node install:
 
 ```bash

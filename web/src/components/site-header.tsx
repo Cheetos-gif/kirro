@@ -1,9 +1,9 @@
 'use client';
 
-import { Menu } from 'lucide-react';
+import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useState } from 'react';
+import { Menu } from 'lucide-react';
 
 import { SignInButton, SignOutButton } from '@/components/auth-buttons';
 import { Button } from '@/components/ui/button';
@@ -45,11 +45,7 @@ function NavLinks({ viewer, onNavigate }: { viewer: Viewer | null; onNavigate?: 
         </Link>
       ) : null}
       {viewer?.role === 'admin' ? (
-        <Link
-          href="/admin"
-          className={linkClass}
-          onClick={onNavigate}
-        >
+        <Link href="/admin" className={linkClass} onClick={onNavigate}>
           Admin
         </Link>
       ) : null}
@@ -61,7 +57,9 @@ function Logo() {
   return (
     <Link href="/" className="flex items-center gap-2">
       <Image src="/kirro.webp" alt="" width={22} height={22} className="rounded-md" priority />
-      <span className="font-heading text-sm font-medium tracking-tight text-foreground">{SITE_NAME}</span>
+      <span className="font-heading text-sm font-medium tracking-tight text-foreground">
+        {SITE_NAME}
+      </span>
     </Link>
   );
 }

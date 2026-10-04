@@ -56,18 +56,14 @@ describe('matchEventsInText', () => {
 describe('matchEventsInTranscript', () => {
   it('keeps an event listed once mentioned, even if later lines do not repeat it', () => {
     expect(
-      matchEventsInTranscript(
-        ['I want badminton', 'yes', 'saturday works', 'four of us'],
-        events
-      )
+      matchEventsInTranscript(['I want badminton', 'yes', 'saturday works', 'four of us'], events)
     ).toEqual([badminton]);
   });
 
   it('orders events by first mention', () => {
-    expect(matchEventsInTranscript(['a film please', 'actually badminton', 'film again'], events)).toEqual([
-      movie,
-      badminton,
-    ]);
+    expect(
+      matchEventsInTranscript(['a film please', 'actually badminton', 'film again'], events)
+    ).toEqual([movie, badminton]);
   });
 
   it('returns nothing for an empty transcript', () => {

@@ -5,7 +5,10 @@ const COLUMNS = [
   },
   {
     label: 'Tested',
-    items: ['The draw is deterministic and never overbooks a slot', 'Live agent runs, logged with failures found'],
+    items: [
+      'The draw is deterministic and never overbooks a slot',
+      'Live agent runs, logged with failures found',
+    ],
   },
   {
     label: 'Mocked',

@@ -1,7 +1,7 @@
 const NODES = [
   { label: 'You', detail: 'WhatsApp or chat' },
   { label: 'KIRRO', detail: 'Declares, reads back, confirms' },
-  { label: 'AgenticOrg', detail: "Pine Labs\u2019 agent platform" },
+  { label: 'AgenticOrg', detail: 'Pine Labs\u2019 agent platform' },
 ] as const;
 
 const CONNECTORS = [
@@ -43,7 +43,10 @@ export function ArchitectureDiagram() {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {CONNECTORS.map(connector => (
-          <div key={connector.name} className="flex flex-col gap-0.5 border border-border px-4 py-3">
+          <div
+            key={connector.name}
+            className="flex flex-col gap-0.5 border border-border px-4 py-3"
+          >
             <p className="text-xs font-medium text-foreground">{connector.name}</p>
             <p className="text-xs text-muted-foreground">{connector.does}</p>
           </div>

@@ -12,7 +12,10 @@ import { Button } from '@/components/ui/button';
  * The action redirects on success; the only thing to show here is a failure.
  */
 export function QuickDemoButton() {
-  const [state, action, pending] = useActionState<ActionState, FormData>(createQuickDemoAction, null);
+  const [state, action, pending] = useActionState<ActionState, FormData>(
+    createQuickDemoAction,
+    null
+  );
 
   return (
     <form action={action} className="flex flex-col gap-2">

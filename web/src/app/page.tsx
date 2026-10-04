@@ -1,4 +1,5 @@
 import { isApiError } from '@/api';
+import DotGrid from '@/components/DotGrid';
 import { AgentStats } from '@/components/marketing/agent-stats';
 import { AllocationFlow } from '@/components/marketing/allocation-flow';
 import { ArchitectureDiagram } from '@/components/marketing/architecture-diagram';
@@ -94,9 +95,29 @@ export default async function HomePage() {
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-6">
-      {/* Hero: copy on the left, the mechanism on the right. Asymmetric on purpose. */}
-      <section className="grid grid-cols-1 gap-10 py-16 sm:py-24 lg:grid-cols-12 lg:gap-8">
-        <div className="lg:col-span-7">
+      {/* Hero: copy on the left, the mechanism on the right. Asymmetric on purpose. A faint dot
+          grid sits behind it — courts, screenings, seats are all grids of slots, and the dots
+          brighten near the cursor rather than announcing themselves outright. */}
+      <section className="relative grid grid-cols-1 gap-10 overflow-hidden py-16 sm:py-24 lg:grid-cols-12 lg:gap-8">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_65%_75%_at_30%_35%,black,transparent_75%)]"
+        >
+          <DotGrid
+            dotSize={3}
+            gap={26}
+            baseColor="#27241f"
+            activeColor="#5fc199"
+            proximity={120}
+            shockRadius={160}
+            shockStrength={2}
+            maxSpeed={3000}
+            resistance={800}
+            returnDuration={1.2}
+            className="h-full w-full !p-0"
+          />
+        </div>
+        <div className="relative z-10 lg:col-span-7">
           <h1 className="font-heading text-4xl leading-[1.08] font-medium tracking-tight text-foreground sm:text-5xl">
             Booking scarce slots shouldn&apos;t reward whoever clicks fastest.
           </h1>
@@ -111,7 +132,7 @@ export default async function HomePage() {
             </div>
           ) : null}
         </div>
-        <div className="flex items-center lg:col-span-5">
+        <div className="relative z-10 flex items-center lg:col-span-5">
           <AllocationFlow />
         </div>
       </section>

@@ -53,10 +53,7 @@ export function DemoPromptCard({ demo }: { demo: DemoPrompt }) {
   }
 
   return (
-    <div
-      role="status"
-      className="rounded-2xl border border-kirro/40 bg-kirro/5 p-4 text-sm"
-    >
+    <div role="status" className="rounded-2xl border border-kirro/40 bg-kirro/5 p-4 text-sm">
       <p className="font-medium text-foreground">Demo event ready: {demo.name}</p>
       <p className="mt-1 text-muted-foreground">
         Start the call and ask KIRRO for this one — say the name, your group size and the most you
@@ -67,9 +64,7 @@ export function DemoPromptCard({ demo }: { demo: DemoPrompt }) {
           .map(slot => `${slot.label} — ${formatPaise(slot.price_per_person_paise)}`)
           .join(', ')}
       </p>
-      {timing ? (
-        <p className="mt-2 text-xs text-clay">{timing}</p>
-      ) : null}
+      {timing ? <p className="mt-2 text-xs text-clay">{timing}</p> : null}
     </div>
   );
 }

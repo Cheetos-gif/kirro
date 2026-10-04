@@ -4,7 +4,11 @@ import { useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 import type { ActionState } from '@/app/actions';
-import { clearPushSubscriptionAction, savePushSubscriptionAction, sendTestPushAction } from '@/app/actions';
+import {
+  clearPushSubscriptionAction,
+  savePushSubscriptionAction,
+  sendTestPushAction,
+} from '@/app/actions';
 import { Button } from '@/components/ui/button';
 import { pushSubscriptionSchema } from '@/lib/kirro/schemas';
 import { currentPushSubscription, pushSupported, subscribeToPush } from '@/lib/push/subscribe';
@@ -20,7 +24,9 @@ function toastResult(result: ActionState) {
 }
 
 export function PushNotificationsForm() {
-  const [status, setStatus] = useState<Status>(() => (pushSupported() ? 'checking' : 'unsupported'));
+  const [status, setStatus] = useState<Status>(() =>
+    pushSupported() ? 'checking' : 'unsupported'
+  );
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -40,7 +46,9 @@ export function PushNotificationsForm() {
         }
         const { publicKey } = (await res.json()) as { publicKey: string };
         const subscription = await subscribeToPush(publicKey);
-        const result = await savePushSubscriptionAction(pushSubscriptionSchema.parse(subscription.toJSON()));
+        const result = await savePushSubscriptionAction(
+          pushSubscriptionSchema.parse(subscription.toJSON())
+        );
         toastResult(result);
         setStatus(result?.ok ? 'enabled' : 'disabled');
       } catch (error) {

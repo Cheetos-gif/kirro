@@ -46,7 +46,10 @@ async function storedNotifyPhone(email: string): Promise<string | null> {
   }
 }
 
-export async function savePhoneAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+export async function savePhoneAction(
+  _prev: ActionState,
+  formData: FormData
+): Promise<ActionState> {
   const viewer = await requireViewer();
   const raw = formData.get('notify_phone');
   const notifyPhone = typeof raw === 'string' ? normalisePhone(raw) : null;
@@ -64,7 +67,9 @@ export async function savePhoneAction(_prev: ActionState, formData: FormData): P
 
 /** Called from the client right after `pushManager.subscribe()` succeeds, with the browser's own
  * `PushSubscription.toJSON()` output. */
-export async function savePushSubscriptionAction(subscription: PushSubscriptionJSON): Promise<ActionState> {
+export async function savePushSubscriptionAction(
+  subscription: PushSubscriptionJSON
+): Promise<ActionState> {
   const viewer = await requireViewer();
   try {
     await api.setUserProfile(viewer.email, { push_subscription: subscription });
@@ -183,7 +188,10 @@ const QUICK_DEMO_WINDOW_MS = 3 * 60_000;
  * On success it redirects to `/talk?demo=<event_id>`: the intended way to use the seeded event is to
  * say it out loud to the agent, not to fill in the declare form.
  */
-export async function createQuickDemoAction(_prev: ActionState, _formData: FormData): Promise<ActionState> {
+export async function createQuickDemoAction(
+  _prev: ActionState,
+  _formData: FormData
+): Promise<ActionState> {
   const viewer = await requireViewer();
   const organiserId = await myOrganiserId(viewer.email);
   if (!organiserId) {
@@ -196,7 +204,9 @@ export async function createQuickDemoAction(_prev: ActionState, _formData: FormD
     const template = DEMO_TEMPLATES[Math.floor(Math.random() * DEMO_TEMPLATES.length)];
     // Two demos of the same kind would be ambiguous to speak ("the pottery one" — which one?), so a
     // repeated title gets a short tag. The common case is the plain name.
-    const taken = new Set(events.filter(event => event.status === 'published').map(event => event.name));
+    const taken = new Set(
+      events.filter(event => event.status === 'published').map(event => event.name)
+    );
     const name = taken.has(template.name)
       ? `${template.name} ${Math.random().toString(36).slice(2, 4).toUpperCase()}`
       : template.name;
@@ -236,8 +246,6 @@ export async function createQuickDemoAction(_prev: ActionState, _formData: FormD
   // Straight to the voice channel: the seeded event exists to be spoken about to the agent.
   redirect(`/talk?demo=${eventId}`);
 }
-
-
 
 export async function declareAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const viewer = await requireViewer();

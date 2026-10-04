@@ -1,5 +1,5 @@
-import { AccessToken } from 'livekit-server-sdk';
 import { NextResponse } from 'next/server';
+import { AccessToken } from 'livekit-server-sdk';
 
 import { auth } from '@/auth';
 import { env } from '@/env';

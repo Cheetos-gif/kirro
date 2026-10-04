@@ -61,7 +61,8 @@ export function DeclareWindow({
   const endMs = Date.parse(opensAt);
   // Until the client clock exists, only an open-from-creation release (no scheduled start) is
   // treated as open; anything else waits for the first tick.
-  const open = now === null ? startMs === null : (startMs === null || now >= startMs) && now < endMs;
+  const open =
+    now === null ? startMs === null : (startMs === null || now >= startMs) && now < endMs;
 
   let status: string;
   if (now === null) {

@@ -1,6 +1,6 @@
-import { render, screen } from '@testing-library/react';
 import type { ReceivedChatMessage } from '@livekit/components-react';
 import { ChatEntry } from '@livekit/components-react';
+import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 /**
@@ -20,7 +20,7 @@ describe('ChatEntry with a transcription-shaped entry', () => {
   it('renders the message text', () => {
     render(<ChatEntry entry={entry} hideName />);
     expect(
-      screen.getByText('Which date do you want for the tennis court booking?'),
+      screen.getByText('Which date do you want for the tennis court booking?')
     ).toBeInTheDocument();
   });
 });

@@ -15,10 +15,9 @@ export function TalkToKirro() {
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <p className="text-sm text-muted-foreground">
-          Tell it what you want: the event, your group size, and the most you are willing to pay.
-          If the slot&apos;s popular, it puts you in the same fair pick as the form above, then
-          lets you know what happened. You talk in your browser and it talks back, no typing
-          required.
+          Tell it what you want: the event, your group size, and the most you are willing to pay. If
+          the slot&apos;s popular, it puts you in the same fair pick as the form above, then lets
+          you know what happened. You talk in your browser and it talks back, no typing required.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <Button className="w-fit" render={<Link href="/talk" />} nativeButton={false}>

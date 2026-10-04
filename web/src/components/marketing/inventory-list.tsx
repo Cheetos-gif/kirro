@@ -14,7 +14,11 @@ type Row = { detail: ReleaseDetail; event: KirroEvent; organiser: Organiser | un
  */
 export function InventoryList({ releases, limit = 3 }: { releases: Row[]; limit?: number }) {
   if (releases.length === 0) {
-    return <p className="border-t border-border py-8 text-sm text-muted-foreground">Nothing is on sale right now.</p>;
+    return (
+      <p className="border-t border-border py-8 text-sm text-muted-foreground">
+        Nothing is on sale right now.
+      </p>
+    );
   }
 
   const shown = releases.slice(0, limit);
@@ -42,7 +46,9 @@ export function InventoryList({ releases, limit = 3 }: { releases: Row[]; limit?
           {soldOut ? (
             <span className="text-xs text-muted-foreground">Sold out</span>
           ) : (
-            <span className="text-xs text-foreground">{formatPaise(Math.min(...prices))}/person</span>
+            <span className="text-xs text-foreground">
+              {formatPaise(Math.min(...prices))}/person
+            </span>
           )}
           <span className={isDraw ? 'text-xs text-kirro' : 'text-xs text-muted-foreground'}>
             {soldOut ? '' : isDraw ? 'Draw' : 'Book now'}

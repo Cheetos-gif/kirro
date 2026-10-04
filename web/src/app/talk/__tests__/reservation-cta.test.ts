@@ -18,8 +18,8 @@ describe('RESERVATION_SUCCESS_PATTERN', () => {
     expect(
       matches(
         'Rs 1,200 is reserved, not charged. You are in the draw for tennis on 10 October. ' +
-          'The window opens at 11:30 AM IST on 9 October.',
-      ),
+          'The window opens at 11:30 AM IST on 9 October.'
+      )
     ).toBe(true);
   });
 
@@ -28,8 +28,8 @@ describe('RESERVATION_SUCCESS_PATTERN', () => {
       matches(
         'Rs 3,000 is reserved, not charged. You are in the draw for tennis on 10 October. The window ' +
           'opens at 11:30 AM IST on 9 October. The result will reach you on WhatsApp at the number ' +
-          'you provided. Please send one message to +91 81673 12268 first, or the result will not arrive.',
-      ),
+          'you provided. Please send one message to +91 81673 12268 first, or the result will not arrive.'
+      )
     ).toBe(true);
   });
 
@@ -38,33 +38,35 @@ describe('RESERVATION_SUCCESS_PATTERN', () => {
   });
 
   it('does not match a clarifying question before the reservation', () => {
-    expect(matches('Tennis on 10 October, any slot, 2 people, all or nothing. Shall I go ahead?')).toBe(
-      false,
-    );
+    expect(
+      matches('Tennis on 10 October, any slot, 2 people, all or nothing. Shall I go ahead?')
+    ).toBe(false);
   });
 
   it('does not match a failure or cancellation reply', () => {
     expect(matches('The amount could not be reserved due to insufficient balance.')).toBe(false);
-    expect(matches('Your declaration has been cancelled, and Rs 600 has been released.')).toBe(false);
+    expect(matches('Your declaration has been cancelled, and Rs 600 has been released.')).toBe(
+      false
+    );
   });
 });
 
 describe('whatsAppOpeningMessage', () => {
   it('names the booking the confirmation gave, so the thread is identifiable', () => {
     const message = whatsAppOpeningMessage(
-      'Rs 3,000 is reserved, not charged. You are in the draw for tennis on 10 October. The window opens...',
+      'Rs 3,000 is reserved, not charged. You are in the draw for tennis on 10 October. The window opens...'
     );
     expect(message).toBe(
-      "Hi Kirro! I've entered the draw for tennis on 10 October. Please send my result here.",
+      "Hi Kirro! I've entered the draw for tennis on 10 October. Please send my result here."
     );
   });
 
   it('falls back to a plain hello when the confirmation names no booking', () => {
     expect(whatsAppOpeningMessage(null)).toBe(
-      "Hi Kirro! I've entered the draw. Please send my result here.",
+      "Hi Kirro! I've entered the draw. Please send my result here."
     );
     expect(whatsAppOpeningMessage('Rs 600 is reserved, not charged.')).toBe(
-      "Hi Kirro! I've entered the draw. Please send my result here.",
+      "Hi Kirro! I've entered the draw. Please send my result here."
     );
   });
 });

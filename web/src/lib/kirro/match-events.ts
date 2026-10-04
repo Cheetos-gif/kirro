@@ -25,7 +25,10 @@ export function matchEventsInText(text: string, events: KirroEvent[]): KirroEven
  * Sticky on purpose: once the caller has named an event, it stays listed for the rest of the call
  * rather than flickering off when the next utterance happens not to repeat it.
  */
-export function matchEventsInTranscript(lines: readonly string[], events: KirroEvent[]): KirroEvent[] {
+export function matchEventsInTranscript(
+  lines: readonly string[],
+  events: KirroEvent[]
+): KirroEvent[] {
   const seen = new Set<string>();
   const matched: KirroEvent[] = [];
   for (const line of lines) {
