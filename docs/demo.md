@@ -1,9 +1,20 @@
 # Demo — Round 3 recording plan
 
+**The video and the written answers are two separate submissions.** This file and `demo-script.md` are only about
+the video; it has to stand on its own without anyone reading the answers, so nothing in it says "as explained in the
+write-up". The answers live in `submission/round-3-answers.md` and are not narrated here.
+
+Three files, three jobs:
+
+- **`demo-script.md`** — the shooting script. Scene by scene: the page on screen, the exact words spoken, and the
+  frame that has to be visible. Shoot from that.
+- **this file** — the operational plan behind it: pre-flight, screen layout, what each take has to prove, what must
+  never be filmed, and what to do when the platform misbehaves mid-take.
+- **`submission/round-3-answers.md`** — the separate written submission.
+
 The brief: record the screen while the agent runs **on the Pine Labs platform**, from the first thing that happens to
-the moment the outcome is achieved; then run it again with **at least two different human inputs** and show how the
-output changes; then answer the written questions. The written answers live in
-`docs/submission/round-3-answers.md`; this file is how the footage gets made.
+the moment the outcome is achieved, then run it again with **at least two different human inputs** and show how the
+output changes.
 
 Everything below is grounded in what has actually run. Every beat carries a live precedent or is marked as unproven.
 **Read `## Do not demo` before planning a single shot** — three paths in this system are currently broken in ways that
@@ -21,7 +32,8 @@ would produce a wrong-looking or wrong-in-fact recording.
 | A teammate plays the user through a real tool                         | the caller speaks into `/talk` and receives the result on a real handset over WhatsApp                                                                                           | T1, T1-6      |
 | Mock returns different responses including bad ones                   | `POST /__admin/scenario`, 10 injectable failures, armed from `/admin` on camera                                                                                                  | T3            |
 | Agent handles them                                                    | the agent releases the mandate and says what actually happened                                                                                                                   | T3            |
-| Two further runs with different human inputs                          | Take 2 ("no" at the read-back), Take 3 (Hinglish + ambiguous price)                                                                                                              | T2, T3        |
+| Two further runs with different human inputs                          | Take 2 ("no" after a correction), Take 3 (Hinglish + an ambiguous price)                                                                                                         | T2, T3        |
+| The mechanism is not a toy                                            | a 10-place stadium concert at Rs 4,500, a society court at Rs 250, a club tennis slot, and an F1 paddock pass that physically ships — one agent, one mechanism                   | T1, T3, T4    |
 
 ## Pre-flight (do this before any recording, not on camera)
 
@@ -30,6 +42,11 @@ would produce a wrong-looking or wrong-in-fact recording.
    about 27 hours. This also clears `ev_0002` ("Padel Court") and the closed `rel_0005` out of shot — there is no
    `DELETE` route for events or releases, so a reset is the only way to clean the catalogue.
 1. **Confirm the scenario is disarmed.** `POST /__admin/scenario {"run_id":"default","target":"*","scenario":"success"}`.
+1. **Confirm the concert is findable by name.** The agent resolves an event from free text. Portal-created events get
+   opaque sequential ids (`ev_0003`), so this depends on the release listing carrying the event's name and aliases —
+   shipped as part of this round's work. After creating the concert, ask the agent "what concerts are open?" in the
+   platform chat panel and confirm it finds it. **If it does not, the mock on the cluster is older than the fix**:
+   check that `main` has rolled out before shooting.
 1. **Save the caller's WhatsApp number** at `https://kirro.upayan.dev/settings`. `declare_interest` refuses a bid
    without one (400), and the agent will correctly refuse and point at Settings — a true behaviour, but not the
    happy path.
@@ -57,64 +74,82 @@ Record one screen at 1920x1080. Two arrangements, switched between takes:
 Have these tabs open throughout, in this order: `/` · `/talk` · `/dashboard` · `/admin` · AgenticOrg agent page ·
 Grafana (`https://grafana.upayan.dev`, dashboard "KIRRO (voice channel + agent)").
 
-## Take 1 — the full run, first event to outcome (target 4–5 min)
+## Take 1 — the full run, first event to outcome (scenes 0–5, target 4–5 min)
 
-The story: **Ananya, 4 October 2026**, wants a society badminton court that twelve people want and one can have.
+The story: **a stadium concert puts ten front-standing places up, and four thousand people want them.** The scale is
+the point — this is the case where first-come-first-served most obviously fails, and where blocking money instead of
+taking it matters most. The society badminton court and the club tennis slot appear later (takes 3 and 4) to show the
+same mechanism at Rs 250 a head.
 
-| #    | Shot                                         | What happens                                                                                                                                                                                                                          | On-screen proof                                                                                     |
-| ---- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| 1-1  | `/` hero                                     | 12 s. "Booking scarce slots shouldn't reward whoever clicks fastest." Scroll past `DrawVisualizer` and the live inventory pulled from the mock.                                                                                       | the listing cards are live mock data, not markup                                                    |
-| 1-2  | `/` as organiser → **Organise a demo event** | one click seeds an event plus a `fair_draw` release and redirects to `/talk?demo=<event_id>`. The declare window opens in 3:00 and closes 3:00 later.                                                                                 | the DemoPromptCard names the event, slot and price, counting down                                   |
-| 1-3  | `/talk` → start                              | token minted server-side, browser joins `wss://voice-kirro.upayan.dev`, the worker speaks a fixed greeting, the call id `call_<12hex>` appears beside the transcript.                                                                 | state label goes Connecting → Listening; call-id badge                                              |
-| 1-4  | **The declaration, spoken**                  | see the script below.                                                                                                                                                                                                                 | live transcript, bar visualiser                                                                     |
-| 1-5  | the read-back                                | agent states event, weekday, date, group, minimum, ceiling and the reserve total, then "Shall I go ahead? Please say yes or no."                                                                                                      | the weekday comes from the release's own `weekday` field — the agent is forbidden to compute one    |
-| 1-6  | "yes" → money                                | `create_mandate` fires **alone**, returns an authorization id and `ACTIVE`; only then `declare_interest`.                                                                                                                             | terminal shows `mcp.create_mandate` then `mcp.declare_interest`, in that order, never parallel      |
-| 1-7  | the `wa.me` popup                            | fires on the agent's "reserved, not charged" line; tap it, confirm the opening message.                                                                                                                                               | popup with the Business number pre-filled                                                           |
-| 1-8  | `/admin`                                     | Draw entries +1; the Releases table shows Entries = 1 for the new release.                                                                                                                                                            | stat tiles move                                                                                     |
-| 1-9  | window closes                                | `/events/<id>` countdown hits **"Window closed — the draw runs within 5 minutes."**                                                                                                                                                   | the countdown is the honest clock                                                                   |
-| 1-10 | the draw                                     | the `kirro-allocator-trigger` CronJob (every 5 min) finds the closed, undrawn release and asks `Kirro Allocator` to settle it. Force it on camera with `kubectl create job --from=cronjob/kirro-allocator-trigger draw-now -n kirro`. | terminal: `allocator.draw` → `create_hold` → `get_hold` → `execute` → `confirm_booking` → `release` |
-| 1-11 | the outcome                                  | `/dashboard` shows the booking row with `BK-####`, hold id and payment id; Payments shows SUCCESS.                                                                                                                                    | the booking reference is the outcome                                                                |
-| 1-12 | the handset                                  | the WhatsApp result message arrives on the real number.                                                                                                                                                                               | real phone, real message                                                                            |
+**Create the concert live on `/organiser`, not with the quick-demo button.** The button picks a template at random,
+which is not shootable, and creating it by hand is a better shot anyway: it shows the organiser surface and makes the
+point that the organiser picks a *rule*, not a winner.
 
-### The spoken script (Take 1)
+| #    | Shot                           | What happens                                                                                                                                                                                                                          | On-screen proof                                                                                     |
+| ---- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| 1-1  | `/` hero                       | 35 s. "Booking scarce slots shouldn't reward whoever clicks fastest." Scroll past `DrawVisualizer` and the live inventory pulled from the mock.                                                                                       | the listing cards are live mock data, not markup                                                    |
+| 1-2  | `/organiser` → **New event**   | `Stadium Concert (Front Standing)`, published.                                                                                                                                                                                        | the event appears with its `published` badge                                                        |
+| 1-3  | `/organiser` → **New release** | the concert · **Draw** · today · opens in ~6 min · slot `Front Standing, 20:00` · **10 seats** · **Rs 4,500**.                                                                                                                        | the release row renders as `Draw · 0 in the draw`                                                   |
+| 1-4  | `/talk` → start                | token minted server-side, browser joins `wss://voice-kirro.upayan.dev`, the worker speaks a fixed greeting, the call id `call_<12hex>` appears beside the transcript.                                                                 | state label goes Connecting → Listening; call-id badge                                              |
+| 1-5  | **the declaration, spoken**    | see the script.                                                                                                                                                                                                                       | live transcript, bar visualiser                                                                     |
+| 1-6  | the read-back                  | agent states event, weekday, date, group, minimum, ceiling and the reserve total, then "Shall I go ahead? Please say yes or no."                                                                                                      | the weekday comes from the release's own `weekday` field — the agent is forbidden to compute one    |
+| 1-7  | "yes" → money                  | `create_mandate` fires **alone**, returns an authorization id and `ACTIVE`; only then `declare_interest`.                                                                                                                             | terminal shows `mcp.create_mandate` then `mcp.declare_interest`, in that order, never parallel      |
+| 1-8  | the `wa.me` popup              | fires on the agent's "reserved, not charged" line; tap it, confirm the opening message.                                                                                                                                               | popup with the Business number pre-filled                                                           |
+| 1-9  | `/admin`                       | Draw entries +1, Captured still 0; the Releases table shows Entries = 1 for the concert.                                                                                                                                              | stat tiles move                                                                                     |
+| 1-10 | window closes                  | `/events/<id>` countdown hits **"Window closed — the draw runs within 5 minutes."**                                                                                                                                                   | the countdown is the honest clock                                                                   |
+| 1-11 | the draw                       | the `kirro-allocator-trigger` CronJob (every 5 min) finds the closed, undrawn release and asks `Kirro Allocator` to settle it. Force it on camera with `kubectl create job --from=cronjob/kirro-allocator-trigger draw-now -n kirro`. | terminal: `allocator.draw` → `create_hold` → `get_hold` → `execute` → `confirm_booking` → `release` |
+| 1-12 | the outcome                    | `/dashboard` shows the booking row with `BK-####`, hold id and payment id; Payments shows SUCCESS.                                                                                                                                    | the booking reference is the outcome                                                                |
+| 1-13 | the handset                    | the WhatsApp result message arrives on the real number.                                                                                                                                                                               | real phone, real message                                                                            |
 
-Say it naturally; these are the facts that must be in it, not a sentence to read.
+### The spoken lines (Take 1)
 
-> **Ananya:** "I want the society badminton court on Saturday. Four of us, but three would still work. I'll pay up to
-> three hundred rupees a head."
+Full narration is in `demo-script.md`; these are the facts the caller's turns must contain.
+
+> **Caller:** "I want the concert tonight. Front standing. Four of us, but three would still work. I'll pay up to four
+> and a half thousand rupees each."
 
 Expected reply shape (this read-back template is in the prompt verbatim):
 
-> **KIRRO:** "Badminton on Saturday, 5 October, any slot, 4 people, minimum 3, up to Rs 300 per person, so I will
-> reserve Rs 1,200, not charge it. Shall I go ahead? Please say yes or no."
+> **KIRRO:** "Stadium Concert on [weekday], [date], any slot, 4 people, minimum 3, up to Rs 4,500 per person, so I
+> will reserve Rs 18,000, not charge it. Shall I go ahead? Please say yes or no."
 
-> **Ananya:** "Yes."
+> **Caller:** "Yes."
 
-Expected: `create_mandate` with `amount_value: 120000` (4 × 300 × 100 — the prompt carries that worked example),
-then `declare_interest`, then a closing message that says the money is reserved and not charged, names the release's
-own `opens_at_ist` verbatim, and tells her to message +91 81673 12268 first so the result can reach her.
+Expected: `create_mandate` with `amount_value: 1800000` (4 × 4,500 × 100), then `declare_interest`, then a closing
+message that says the money is reserved and not charged, names the release's own `opens_at_ist` verbatim, and tells
+the caller to message +91 81673 12268 first so the result can reach them.
 
-**Live precedent:** this exact chain ran on 2026-10-03 — `create_mandate` 120000 ACTIVE → `declare_interest rel_0002`
-DECLARED (`docs/testing.md:280`), and the single-bid draw chain produced `BK-0001` and `BK-0002` CONFIRMED through the
-bridge (`docs/testing.md:366-384`), with WhatsApp delivery to a real handset verified at `BK-0003`
-(`docs/testing.md:315-328`).
+**Live precedent:** the same chain ran on 2026-10-03 at a smaller amount — `create_mandate` 120000 ACTIVE →
+`declare_interest rel_0002` DECLARED (`docs/testing.md:280`); the single-bid draw chain produced `BK-0001` and
+`BK-0002` CONFIRMED through the bridge (`docs/testing.md:366-384`); WhatsApp delivery to a real handset was verified
+at `BK-0003` (`docs/testing.md:315-328`).
 
-## Take 2 — different human input: she says no (target 60–90 s)
+**Why a concert is safe to shoot despite the capacity being 10:** the draw is only dangerous with **more bids than
+capacity** (issue #37). One bid against ten places is the proven single-bid path. Do not seed extra bids to make it
+look contested.
 
-Same opening, then the two inputs that change everything:
+## Take 2 — different human input: she says no (scene 6, target 60–90 s)
 
-> **Ananya:** "Actually make it Sunday."
+A fresh call against the **same concert release**, so only the human changes:
+
+> **Caller:** "Concert tonight, two of us, up to three thousand each."
 >
-> *(the agent applies the correction immediately — "actually" is a correction signal in the prompt — looks the release
-> up again, and reads back the new date, or says there is no open window on Sunday and names the dates that are open)*
+> *(read-back for 2 people)*
+>
+> **Caller:** "Actually make it four of us."
+>
+> *(the agent applies the correction immediately and reads back again — "actually" is a correction signal in the
+> prompt. A different number with **no** correction signal would instead get "you said two earlier, do you want to
+> change it to four?", because a misheard number and a changed mind sound identical over a phone line)*
 >
 > **KIRRO:** "... Shall I go ahead? Please say yes or no."
 >
-> **Ananya:** "No."
+> **Caller:** "No."
 
-**What must be visible:** the date changed on the correction *without* a confirmation question, and after "no" the
-mock's log contains **no `create_mandate` and no `declare_interest` at all**. Cut to the terminal and show the
-absence. That is the point: a declined declaration costs the user nothing because no money was ever reserved.
+**What must be visible:** the group size changed on the correction *without* a confirmation question, and after "no"
+the mock's log contains **no `create_mandate` and no `declare_interest` at all** for that thread. Cut to the terminal
+and show the absence. That is the point: declining costs the user nothing, which is the only reason declaring
+interest is a reasonable thing to ask a person to do.
 
 **Live precedent:** L05 on v6, 2026-10-03 — "actually make it Sunday" applied at once, no open tennis window on
 Sunday so it offered 10 October, "no" → cancelled, no money tool in the log (`docs/testing.md:271`).
@@ -125,7 +160,7 @@ Three changes in one take, because they compound.
 
 **3a — ambiguous price.** Open with a range:
 
-> **Ananya:** "Tennis court Saturday, two of us, budget eight to ten thousand, ideally eight."
+> **Caller:** "Tennis court Saturday, two of us, budget eight to ten thousand, ideally eight."
 
 Expected: the agent stores **nothing** for the price and asks *"What is the single maximum you will pay per person?"*
 Neither 8,000 nor 10,000 appears anywhere in the reply, and no tool is called. (L01, passed on every prompt version
@@ -133,7 +168,7 @@ since v0 — `docs/testing.md:266`.)
 
 **3b — Hinglish.** Switch language mid-conversation:
 
-> **Ananya:** "Shanivaar ko court chahiye, char log."
+> **Caller:** "Shanivaar ko court chahiye, char log."
 
 Expected: the whole reply in Hinglish, Roman script; "court" is treated as ambiguous (badminton *and* tennis exist),
 so it asks which one **and** the ceiling in one question, keeping Saturday and 4. The language is decided fresh from

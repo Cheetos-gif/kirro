@@ -378,6 +378,7 @@ def create_app(log_dir: str | None = None) -> FastAPI:
             "weekday": weekday_name(r.get("date")),
             "opens_at_ist": opens_at_ist(r["opens_at"]),
             "min_price_per_person_paise": min_price_per_person_paise(r),
+            **event_identity(run, r),
             "slots": [slot_view(run, sc, s) for s in r["slots"]],
         }
 
@@ -405,6 +406,20 @@ def create_app(log_dir: str | None = None) -> FastAPI:
         below every slot (#12 item 7: the warning was removed after the model raised it wrongly)."""
         prices = [s["price_per_person_paise"] for s in r.get("slots", [])]
         return min(prices) if prices else None
+
+    def event_identity(run: RunState, r: dict) -> dict:
+        """The owning event's name and alias lists, flattened onto the release (MOCK fields).
+
+        The agent resolves a release from free speech ("concert"), and only the ids used to travel with the
+        listing. Seeded events have semantic ids (`ev_badminton`), but every portal-created event gets a
+        sequential one (`ev_0003`), so without this its name and aliases were unreachable. An event deleted
+        out from under its release degrades to empty, never an error."""
+        event = run.events.get(r["event_id"]) or {}
+        return {
+            "event_name": event.get("name"),
+            "event_aliases": list(event.get("aliases") or []),
+            "event_generic_aliases": list(event.get("generic_aliases") or []),
+        }
 
     @app.get("/venue/catalogue")
     def catalogue(request: Request):
@@ -437,6 +452,7 @@ def create_app(log_dir: str | None = None) -> FastAPI:
                     "weekday": weekday_name(r.get("date")),
                     "opens_at_ist": opens_at_ist(r["opens_at"]),
                     "min_price_per_person_paise": min_price_per_person_paise(r),
+                    **event_identity(run, r),
                 }
                 for r in run.releases.values()
                 if (not q.get("event_id") or r["event_id"] == q["event_id"])

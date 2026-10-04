@@ -97,7 +97,13 @@ async def _call(
 
 def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
 
-    @mcp.tool(description="List the booking releases. Filter by event (e.g. badminton) and/or date (YYYY-MM-DD).")
+    @mcp.tool(
+        description=(
+            "List the booking releases. Filter by event and/or date (YYYY-MM-DD). The event may be an id "
+            "(ev_badminton), the event's name (Stadium Concert), or any word the organiser registered for it "
+            "(badminton, concert, gig)."
+        )
+    )
     async def list_releases(event: Any = None, date: Any = None, run_id: str = DEFAULT_RUN) -> dict:
         _record("list_releases", run_id, {"event": event, "date": date})
         return await _releases(client, run_id, _first_str(event), _first_str(date))
@@ -105,7 +111,7 @@ def _venue(mcp: MCPServer, client: httpx.AsyncClient) -> None:
     @mcp.tool(
         description=(
             "Fetch one booking release with its slots, capacity and opening time. release_id is required: pass an "
-            "id such as rel_badminton_sat, or an event name such as badminton."
+            "id such as rel_badminton_sat, the event's name, or an event word such as badminton or concert."
         )
     )
     async def get_release(
@@ -522,12 +528,29 @@ def _single_open_or_all(found: list[dict]) -> list[dict]:
     return found
 
 
+def _matches(item: dict, needle: str) -> tuple[bool, bool]:
+    """`(specific, generic)` for one listing row against a lowercased needle.
+
+    A `generic_aliases` hit is deliberately weaker: "court" is a generic alias of both badminton and tennis
+    by design, and that ambiguity is what makes the agent ask which one. A specific hit (id, name, or a real
+    alias) must not be diluted by unrelated events that merely share a generic word.
+    """
+    specific = [item["event_id"], item["release_id"], item.get("event_name") or "", *(item.get("event_aliases") or [])]
+    generic = item.get("event_generic_aliases") or []
+    return (
+        any(needle in value.lower() for value in specific),
+        any(needle in value.lower() for value in generic),
+    )
+
+
 async def _releases(client: httpx.AsyncClient, run_id: str, event: str | None, date: str | None) -> dict:
     """List releases, tolerating a free-text event.
 
     The REST route filters `event_id` by exact match, but a model naturally sends "badminton" rather than
-    "ev_badminton", which would silently return nothing. Here an event that is not already an exact id is matched
-    as a substring of the event or release id, and the filtered list is returned in the route's own shape.
+    "ev_badminton", which would silently return nothing. Here an event that is not already an exact id is
+    matched as a substring of the event or release id, the event's name, or one of its aliases — the name and
+    aliases because a portal-created event's id is a sequential `ev_0003` that nothing a caller says will ever
+    contain. The filtered list is returned in the route's own shape.
     """
     listing = await _call(client, "GET", "/venue/releases", run_id=run_id, params={})
     if listing["status_code"] != 200:
@@ -539,9 +562,9 @@ async def _releases(client: httpx.AsyncClient, run_id: str, event: str | None, d
             releases = exact
         else:
             needle = event.lower()
-            releases = [
-                item for item in releases if needle in item["event_id"].lower() or needle in item["release_id"].lower()
-            ]
+            scored = [(item, *_matches(item, needle)) for item in releases]
+            specific = [item for item, is_specific, _ in scored if is_specific]
+            releases = specific or [item for item, _, is_generic in scored if is_generic]
     if date:
         dated = [item for item in releases if item["date"] == date]
         # Mock convenience, and a deliberate one: weekday-to-date arithmetic is a known model weakness (live, the

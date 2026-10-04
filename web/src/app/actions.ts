@@ -153,6 +153,14 @@ const DEMO_TEMPLATES = [
     pricePaise: 900000,
   },
   {
+    name: 'Stadium Concert (Front Standing)',
+    aliases: ['concert', 'gig'],
+    generic_aliases: ['show', 'tickets', 'band'],
+    label: 'Front Standing, 20:00',
+    capacity: 10,
+    pricePaise: 450000,
+  },
+  {
     name: 'Rooftop Yoga Session',
     aliases: ['yoga'],
     generic_aliases: ['rooftop', 'class'],

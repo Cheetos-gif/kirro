@@ -106,12 +106,18 @@ catalogue fixture is seeded with dates computed relative to that seed's own cloc
 `_seed_domain`), not pinned to a calendar date, so its releases are open right after a reset regardless of when
 that happens to be. The detail and listing routes also carry: the release's `date`; `weekday` (its day name,
 MOCK field, so the agent never reads one back wrong); `opens_at_ist` (`opens_at` converted to IST, a fixed
-UTC+5:30 offset, MOCK field, so the agent does not do that arithmetic either); and
-`min_price_per_person_paise` (the cheapest slot's price, MOCK field, so the agent can tell a bidder their
-ceiling is below every slot without computing it). On the MCP surface, an event word (`"tennis"`) passed to
-`get_release` or `declare_interest` that matches several releases resolves to the one whose
-`declarations_open` is `true` when exactly one is; otherwise the tool answers with the candidate list, dates
-included.
+UTC+5:30 offset, MOCK field, so the agent does not do that arithmetic either); `min_price_per_person_paise`
+(the cheapest slot's price, MOCK field, so the agent can tell a bidder their ceiling is below every slot
+without computing it); and `event_name`, `event_aliases`, `event_generic_aliases` (the owning event's display
+name and alias lists, MOCK fields, empty if the event has since been removed). The alias fields exist because
+the agent resolves an event from free speech ("concert"): seeded events have semantic ids (`ev_badminton`) that
+a spoken word happens to match, but every portal-created event gets a sequential `ev_0003`, so without the name
+and aliases on the listing its release was unreachable by anything a caller would say. On the MCP surface, an
+event word passed to `list_releases`, `get_release` or `declare_interest` is matched against the event id, the
+release id, the event name and its aliases; a `generic_aliases`-only hit is weaker and used only when nothing
+matched specifically, so `"court"` (generic to both badminton and tennis by design) stays ambiguous. A word
+that matches several releases resolves to the one whose `declarations_open` is `true` when exactly one is;
+otherwise the tool answers with the candidate list, dates included.
 
 - `GET /venue/organisers?status=` — `{organisers: [...]}`, each `{organiser_id, name, contact, status, requested_by}`.
 - `POST /venue/organisers` — self-serve request; body `{name, contact, requested_by}` (all non-empty strings).
