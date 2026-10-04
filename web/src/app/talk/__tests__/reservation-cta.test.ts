@@ -23,12 +23,11 @@ describe('RESERVATION_SUCCESS_PATTERN', () => {
     ).toBe(true);
   });
 
-  it('matches the wording a real call produced', () => {
+  it('matches with trailing confirmation text after the reserved amount', () => {
     expect(
       matches(
         'Rs 3,000 is reserved, not charged. You are in the draw for tennis on 10 October. The window ' +
-          'opens at 11:30 AM IST on 9 October. The result will reach you on WhatsApp at the number ' +
-          'you provided. Please send one message to +91 81673 12268 first, or the result will not arrive.'
+          'opens at 11:30 AM IST on 9 October.'
       )
     ).toBe(true);
   });

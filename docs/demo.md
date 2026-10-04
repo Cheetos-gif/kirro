@@ -116,8 +116,9 @@ Expected reply shape (this read-back template is in the prompt verbatim):
 > **Caller:** "Yes."
 
 Expected: `create_mandate` with `amount_value: 1800000` (4 × 4,500 × 100), then `declare_interest`, then a closing
-message that says the money is reserved and not charged, names the release's own `opens_at_ist` verbatim, and tells
-the caller to message +91 81673 12268 first so the result can reach them.
+message that says the money is reserved and not charged, names the release's own `opens_at_ist` verbatim, and says
+nothing about WhatsApp or a phone number — the `/talk` page's own popup is what prompts the caller to send the one
+opening message.
 
 **Live precedent:** the same chain ran on 2026-10-03 at a smaller amount — `create_mandate` 120000 ACTIVE →
 `declare_interest rel_0002` DECLARED (`docs/testing.md:280`); the single-bid draw chain produced `BK-0001` and

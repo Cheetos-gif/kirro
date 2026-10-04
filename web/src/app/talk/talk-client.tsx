@@ -243,6 +243,7 @@ export function TalkClient({
   const [callId, setCallId] = useState<string | null>(null);
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
   const [whatsAppText, setWhatsAppText] = useState<string | null>(null);
+  const [whatsAppSent, setWhatsAppSent] = useState(false);
   const scrollBox = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -273,6 +274,7 @@ export function TalkClient({
   }, []);
 
   const onReserved = useCallback((confirmation: string) => {
+    setWhatsAppSent(false);
     setWhatsAppText(whatsAppOpeningMessage(confirmation));
   }, []);
 
@@ -285,6 +287,7 @@ export function TalkClient({
     setCallId(null);
     setVoiceNotice(null);
     setWhatsAppText(null);
+    setWhatsAppSent(false);
     setStartedAt(new Date());
     try {
       const response = await fetch('/api/voice/token', { method: 'POST' });
@@ -469,27 +472,39 @@ export function TalkClient({
         >
           <Card className="w-full max-w-sm">
             <CardHeader>
-              <CardTitle id="wa-popup-title">One tap to get your result</CardTitle>
+              <CardTitle id="wa-popup-title">
+                {whatsAppSent ? 'Message sent' : 'One tap to get your result'}
+              </CardTitle>
               <CardDescription>
-                You&apos;re in the draw. WhatsApp only lets a business message you once you&apos;ve
-                messaged it first, so send this one message and the result will reach you there
-                after the window closes.
+                {whatsAppSent
+                  ? "Kirro has your message. You'll hear back here once the window closes — no need to keep this open."
+                  : "You're in the draw. WhatsApp only lets a business message you once you've messaged it " +
+                    'first, so send this one message and the result will reach you there after the window closes.'}
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
-              <p className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                {whatsAppText}
-              </p>
-              <Button
-                render={<a href={whatsAppLink(whatsAppText)} target="_blank" rel="noreferrer" />}
-                nativeButton={false}
-                className="w-full"
-              >
-                Open WhatsApp
-              </Button>
-              <Button variant="ghost" className="w-fit" onClick={() => setWhatsAppText(null)}>
-                Not now
-              </Button>
+              {whatsAppSent ? (
+                <Button className="w-full" onClick={() => setWhatsAppText(null)}>
+                  Done
+                </Button>
+              ) : (
+                <>
+                  <p className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                    {whatsAppText}
+                  </p>
+                  <Button
+                    render={<a href={whatsAppLink(whatsAppText)} target="_blank" rel="noreferrer" />}
+                    nativeButton={false}
+                    className="w-full"
+                    onClick={() => setWhatsAppSent(true)}
+                  >
+                    Open WhatsApp
+                  </Button>
+                  <Button variant="ghost" className="w-fit" onClick={() => setWhatsAppText(null)}>
+                    Not now
+                  </Button>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>
