@@ -111,11 +111,15 @@ from a first success (`tests/test_mock_server.py::test_declare_pool_second_call_
   confirmed live on production immediately after resume (L10 English, L03 Hinglish, both correct). Separately
   observed, not fixed here (out of scope for #17): L03's event-ambiguity and date-resolution handling were
   themselves flaky across samples even before this change — worth its own issue if it recurs.
-- **Time windows on v6 are untested (live, open — issue #18).** No eval case gives a window ("7 to 9 am"), so slot
-  filtering by window (`acceptable_slot_ids`/`constraints.start_hour_min|max`) has never been exercised against the
-  live agent — the mechanism itself is covered (`tests/test_allocator.py::test_time_constraint_hard_filter`). Needs a
-  live eval case against the agent, not a mock-server change; blocked here on AgenticOrg login (never stored in this
-  repo, `platform-map.md` §1).
+- **Verified live 2026-10-04 (issue #18): time-window filtering works.** No eval case had ever given v6 a time
+  window ("7 to 9 am"), so slot filtering (`acceptable_slot_ids`) was unexercised against the live agent — the
+  mechanism itself was already covered at the allocator level
+  (`tests/test_allocator.py::test_time_constraint_hard_filter`). Ran a full declaration live against `v6-dev`:
+  "badminton, 5 October, between 7 and 9 am, 2 people, Rs 300 per person" on `rel_badminton_sat` (slots at
+  07:00, 08:00 and 18:00) → read-back correctly kept "between 7 and 9 am" → confirmed "yes" → the resulting pool
+  entry (`GET /venue/releases/{id}/declarations`, ground truth per this issue's own suggested check) carries
+  `"acceptable_slot_ids":["bd_0700","bd_0800"]` — exactly the two slots inside the stated window, correctly
+  excluding the 18:00 slot. No prompt change needed; the agent already does this correctly.
 - **Fixed 2026-10-04: waitlist ordering verified live end to end for a multi-bid release (issue #19).** Previously
   only single-bid releases had gone through the allocator-trigger bridge for real (ADR-018). Verified directly
   against the live mock (`api-kirro.upayan.dev`, dedicated run `issue19-verify` — isolated from `default`, no cleanup
