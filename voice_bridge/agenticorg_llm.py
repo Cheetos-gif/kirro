@@ -132,15 +132,59 @@ class AgenticOrgChat(LLM):
     def _stream_cls(self) -> type[LLMStream]:
         return AgenticOrgStream
 
+    # A caller who re-says a short confirmation on purpose — "yes", "haan", "no" — must reach the
+    # agent even if it is character-for-character what was last sent; the exact-repeat collapse below
+    # exists for the framework re-invoking the pipeline with an unchanged transcript, not for a
+    # genuine one-word reply that happens to repeat the previous one (e.g. the agent asked a yes/no
+    # question twice). Case/punctuation-insensitive; Hindi forms included since the agent mirrors the
+    # caller's language (declare-v6-notes.md §4).
+    _SHORT_CONFIRMATIONS = frozenset(
+        {
+            "yes",
+            "yeah",
+            "yep",
+            "yup",
+            "ok",
+            "okay",
+            "correct",
+            "right",
+            "confirm",
+            "confirmed",
+            "no",
+            "nope",
+            "nah",
+            "haan",
+            "han",
+            "ha",
+            "haanji",
+            "sahi",
+            "theek",
+            "thik",
+            "theek hai",
+            "thik hai",
+            "nahi",
+            "nahin",
+            "nai",
+        }
+    )
+
     def next_turn_text(self, text: str) -> str | None:
         """Collapse a cumulative transcript re-send into the one new thing to tell the agent.
 
         Returns `None` when there is nothing new to send (an exact repeat, or a growing transcript
         whose only addition is whitespace); otherwise returns the text to send — the new suffix for
-        a growing transcript, or the whole thing for a genuinely new utterance.
+        a growing transcript, or the whole thing for a genuinely new utterance. A short yes/no-shaped
+        answer is always sent, even if identical to the last sent text (see `_SHORT_CONFIRMATIONS`).
         """
         last = self._last_sent_text
+        normalized = text.strip().lower().rstrip(".!?")
         if text == last:
+            if normalized in self._SHORT_CONFIRMATIONS:
+                self.call_log.info(
+                    "voice transcript resend sent as a genuine confirmation repeat",
+                    extra={"text": text},
+                )
+                return text
             self.call_log.info("voice transcript resend skipped", extra={"reason": "exact_repeat", "text": text})
             return None
         if last and text.startswith(last):
