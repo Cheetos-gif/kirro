@@ -18,7 +18,7 @@ import { ApproveOrganiserButton, ResetRunButton, ScenarioForm } from './admin-co
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <p className="font-mono text-[11px] tracking-[0.08em] text-muted-foreground uppercase">
+      <p className="text-xs text-muted-foreground">
         {label}
       </p>
       <p className="font-heading text-2xl font-medium text-foreground">{value}</p>

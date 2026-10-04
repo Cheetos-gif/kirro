@@ -32,9 +32,7 @@ export function AgentStats({ agents }: { agents: AgentStat[] }) {
               {agent.name ?? agent.agent_id}
             </p>
             {agent.status ? (
-              <span className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
-                {agent.status}
-              </span>
+              <span className="text-xs text-muted-foreground">{agent.status}</span>
             ) : null}
           </div>
           <p className="mt-2 font-heading text-2xl font-medium text-foreground">

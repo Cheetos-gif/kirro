@@ -91,16 +91,13 @@ export default async function HomePage() {
       {/* Hero: copy on the left, the mechanism on the right. Asymmetric on purpose. */}
       <section className="grid grid-cols-1 gap-10 py-16 sm:py-24 lg:grid-cols-12 lg:gap-8">
         <div className="lg:col-span-7">
-          <p className="font-mono text-xs tracking-wide text-muted-foreground">
-            declare <span className="text-kirro">&rarr;</span> draw{' '}
-            <span className="text-kirro">&rarr;</span> book
-          </p>
-          <h1 className="mt-4 max-w-xl font-heading text-4xl leading-[1.08] font-medium tracking-tight text-foreground sm:text-5xl">
+          <h1 className="font-heading text-4xl leading-[1.08] font-medium tracking-tight text-foreground sm:text-5xl">
             Booking scarce slots shouldn&apos;t reward whoever clicks fastest.
           </h1>
           <p className="mt-5 max-w-md text-base text-muted-foreground">
-            KIRRO holds your spot, enters a seeded draw when a slot is contested, and books it
-            outright when it isn&apos;t. Arrival time decides nothing.
+            Tell KIRRO the slot you want, your group size, and the most you&apos;ll pay. If it&apos;s
+            free, it&apos;s yours. If other people want it too, everyone gets an equal, fair shot
+            &mdash; not just whoever showed up first.
           </p>
           {viewer?.role === 'organiser' || viewer?.role === 'admin' ? (
             <div className="mt-6">
@@ -117,7 +114,7 @@ export default async function HomePage() {
       <section className="border-t border-border py-14">
         <SectionLabel>The draw</SectionLabel>
         <h2 className="mt-2 font-heading text-2xl font-medium tracking-tight text-foreground">
-          One seeded draw, run once the window closes
+          When a slot fills up, everyone gets a fair shot
         </h2>
         <div className="mt-8">
           <DrawVisualizer />
@@ -149,13 +146,13 @@ export default async function HomePage() {
 
       {/* Architecture */}
       <section className="border-t border-border py-14">
-        <SectionLabel>How a request reaches the mock services</SectionLabel>
+        <p className="text-sm text-muted-foreground">How your request actually gets booked</p>
         <h2 className="mt-2 font-heading text-2xl font-medium tracking-tight text-foreground">
-          The agent, not the form
+          A real agent handles it, not a form
         </h2>
         <p className="mt-3 max-w-xl text-sm text-muted-foreground">
-          This site is one way to declare interest. KIRRO runs as a Virtual Employee on Pine
-          Labs&apos; AgenticOrg platform &mdash; the agent does the same declare, draw, and book
+          This site is one way to declare interest. KIRRO also runs as an agent on Pine
+          Labs&apos; AgenticOrg platform &mdash; it does the same declare, draw, and book
           sequence over WhatsApp or chat.
         </p>
         <div className="mt-8">

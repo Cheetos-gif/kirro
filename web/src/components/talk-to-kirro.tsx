@@ -8,17 +8,17 @@ export function TalkToKirro() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>The agent, not the form</CardTitle>
+        <CardTitle>Prefer to just say it?</CardTitle>
         <CardDescription>
-          KIRRO runs as a virtual employee on AgenticOrg, Pine Labs&apos; agent platform.
+          Call KIRRO and ask for a slot out loud, instead of filling in a form.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <p className="text-sm text-muted-foreground">
-          This site is one way to declare interest. The agent is the other: tell it a slot, your
-          group size, and your price ceiling, and it does the same declare &rarr; draw &rarr; book
-          sequence described above. Talk to it in the browser &mdash; Gnani transcribes you and
-          speaks the reply back.
+          Tell it what you want: the event, your group size, and the most you are willing to pay.
+          If the slot&apos;s popular, it puts you in the same fair pick as the form above, then
+          lets you know what happened. You talk in your browser and it talks back, no typing
+          required.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <Button className="w-fit" render={<Link href="/talk" />} nativeButton={false}>

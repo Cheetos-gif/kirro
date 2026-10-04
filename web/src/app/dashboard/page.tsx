@@ -46,8 +46,8 @@ export default async function DashboardPage() {
           <h1 className="font-heading text-2xl font-medium tracking-tight text-foreground">
             My bookings
           </h1>
-          <p className="mt-1 font-mono text-xs text-muted-foreground">
-            {viewer.email} &middot; {viewer.role}
+          <p className="mt-1 text-sm text-muted-foreground">
+            Signed in as {viewer.email}, {viewer.role}
           </p>
         </div>
         {viewer.role === 'user' ? (
@@ -157,7 +157,7 @@ export default async function DashboardPage() {
                   <TableCell>{formatPaise(payment.amount)}</TableCell>
                   <TableCell>
                     <Badge variant={payment.status === 'SUCCESS' ? 'secondary' : 'destructive'}>
-                      {payment.status}
+                      {payment.status === 'SUCCESS' ? 'Success' : 'Failed'}
                     </Badge>
                   </TableCell>
                   <TableCell>{payment.refunded ? 'Yes' : 'No'}</TableCell>

@@ -47,7 +47,7 @@ function NavLinks({ viewer, onNavigate }: { viewer: Viewer | null; onNavigate?: 
       {viewer?.role === 'admin' ? (
         <Link
           href="/admin"
-          className="font-mono text-xs tracking-wide text-muted-foreground uppercase hover:text-foreground"
+          className={linkClass}
           onClick={onNavigate}
         >
           Admin
@@ -82,7 +82,7 @@ export function SiteHeader({ viewer }: { viewer: Viewer | null }) {
           {viewer ? (
             <>
               <span className="h-4 w-px bg-border" aria-hidden />
-              <span className="hidden font-mono text-xs text-muted-foreground lg:inline">{viewer.email}</span>
+              <span className="hidden text-xs text-muted-foreground lg:inline">{viewer.email}</span>
               <SignOutButton />
             </>
           ) : (
@@ -113,7 +113,7 @@ export function SiteHeader({ viewer }: { viewer: Viewer | null }) {
                 {viewer ? (
                   <>
                     <span className="h-px w-full bg-border" aria-hidden />
-                    <span className="font-mono text-xs text-muted-foreground">{viewer.email}</span>
+                    <span className="text-xs text-muted-foreground">{viewer.email}</span>
                     <SignOutButton />
                   </>
                 ) : null}

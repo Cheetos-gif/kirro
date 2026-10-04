@@ -12,6 +12,8 @@
   --font-heading: var(--font-display);
   --color-kirro: var(--kirro);
   --color-kirro-dim: var(--kirro-dim);
+  --color-clay: var(--clay);
+  --color-clay-dim: var(--clay-dim);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -50,6 +52,12 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * Warm, grounded palette (evolved from the original zero-chroma grayscale + single green accent).
+ * Ink/paper replace pure black/white; court (green) stays the one brand accent; clay is a second,
+ * sparingly-used warm accent reserved for time-sensitive/waiting states (the draw window, "your
+ * turn"), never decoration. Chart tones carry the same warm hue instead of flat gray.
+ */
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -85,6 +93,8 @@
   --sidebar-ring: oklch(0.708 0 0);
   --kirro: oklch(0.56 0.1 165);
   --kirro-dim: oklch(0.56 0.1 165 / 12%);
+  --clay: oklch(0.702 0.132 61.7);
+  --clay-dim: oklch(0.702 0.132 61.7 / 14%);
 }
 
 .dark {
@@ -121,6 +131,8 @@
   --sidebar-ring: oklch(0.556 0 0);
   --kirro: oklch(0.74 0.11 165);
   --kirro-dim: oklch(0.74 0.11 165 / 14%);
+  --clay: oklch(0.78 0.1 66);
+  --clay-dim: oklch(0.78 0.1 66 / 16%);
 }
 
 @layer base {

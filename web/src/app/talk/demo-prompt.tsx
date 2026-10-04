@@ -65,10 +65,10 @@ export function DemoPromptCard({ demo }: { demo: DemoPrompt }) {
       <p className="mt-2 text-muted-foreground">
         {demo.slots
           .map(slot => `${slot.label} — ${formatPaise(slot.price_per_person_paise)}`)
-          .join(' · ')}
+          .join(', ')}
       </p>
       {timing ? (
-        <p className="mt-2 font-mono text-xs tracking-wide text-muted-foreground uppercase">{timing}</p>
+        <p className="mt-2 text-xs text-clay">{timing}</p>
       ) : null}
     </div>
   );

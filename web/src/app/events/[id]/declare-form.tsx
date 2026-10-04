@@ -123,9 +123,10 @@ export function DeclareForm({
         ) : null}
 
         <p className="text-xs text-muted-foreground">
-          We&apos;ll reserve {formatPaise(reservePaise)} now (people &times; your max), against a
-          mock Pine Labs mandate. If you lose, it&apos;s released, not charged. The result comes to
-          your WhatsApp number from <span className="text-foreground">settings</span>.
+          We&apos;ll reserve {formatPaise(reservePaise)} now (people &times; your max) as a
+          temporary payment hold (a mock Pine Labs hold for this demo). If you lose, it&apos;s
+          released, not charged. The result comes to your WhatsApp number from{' '}
+          <span className="text-foreground">settings</span>.
         </p>
 
         <Button

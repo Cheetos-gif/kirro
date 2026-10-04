@@ -25,7 +25,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'KIRRO',
   description:
-    'KIRRO books scarce slots: courts, screenings, passes. Contested slots go to a seeded fair draw; the rest sell first come, first served.',
+    'KIRRO books scarce slots: courts, screenings, passes. Popular slots get a fair pick; the rest you can just buy, first come, first served.',
   // iOS has no manifest.json support for "Add to Home Screen" styling; these meta tags are the
   // separate, Apple-specific path to the same standalone/app-like presentation.
   appleWebApp: {

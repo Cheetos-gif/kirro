@@ -208,7 +208,7 @@ function Call({
 
   return (
     <>
-      <span className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
+      <span className="text-xs text-muted-foreground">
         {label}
       </span>
       <BarVisualizer
@@ -346,7 +346,7 @@ export function TalkClient({
             <Button onClick={start} disabled={connecting}>
               {connecting ? 'Connecting…' : lines.length ? 'Start again' : 'Start call'}
             </Button>
-            <span className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
+            <span className="text-xs text-muted-foreground">
               Not connected
             </span>
           </div>
@@ -368,8 +368,8 @@ export function TalkClient({
         <section className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
-              <h2 className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
-                Transcript{lines.length ? ` · ${lines.length} turns` : ''}
+              <h2 className="text-xs text-muted-foreground">
+                Transcript{lines.length ? ` (${lines.length} turns)` : ''}
               </h2>
               {callId ? (
                 <span
@@ -405,7 +405,7 @@ export function TalkClient({
               <ul className="flex flex-col gap-3">
                 {lines.map(line => (
                   <li key={line.key} className="flex flex-col gap-0.5">
-                    <span className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
+                    <span className="text-xs text-muted-foreground">
                       {line.mine ? 'You' : 'KIRRO'}
                     </span>
                     {/* LiveKit's own entry markup and styling for the message body. */}
@@ -428,7 +428,7 @@ export function TalkClient({
 
         {mentioned.length ? (
           <section className="flex flex-col gap-2">
-            <h2 className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
+            <h2 className="text-xs text-muted-foreground">
               Mentioned in this call
             </h2>
             <ul className="flex flex-wrap gap-2">

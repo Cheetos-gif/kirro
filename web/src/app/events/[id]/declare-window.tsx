@@ -78,7 +78,7 @@ export function DeclareWindow({
     <div className="flex flex-col gap-3">
       <p
         role="status"
-        className="w-fit rounded-full border border-border px-3 py-1 font-mono text-xs tracking-wide text-muted-foreground uppercase"
+        className="w-fit rounded-full border border-clay/30 bg-clay-dim px-3 py-1 text-xs text-clay"
       >
         {status}
       </p>
