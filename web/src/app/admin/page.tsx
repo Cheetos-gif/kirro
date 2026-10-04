@@ -8,6 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { requireRole } from '@/lib/auth/roles';
 import * as api from '@/lib/kirro/api';
 import { formatDate, formatDateTime, formatPaise } from '@/lib/kirro/format';
@@ -18,9 +19,7 @@ import { ApproveOrganiserButton, ResetRunButton, ScenarioForm } from './admin-co
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <p className="text-xs text-muted-foreground">
-        {label}
-      </p>
+      <p className="text-xs text-muted-foreground">{label}</p>
       <p className="font-heading text-2xl font-medium text-foreground">{value}</p>
       {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
     </div>
@@ -90,170 +89,182 @@ export default async function AdminPage() {
         />
       </section>
 
-      <section className="border-t border-border py-8">
-        <h2 className="font-heading text-lg font-medium text-foreground">Organiser requests</h2>
-        <p className="mt-1 text-sm text-muted-foreground">People asking to organise events.</p>
-        {pending.length === 0 ? (
-          <p className="mt-4 text-sm text-muted-foreground">Nothing waiting.</p>
-        ) : (
-          <Table className="mt-4">
+      <Tabs defaultValue="organisers" className="mt-2">
+        <TabsList>
+          <TabsTrigger value="organisers">
+            Organisers {pending.length > 0 ? `(${pending.length} waiting)` : ''}
+          </TabsTrigger>
+          <TabsTrigger value="events">Events ({events.length})</TabsTrigger>
+          <TabsTrigger value="releases">Releases ({releases.length})</TabsTrigger>
+          <TabsTrigger value="demo">Demo controls</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="organisers" className="flex flex-col gap-8 pt-6">
+          <div>
+            <h2 className="font-heading text-lg font-medium text-foreground">Organiser requests</h2>
+            <p className="mt-1 text-sm text-muted-foreground">People asking to organise events.</p>
+            {pending.length === 0 ? (
+              <p className="mt-4 text-sm text-muted-foreground">Nothing waiting.</p>
+            ) : (
+              <Table className="mt-4">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Contact</TableHead>
+                    <TableHead>Requested by</TableHead>
+                    <TableHead />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pending.map(organiser => (
+                    <TableRow key={organiser.organiser_id}>
+                      <TableCell className="font-medium">{organiser.name}</TableCell>
+                      <TableCell>{organiser.contact}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {organiser.requested_by}
+                      </TableCell>
+                      <TableCell>
+                        <ApproveOrganiserButton organiserId={organiser.organiser_id} />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+
+          <div>
+            <h2 className="font-heading text-lg font-medium text-foreground">All organisers</h2>
+            <Table className="mt-4">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Id</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Requested by</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {organisers.map(organiser => (
+                  <TableRow key={organiser.organiser_id}>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {organiser.organiser_id}
+                    </TableCell>
+                    <TableCell className="font-medium">{organiser.name}</TableCell>
+                    <TableCell>
+                      <Badge variant={organiser.status === 'approved' ? 'secondary' : 'outline'}>
+                        {organiser.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {organiser.requested_by ?? 'none'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="events" className="pt-6">
+          <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Id</TableHead>
                 <TableHead>Name</TableHead>
-                <TableHead>Contact</TableHead>
-                <TableHead>Requested by</TableHead>
-                <TableHead />
+                <TableHead>Organiser</TableHead>
+                <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {pending.map(organiser => (
-                <TableRow key={organiser.organiser_id}>
-                  <TableCell className="font-medium">{organiser.name}</TableCell>
-                  <TableCell>{organiser.contact}</TableCell>
-                  <TableCell className="text-muted-foreground">{organiser.requested_by}</TableCell>
+              {events.map(event => (
+                <TableRow key={event.event_id}>
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    {event.event_id}
+                  </TableCell>
+                  <TableCell className="font-medium">{event.name}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    {event.organiser_id}
+                  </TableCell>
                   <TableCell>
-                    <ApproveOrganiserButton organiserId={organiser.organiser_id} />
+                    <Badge variant={event.status === 'published' ? 'secondary' : 'outline'}>
+                      {event.status}
+                    </Badge>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-        )}
-      </section>
+        </TabsContent>
 
-      <section className="border-t border-border py-8">
-        <h2 className="font-heading text-lg font-medium text-foreground">All organisers</h2>
-        <Table className="mt-4">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Id</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Requested by</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {organisers.map(organiser => (
-              <TableRow key={organiser.organiser_id}>
-                <TableCell className="font-mono text-xs text-muted-foreground">
-                  {organiser.organiser_id}
-                </TableCell>
-                <TableCell className="font-medium">{organiser.name}</TableCell>
-                <TableCell>
-                  <Badge variant={organiser.status === 'approved' ? 'secondary' : 'outline'}>
-                    {organiser.status}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {organiser.requested_by ?? 'none'}
-                </TableCell>
+        <TabsContent value="releases" className="pt-6">
+          <p className="text-sm text-muted-foreground">
+            Every release on sale: slot capacity, price range and draw entries.
+          </p>
+          <Table className="mt-4">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Release</TableHead>
+                <TableHead>Event</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Opens</TableHead>
+                <TableHead>Mode</TableHead>
+                <TableHead className="text-right">Slots</TableHead>
+                <TableHead className="text-right">Capacity</TableHead>
+                <TableHead className="text-right">Price / person</TableHead>
+                <TableHead className="text-right">Entries</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </section>
+            </TableHeader>
+            <TableBody>
+              {releases.map(({ detail, date, declared }) => {
+                const prices = detail.slots.map(slot => slot.price_per_person_paise);
+                const low = prices.length ? Math.min(...prices) : 0;
+                const high = prices.length ? Math.max(...prices) : 0;
+                return (
+                  <TableRow key={detail.release_id}>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {detail.release_id}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {eventName.get(detail.event_id) ?? detail.event_id}
+                    </TableCell>
+                    <TableCell>{formatDate(date)}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {formatDateTime(detail.opens_at)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={detail.allocation_mode === 'fair_draw' ? 'secondary' : 'outline'}
+                      >
+                        {detail.allocation_mode === 'fair_draw' ? 'fair draw' : 'instant buy'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">{detail.slots.length}</TableCell>
+                    <TableCell className="text-right">
+                      {detail.slots.reduce((sum, slot) => sum + slot.capacity, 0)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {low === high ? formatPaise(low) : `${formatPaise(low)}–${formatPaise(high)}`}
+                    </TableCell>
+                    <TableCell className="text-right">{declared}</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </TabsContent>
 
-      <section className="border-t border-border py-8">
-        <h2 className="font-heading text-lg font-medium text-foreground">Events</h2>
-        <Table className="mt-4">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Id</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Organiser</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {events.map(event => (
-              <TableRow key={event.event_id}>
-                <TableCell className="font-mono text-xs text-muted-foreground">
-                  {event.event_id}
-                </TableCell>
-                <TableCell className="font-medium">{event.name}</TableCell>
-                <TableCell className="font-mono text-xs text-muted-foreground">
-                  {event.organiser_id}
-                </TableCell>
-                <TableCell>
-                  <Badge variant={event.status === 'published' ? 'secondary' : 'outline'}>
-                    {event.status}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </section>
-
-      <section className="border-t border-border py-8">
-        <h2 className="font-heading text-lg font-medium text-foreground">Releases</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Every release on sale: slot capacity, price range and draw entries.
-        </p>
-        <Table className="mt-4">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Release</TableHead>
-              <TableHead>Event</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Opens</TableHead>
-              <TableHead>Mode</TableHead>
-              <TableHead className="text-right">Slots</TableHead>
-              <TableHead className="text-right">Capacity</TableHead>
-              <TableHead className="text-right">Price / person</TableHead>
-              <TableHead className="text-right">Entries</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {releases.map(({ detail, date, declared }) => {
-              const prices = detail.slots.map(slot => slot.price_per_person_paise);
-              const low = prices.length ? Math.min(...prices) : 0;
-              const high = prices.length ? Math.max(...prices) : 0;
-              return (
-                <TableRow key={detail.release_id}>
-                  <TableCell className="font-mono text-xs text-muted-foreground">
-                    {detail.release_id}
-                  </TableCell>
-                  <TableCell className="font-medium">
-                    {eventName.get(detail.event_id) ?? detail.event_id}
-                  </TableCell>
-                  <TableCell>{formatDate(date)}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDateTime(detail.opens_at)}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={detail.allocation_mode === 'fair_draw' ? 'secondary' : 'outline'}
-                    >
-                      {detail.allocation_mode === 'fair_draw' ? 'fair draw' : 'instant buy'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">{detail.slots.length}</TableCell>
-                  <TableCell className="text-right">
-                    {detail.slots.reduce((sum, slot) => sum + slot.capacity, 0)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {low === high ? formatPaise(low) : `${formatPaise(low)}–${formatPaise(high)}`}
-                  </TableCell>
-                  <TableCell className="text-right">{declared}</TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </section>
-
-      <section className="border-t border-border py-8">
-        <h2 className="font-heading text-lg font-medium text-foreground">Demo controls</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Make the next call to a target behave badly, so a failure can be shown live. Only affects
-          this run.
-        </p>
-        <div className="mt-4 flex flex-col gap-6">
-          <ScenarioForm />
-          <ResetRunButton />
-        </div>
-      </section>
+        <TabsContent value="demo" className="pt-6">
+          <p className="text-sm text-muted-foreground">
+            Make the next call to a target behave badly, so a failure can be shown live. Only
+            affects this run.
+          </p>
+          <div className="mt-4 flex flex-col gap-6">
+            <ScenarioForm />
+            <ResetRunButton />
+          </div>
+        </TabsContent>
+      </Tabs>
     </main>
   );
 }

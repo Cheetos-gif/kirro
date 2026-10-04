@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
+import CountUp from '@/components/CountUp';
 import { Button } from '@/components/ui/button';
 
 /**
@@ -61,7 +62,7 @@ export function DrawVisualizer() {
         <div>
           <p className="text-[11px] text-muted-foreground">Entries in</p>
           <p className="font-heading text-3xl font-medium text-foreground">
-            {active.declarations}
+            <CountUp to={active.declarations} duration={0.8} className="tabular-nums" />
           </p>
           <p className="text-xs text-muted-foreground">
             {active.groupSize} seat{active.groupSize === 1 ? '' : 's'} each, {active.seatsNote}
@@ -76,7 +77,9 @@ export function DrawVisualizer() {
         <div className="text-muted-foreground">&rarr;</div>
         <div>
           <p className="text-[11px] text-kirro">Who got a spot</p>
-          <p className="font-heading text-3xl font-medium text-foreground">{allocatedCount}</p>
+          <p className="font-heading text-3xl font-medium text-foreground">
+            <CountUp to={allocatedCount} duration={0.8} className="tabular-nums" />
+          </p>
           <p className="text-xs text-muted-foreground">
             {active.declarations - allocatedCount} waitlisted, same order
           </p>
