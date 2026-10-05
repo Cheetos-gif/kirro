@@ -24,7 +24,9 @@ export function DeclareForm({
   useActionToast(state);
   const [groupSize, setGroupSize] = useState(2);
   const [maxPriceRupees, setMaxPriceRupees] = useState(300);
-  const [selectedSlots, setSelectedSlots] = useState<string[]>(() => slots.map(slot => slot.slot_id));
+  const [selectedSlots, setSelectedSlots] = useState<string[]>(() =>
+    slots.map(slot => slot.slot_id)
+  );
   const reservePaise = Math.max(groupSize, 0) * Math.max(maxPriceRupees, 0) * 100;
 
   // The mock refuses a bid whose ceiling cannot reach the cheapest slot the caller accepted (#35), so
@@ -117,15 +119,17 @@ export function DeclareForm({
           </p>
         ) : ceilingTooLow ? (
           <p role="status" className="text-sm text-destructive">
-            Your maximum is below the cheapest slot you picked ({formatPaise(Math.min(...selectedPrices))}),
-            so this bid could not win. Raise it or pick a cheaper slot.
+            Your maximum is below the cheapest slot you picked (
+            {formatPaise(Math.min(...selectedPrices))}), so this bid could not win. Raise it or pick
+            a cheaper slot.
           </p>
         ) : null}
 
         <p className="text-xs text-muted-foreground">
-          We&apos;ll reserve {formatPaise(reservePaise)} now (people &times; your max), against a
-          mock Pine Labs mandate. If you lose, it&apos;s released, not charged. The result comes to
-          your WhatsApp number from <span className="text-foreground">settings</span>.
+          We&apos;ll reserve {formatPaise(reservePaise)} now (people &times; your max) as a
+          temporary payment hold (a mock Pine Labs hold for this demo). If you lose, it&apos;s
+          released, not charged. The result comes to your WhatsApp number from{' '}
+          <span className="text-foreground">settings</span>.
         </p>
 
         <Button

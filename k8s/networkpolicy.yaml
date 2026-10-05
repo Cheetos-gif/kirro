@@ -35,6 +35,32 @@ spec:
         - protocol: TCP
           port: 8081
 ---
+# The WhatsApp webhook bridge (ADR-022): same shape as kirro-mock — public (Traefik) + same
+# namespace, since Meta's Cloud API calls /webhook through the public Ingress.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kirro-whatsapp-ingress
+  namespace: kirro
+spec:
+  podSelector:
+    matchLabels:
+      app: kirro-whatsapp
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 8083
+---
 # The room server (ADR-017).
 #
 # Two very different traffic paths meet this pod, so the policy has two rules:

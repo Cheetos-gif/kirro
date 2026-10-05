@@ -31,7 +31,7 @@ export function SiteFooter() {
           className="flex items-center gap-1.5 hover:text-foreground"
         >
           <GithubMark />
-          <span className="font-mono">Source</span>
+          <span>Source</span>
         </a>
       </div>
     </footer>

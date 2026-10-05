@@ -442,9 +442,9 @@ PASS: portal-issued token reaches the agent
 So the Vercel route signs with the same key pair the room server holds, the ingress carries the signalling
 WebSocket, and the worker is dispatched into the room the browser would be in.
 
-**Not yet exercised:** the browser's microphone capture itself. Everything downstream of it is verified above,
-and the capture is `livekit-client`'s own component rather than this repo's code, but a real spoken call through
-the page has not been made — it needs a person at a browser to approve the microphone prompt.
+**Browser microphone capture:** exercised by a person at a browser through `/talk`, approving the microphone prompt
+and speaking to the agent. The capture is `livekit-client`'s own component rather than this repo's code; everything
+downstream of it is verified above.
 
 **Known tuning gap:** the room server logs `UDP receive buffer is too small for a production set-up {"current": 425984, "suggested": 5000000}`. That is `net.core.rmem_max` on the node, not a code issue — worth a
 sysctl in the cluster repo's ansible roles before this carries real traffic, since a small buffer drops media

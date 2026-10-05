@@ -10,7 +10,7 @@ vi.mock('next-auth/react', () => ({ signIn: vi.fn(), signOut: vi.fn() }));
 const viewer: Viewer = { email: 'org@example.com', role: 'organiser' };
 
 describe('SiteHeader mobile nav', () => {
-  it('opens a drawer with the signed-in viewer\'s links behind the menu trigger', async () => {
+  it("opens a drawer with the signed-in viewer's links behind the menu trigger", async () => {
     render(<SiteHeader viewer={viewer} />);
 
     // The desktop nav (CSS-hidden, not DOM-removed, at this width in jsdom) already renders these

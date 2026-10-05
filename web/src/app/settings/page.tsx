@@ -33,16 +33,14 @@ export default async function SettingsPage() {
         <h1 className="font-heading text-2xl font-medium tracking-tight text-foreground">
           Settings
         </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Where KIRRO reaches you about a draw.
-        </p>
+        <p className="mt-2 text-sm text-muted-foreground">Where KIRRO reaches you about a draw.</p>
       </header>
 
       <section className="border-t border-border py-8">
         <h2 className="font-heading text-lg font-medium text-foreground">Result notifications</h2>
         <p className="mt-1 mb-4 max-w-prose text-sm text-muted-foreground">
-          The draw result is delivered on WhatsApp, so a number is required before you can enter one.
-          WhatsApp also only lets a business message you inside a 24-hour window you open by
+          The draw result is delivered on WhatsApp, so a number is required before you can enter
+          one. WhatsApp also only lets a business message you inside a 24-hour window you open by
           messaging it first &mdash; the{' '}
           <Link href="/talk" className="text-foreground underline underline-offset-4">
             Talk to KIRRO
@@ -66,7 +64,12 @@ export default async function SettingsPage() {
         <p className="mt-1 text-sm text-muted-foreground">
           Signed in as <span className="text-foreground">{viewer.email}</span>.
         </p>
-        <Button className="mt-4 w-fit" variant="outline" render={<Link href="/dashboard" />} nativeButton={false}>
+        <Button
+          className="mt-4 w-fit"
+          variant="outline"
+          render={<Link href="/dashboard" />}
+          nativeButton={false}
+        >
           My bookings
         </Button>
       </section>

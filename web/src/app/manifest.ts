@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: 'KIRRO',
     short_name: 'KIRRO',
     description:
-      'KIRRO books scarce slots: courts, screenings, passes. Contested slots go to a seeded fair draw; the rest sell first come, first served.',
+      'KIRRO books scarce slots: courts, screenings, passes. Popular slots get a fair pick; the rest you can just buy, first come, first served.',
     lang: 'en',
     categories: ['shopping', 'sports', 'entertainment'],
     start_url: '/',

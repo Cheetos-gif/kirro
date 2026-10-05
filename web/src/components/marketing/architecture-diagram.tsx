@@ -1,20 +1,20 @@
 const NODES = [
-  { label: 'User', detail: 'WhatsApp or chat' },
-  { label: 'KIRRO', detail: 'declare, read back, confirm' },
-  { label: 'AgenticOrg', detail: "Pine Labs\u2019 agent platform" },
+  { label: 'You', detail: 'WhatsApp or chat' },
+  { label: 'KIRRO', detail: 'Declares, reads back, confirms' },
+  { label: 'AgenticOrg', detail: 'Pine Labs\u2019 agent platform' },
 ] as const;
 
 const CONNECTORS = [
-  { name: 'Venue inventory', does: 'catalogue, holds, bookings' },
-  { name: 'DIFD', does: 'the seeded fair draw' },
-  { name: 'Pine Labs', does: 'mandate hold, capture, release' },
+  { name: 'Venue inventory', does: 'Catalogue, holds, bookings' },
+  { name: 'The draw', does: 'Runs the seeded, fair draw' },
+  { name: 'Pine Labs', does: 'Holds, charges, and releases payment' },
 ] as const;
 
 /**
- * How a declaration actually reaches the mock services: user to the KIRRO agent, the agent runs on
- * AgenticOrg (Pine Labs' platform), AgenticOrg calls out to the connectors below. No invented
- * integrations — these three are the same mocks the rest of this site and docs/connectors.md
- * describe.
+ * How a declaration actually reaches the mock services: you talk to the KIRRO agent, the agent
+ * runs on AgenticOrg (Pine Labs' platform), and AgenticOrg calls out to the services below. No
+ * invented integrations — these three are the same mocks the rest of this site and
+ * docs/connectors.md describe.
  */
 export function ArchitectureDiagram() {
   return (
@@ -23,7 +23,7 @@ export function ArchitectureDiagram() {
         {NODES.map((node, index) => (
           <div key={node.label} className="flex flex-col sm:flex-1 sm:flex-row sm:items-stretch">
             {index > 0 ? (
-              <div className="flex h-6 items-center justify-center font-mono text-muted-foreground sm:h-auto sm:w-8">
+              <div className="flex h-6 items-center justify-center text-muted-foreground sm:h-auto sm:w-8">
                 <span className="sm:hidden">&darr;</span>
                 <span className="hidden sm:inline">&rarr;</span>
               </div>
@@ -36,15 +36,18 @@ export function ArchitectureDiagram() {
         ))}
       </div>
 
-      <div className="flex items-center gap-2 py-1 pl-1 font-mono text-xs text-muted-foreground">
+      <div className="flex items-center gap-2 py-1 pl-1 text-xs text-muted-foreground">
         <span>&darr;</span>
-        <span>fans out to</span>
+        <span>which in turn relies on</span>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {CONNECTORS.map(connector => (
-          <div key={connector.name} className="flex flex-col gap-0.5 border border-border px-4 py-3">
-            <p className="font-mono text-xs text-foreground">{connector.name}</p>
+          <div
+            key={connector.name}
+            className="flex flex-col gap-0.5 border border-border px-4 py-3"
+          >
+            <p className="text-xs font-medium text-foreground">{connector.name}</p>
             <p className="text-xs text-muted-foreground">{connector.does}</p>
           </div>
         ))}

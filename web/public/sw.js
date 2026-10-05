@@ -14,7 +14,9 @@ self.addEventListener('activate', event => {
   event.waitUntil(
     caches
       .keys()
-      .then(names => Promise.all(names.filter(name => name !== CACHE_NAME).map(name => caches.delete(name))))
+      .then(names =>
+        Promise.all(names.filter(name => name !== CACHE_NAME).map(name => caches.delete(name)))
+      )
       .then(() => self.clients.claim())
   );
 });
@@ -28,7 +30,8 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-  const isStaticAsset = url.pathname.startsWith('/_next/static/') || url.pathname.startsWith('/_next/image');
+  const isStaticAsset =
+    url.pathname.startsWith('/_next/static/') || url.pathname.startsWith('/_next/image');
 
   if (isStaticAsset) {
     event.respondWith(
@@ -68,7 +71,8 @@ self.addEventListener('push', event => {
 // otherwise opens a new one. Standard pattern for "clicking a push notification acts like a link".
 self.addEventListener('notificationclick', event => {
   event.notification.close();
-  const targetUrl = event.notification.data && event.notification.data.url ? event.notification.data.url : '/';
+  const targetUrl =
+    event.notification.data && event.notification.data.url ? event.notification.data.url : '/';
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {

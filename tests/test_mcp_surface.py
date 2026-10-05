@@ -613,3 +613,87 @@ def test_an_event_word_resolves_to_the_one_release_still_open(mcp_base):
     listed = asyncio.run(ambiguous())
     assert listed["status_code"] == 404
     assert {item["release_id"] for item in listed["body"]["releases"]} == {"rel_tennis_sat", second_id}
+
+
+def _portal_event_with_a_release(base, name, aliases, generic_aliases, key):
+    """Create an event the way the portal's organiser surface does, so it gets a sequential `ev_NNNN`
+    id rather than a semantic one, plus one open release on it."""
+    org = httpx.post(
+        f"{base}/venue/organisers",
+        json={"name": f"Org {key}", "contact": "org@example.test", "requested_by": "org@example.test"},
+        headers={**H, "Idempotency-Key": f"org-{key}"},
+        timeout=10,
+    ).json()
+    httpx.post(f"{base}/venue/organisers/{org['organiser_id']}/approve", headers=H, timeout=10)
+    event = httpx.post(
+        f"{base}/venue/events",
+        json={
+            "name": name,
+            "organiser_id": org["organiser_id"],
+            "status": "published",
+            "aliases": aliases,
+            "generic_aliases": generic_aliases,
+        },
+        headers={**H, "Idempotency-Key": f"ev-{key}"},
+        timeout=10,
+    ).json()
+    release = httpx.post(
+        f"{base}/venue/releases",
+        json={
+            "event_id": event["event_id"],
+            "date": "2099-05-01",
+            "opens_at": "2099-05-01T18:00:00Z",
+            "slots": [
+                {
+                    "label": "Front Standing, 20:00",
+                    "starts_at": "2099-05-01T20:00:00Z",
+                    "capacity": 10,
+                    "price_per_person_paise": 450000,
+                }
+            ],
+        },
+        headers={**H, "Idempotency-Key": f"rel-{key}"},
+        timeout=10,
+    ).json()
+    return event["event_id"], release["release_id"]
+
+
+def test_a_portal_created_event_is_reachable_by_name_and_by_alias(mcp_base):
+    """The Round 3 concert demo: an event seeded from the portal gets a sequential id (`ev_0003`), so
+    matching free text against ids alone made its name and aliases unreachable — the agent could never
+    find the release it was told about out loud. Name, alias and generic alias must all resolve it, while
+    the seeded semantic-id path keeps working."""
+    event_id, release_id = _portal_event_with_a_release(
+        mcp_base, "Stadium Concert (Front Standing)", ["concert", "gig"], ["show", "band"], "concert"
+    )
+    assert event_id.startswith("ev_0")
+
+    async def go():
+        async with session(f"{mcp_base}/venue/mcp") as s:
+            return [
+                payload(await s.call_tool("get_release", {"release_id": word, "run_id": "mcp"}))
+                for word in ("concert", "stadium concert", "gig", "band", "badminton")
+            ]
+
+    by_alias, by_name, by_second_alias, by_generic, seeded = asyncio.run(go())
+    for looked in (by_alias, by_name, by_second_alias, by_generic):
+        assert looked["status_code"] == 200, looked
+        assert looked["body"]["release_id"] == release_id
+        assert looked["body"]["event_name"] == "Stadium Concert (Front Standing)"
+    assert seeded["status_code"] == 200 and seeded["body"]["release_id"] == "rel_badminton_sat"
+
+
+def test_a_generic_alias_shared_by_two_events_stays_ambiguous(mcp_base):
+    """ "court" is a generic alias of both badminton and tennis by design: the agent is supposed to ask
+    which one. Resolving names and aliases must not collapse that to a single release."""
+
+    async def go():
+        async with session(f"{mcp_base}/venue/mcp") as s:
+            listed = payload(await s.call_tool("list_releases", {"event": "court", "run_id": "mcp"}))
+            looked = payload(await s.call_tool("get_release", {"release_id": "court", "run_id": "mcp"}))
+            return listed, looked
+
+    listed, looked = asyncio.run(go())
+    assert {item["release_id"] for item in listed["body"]["releases"]} == {"rel_badminton_sat", "rel_tennis_sat"}
+    assert looked["status_code"] == 404
+    assert {item["release_id"] for item in looked["body"]["releases"]} == {"rel_badminton_sat", "rel_tennis_sat"}

@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from 'react';
 
+import CountUp from '@/components/CountUp';
+import { Button } from '@/components/ui/button';
+
 /**
  * Three real outcomes of allocator.engine.allocate, run against the exact bid helper used in
  * tests/test_allocator.py (seed "rel1"/"2026-10-02T06:00:00Z"). Verified by executing the real
@@ -57,24 +60,26 @@ export function DrawVisualizer() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
         <div>
-          <p className="font-mono text-[11px] tracking-wide text-muted-foreground">DECLARATIONS</p>
+          <p className="text-[11px] text-muted-foreground">Entries in</p>
           <p className="font-heading text-3xl font-medium text-foreground">
-            {active.declarations}
+            <CountUp to={active.declarations} duration={0.8} className="tabular-nums" />
           </p>
           <p className="text-xs text-muted-foreground">
             {active.groupSize} seat{active.groupSize === 1 ? '' : 's'} each, {active.seatsNote}
           </p>
         </div>
-        <div className="font-mono text-muted-foreground">&rarr;</div>
+        <div className="text-muted-foreground">&rarr;</div>
         <div>
-          <p className="font-mono text-[11px] tracking-wide text-muted-foreground">SEED</p>
-          <p className="font-mono text-sm text-foreground">sha256(release_id + window_open)</p>
-          <p className="text-xs text-muted-foreground">fixes the draw order</p>
+          <p className="text-[11px] text-muted-foreground">How we pick</p>
+          <p className="text-sm text-foreground">A fair pick, not a race</p>
+          <p className="text-xs text-muted-foreground">Doesn&apos;t matter who asked first</p>
         </div>
-        <div className="font-mono text-muted-foreground">&rarr;</div>
+        <div className="text-muted-foreground">&rarr;</div>
         <div>
-          <p className="font-mono text-[11px] tracking-wide text-kirro">ALLOCATED</p>
-          <p className="font-heading text-3xl font-medium text-foreground">{allocatedCount}</p>
+          <p className="text-[11px] text-kirro">Who got a spot</p>
+          <p className="font-heading text-3xl font-medium text-foreground">
+            <CountUp to={allocatedCount} duration={0.8} className="tabular-nums" />
+          </p>
           <p className="text-xs text-muted-foreground">
             {active.declarations - allocatedCount} waitlisted, same order
           </p>
@@ -97,7 +102,7 @@ export function DrawVisualizer() {
             >
               {claim.id + 1}
             </div>
-            <span className="font-mono text-[9px] text-muted-foreground sm:text-[10px]">
+            <span className="text-[9px] text-muted-foreground sm:text-[10px]">
               {claim.allocated ? 'seated' : 'wait'}
             </span>
           </div>
@@ -111,15 +116,17 @@ export function DrawVisualizer() {
         </p>
         <div className="flex shrink-0 items-center gap-1.5">
           {CASES.map((c, i) => (
-            <button
+            <Button
               key={c.declarations + c.seatsNote}
               type="button"
+              variant="ghost"
+              size="icon-xs"
               aria-label={`Show case ${i + 1}`}
               onClick={() => setIndex(i)}
               className={
                 i === index
-                  ? 'size-1.5 rounded-full bg-kirro'
-                  : 'size-1.5 rounded-full bg-border transition-colors hover:bg-muted-foreground'
+                  ? 'size-1.5 rounded-full border-none bg-kirro p-0'
+                  : 'size-1.5 rounded-full border-none bg-border p-0 hover:bg-muted-foreground'
               }
             />
           ))}

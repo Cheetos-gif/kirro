@@ -11,7 +11,7 @@ const STAGES = [
  */
 export function AllocationFlow() {
   return (
-    <div className="flex flex-col items-start gap-0 font-mono text-xs tracking-tight text-muted-foreground">
+    <div className="flex flex-col items-start gap-0 text-xs text-muted-foreground">
       {STAGES.map((stage, index) => (
         <div key={stage.label} className="flex flex-col items-start">
           <div className="flex items-center gap-3">

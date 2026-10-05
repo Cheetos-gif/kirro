@@ -93,15 +93,13 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
         {releases.map(release => (
           <Card key={release.release_id}>
             <CardHeader>
-              <CardTitle className="flex items-center gap-3 font-mono text-sm font-normal">
+              <CardTitle className="flex items-center gap-3 text-sm font-normal">
                 <span
                   className={
-                    release.allocation_mode === 'fair_draw'
-                      ? 'tracking-wide text-kirro'
-                      : 'tracking-wide text-muted-foreground'
+                    release.allocation_mode === 'fair_draw' ? 'text-kirro' : 'text-muted-foreground'
                   }
                 >
-                  {release.allocation_mode === 'fair_draw' ? 'DRAW' : 'BUY NOW'}
+                  {release.allocation_mode === 'fair_draw' ? 'Fair draw' : 'Buy now'}
                 </span>
                 <span className="font-sans text-foreground">
                   {release.allocation_mode === 'fair_draw' ? 'Draw runs' : 'On sale from'}{' '}

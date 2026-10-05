@@ -7,12 +7,12 @@ const STEPS = [
   {
     n: '02',
     title: 'Reserve',
-    body: 'Money held against a mandate, not a card charge.',
+    body: 'Money held, not a card charge, until the draw is settled.',
   },
   {
     n: '03',
     title: 'Draw',
-    body: 'One seeded draw runs when the window closes.',
+    body: 'We pick fairly once the window closes.',
   },
   {
     n: '04',
@@ -36,7 +36,7 @@ export function MechanismTimeline() {
               className={`hidden h-px flex-1 bg-border sm:block ${index === 0 ? 'sm:invisible' : ''}`}
               aria-hidden
             />
-            <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-border font-mono text-[11px] text-muted-foreground">
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-border text-[11px] text-muted-foreground">
               {step.n}
             </span>
             <span

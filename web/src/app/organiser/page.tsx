@@ -56,7 +56,8 @@ export default async function OrganiserPage() {
         <h1 className="font-heading text-2xl font-medium tracking-tight text-foreground">
           {mine.name}
         </h1>
-        <p className="mt-1 font-mono text-xs text-muted-foreground">Organiser &middot; {viewer.email}</p>
+        <p className="mt-1 text-sm text-muted-foreground">Organiser</p>
+        <p className="text-sm text-muted-foreground">{viewer.email}</p>
       </header>
 
       <section className="border-t border-border py-8">
@@ -92,17 +93,17 @@ export default async function OrganiserPage() {
                           key={release.release_id}
                           className="flex flex-wrap items-center gap-x-3 gap-y-1"
                         >
-                          <span className="font-mono text-xs text-muted-foreground">
+                          <span className="text-xs text-muted-foreground">
                             {formatDate(release.opens_at)}
                           </span>
                           <span
                             className={
                               release.allocation_mode === 'fair_draw'
-                                ? 'font-mono text-xs tracking-wide text-kirro'
-                                : 'font-mono text-xs tracking-wide text-muted-foreground'
+                                ? 'text-xs text-kirro'
+                                : 'text-xs text-muted-foreground'
                             }
                           >
-                            {release.allocation_mode === 'fair_draw' ? 'DRAW' : 'BUY NOW'}
+                            {release.allocation_mode === 'fair_draw' ? 'Draw' : 'Buy now'}
                           </span>
                           <span className="text-muted-foreground">
                             {release.allocation_mode === 'fair_draw'

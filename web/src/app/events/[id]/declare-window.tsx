@@ -61,7 +61,8 @@ export function DeclareWindow({
   const endMs = Date.parse(opensAt);
   // Until the client clock exists, only an open-from-creation release (no scheduled start) is
   // treated as open; anything else waits for the first tick.
-  const open = now === null ? startMs === null : (startMs === null || now >= startMs) && now < endMs;
+  const open =
+    now === null ? startMs === null : (startMs === null || now >= startMs) && now < endMs;
 
   let status: string;
   if (now === null) {
@@ -78,7 +79,7 @@ export function DeclareWindow({
     <div className="flex flex-col gap-3">
       <p
         role="status"
-        className="w-fit rounded-full border border-border px-3 py-1 font-mono text-xs tracking-wide text-muted-foreground uppercase"
+        className="w-fit rounded-full border border-clay/30 bg-clay-dim px-3 py-1 text-xs text-clay"
       >
         {status}
       </p>

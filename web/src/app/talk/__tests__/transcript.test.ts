@@ -22,17 +22,19 @@ describe('transcriptAsText', () => {
         line('them|2', false, 'Which date do you want?'),
         line('me|3', true, 'the 3rd of October'),
       ],
-      null,
+      null
     );
     expect(text).toBe(
       'You: I want a tennis court on Saturday\n\n' +
         'KIRRO: Which date do you want?\n\n' +
-        'You: the 3rd of October\n',
+        'You: the 3rd of October\n'
     );
   });
 
   it('omits the header when the call start is unknown', () => {
-    expect(transcriptAsText([line('them|1', false, 'hello')], null).startsWith('KIRRO:')).toBe(true);
+    expect(transcriptAsText([line('them|1', false, 'hello')], null).startsWith('KIRRO:')).toBe(
+      true
+    );
   });
 
   it('dates the transcript when the start is known', () => {
@@ -49,7 +51,7 @@ describe('transcriptAsText', () => {
     const text = transcriptAsText(
       [line('me|1', true, 'hi')],
       new Date('2026-10-03T09:15:00Z'),
-      'call_29fbe992aa8d',
+      'call_29fbe992aa8d'
     );
     expect(text).toContain('Call id: call_29fbe992aa8d\n');
     expect(text.startsWith('KIRRO voice transcript —')).toBe(true);
@@ -75,7 +77,12 @@ describe('mergeTurn', () => {
 
   it('rewrites a growing segment in place instead of appending a line per revision', () => {
     let lines: TranscriptLine[] = [];
-    for (const text of ['Hello!', 'Hello! How', 'Hello! How can', 'Hello! How can I assist you today with your booking needs?']) {
+    for (const text of [
+      'Hello!',
+      'Hello! How',
+      'Hello! How can',
+      'Hello! How can I assist you today with your booking needs?',
+    ]) {
       lines = mergeTurn(lines, line('them|seg-1', false, text));
     }
     expect(lines).toHaveLength(1);

@@ -1,15 +1,22 @@
 import { isApiError } from '@/api';
-import { AllocationFlow } from '@/components/marketing/allocation-flow';
+import DotGrid from '@/components/DotGrid';
 import { AgentStats } from '@/components/marketing/agent-stats';
+import { AllocationFlow } from '@/components/marketing/allocation-flow';
 import { ArchitectureDiagram } from '@/components/marketing/architecture-diagram';
 import { DrawVisualizer } from '@/components/marketing/draw-visualizer';
 import { EvidenceGrid } from '@/components/marketing/evidence-grid';
 import { InventoryList } from '@/components/marketing/inventory-list';
 import { MechanismTimeline } from '@/components/marketing/mechanism-timeline';
-import { SectionLabel } from '@/components/marketing/section-label';
 import { QuickDemoButton } from '@/components/quick-demo-button';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AGENTICORG_URL } from '@/constants';
 import { currentViewer } from '@/lib/auth/roles';
 import * as api from '@/lib/kirro/api';
@@ -88,19 +95,36 @@ export default async function HomePage() {
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-6">
-      {/* Hero: copy on the left, the mechanism on the right. Asymmetric on purpose. */}
-      <section className="grid grid-cols-1 gap-10 py-16 sm:py-24 lg:grid-cols-12 lg:gap-8">
-        <div className="lg:col-span-7">
-          <p className="font-mono text-xs tracking-wide text-muted-foreground">
-            declare <span className="text-kirro">&rarr;</span> draw{' '}
-            <span className="text-kirro">&rarr;</span> book
-          </p>
-          <h1 className="mt-4 max-w-xl font-heading text-4xl leading-[1.08] font-medium tracking-tight text-foreground sm:text-5xl">
+      {/* Hero: copy on the left, the mechanism on the right. Asymmetric on purpose. A faint dot
+          grid sits behind it — courts, screenings, seats are all grids of slots, and the dots
+          brighten near the cursor rather than announcing themselves outright. */}
+      <section className="relative grid grid-cols-1 gap-10 overflow-hidden py-16 sm:py-24 lg:grid-cols-12 lg:gap-8">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_65%_75%_at_30%_35%,black,transparent_75%)]"
+        >
+          <DotGrid
+            dotSize={3}
+            gap={26}
+            baseColor="#27241f"
+            activeColor="#5fc199"
+            proximity={120}
+            shockRadius={160}
+            shockStrength={2}
+            maxSpeed={3000}
+            resistance={800}
+            returnDuration={1.2}
+            className="h-full w-full !p-0"
+          />
+        </div>
+        <div className="relative z-10 lg:col-span-7">
+          <h1 className="font-heading text-4xl leading-[1.08] font-medium tracking-tight text-foreground sm:text-5xl">
             Booking scarce slots shouldn&apos;t reward whoever clicks fastest.
           </h1>
           <p className="mt-5 max-w-md text-base text-muted-foreground">
-            KIRRO holds your spot, enters a seeded draw when a slot is contested, and books it
-            outright when it isn&apos;t. Arrival time decides nothing.
+            Tell KIRRO the slot you want, your group size, and the most you&apos;ll pay. If
+            it&apos;s free, it&apos;s yours. If other people want it too, everyone gets an equal,
+            fair shot &mdash; not just whoever showed up first.
           </p>
           {viewer?.role === 'organiser' || viewer?.role === 'admin' ? (
             <div className="mt-6">
@@ -108,30 +132,32 @@ export default async function HomePage() {
             </div>
           ) : null}
         </div>
-        <div className="flex items-center lg:col-span-5">
+        <div className="relative z-10 flex items-center lg:col-span-5">
           <AllocationFlow />
         </div>
       </section>
 
-      {/* The draw: the one genuinely interesting mechanism, given the most visual weight. */}
-      <section className="border-t border-border py-14">
-        <SectionLabel>The draw</SectionLabel>
-        <h2 className="mt-2 font-heading text-2xl font-medium tracking-tight text-foreground">
-          One seeded draw, run once the window closes
-        </h2>
-        <div className="mt-8">
-          <DrawVisualizer />
-        </div>
-      </section>
-
-      {/* How it works */}
+      {/* How it works: tabbed so the live demo and the step list don't both claim full-page
+          height — a visitor picks one, the other stays a click away. */}
       <section className="border-t border-border py-14">
         <h2 className="font-heading text-2xl font-medium tracking-tight text-foreground">
           How it works
         </h2>
-        <div className="mt-8">
-          <MechanismTimeline />
-        </div>
+        <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+          When a slot fills up, everyone gets a fair shot &mdash; not just whoever showed up first.
+        </p>
+        <Tabs defaultValue="demo" className="mt-8">
+          <TabsList>
+            <TabsTrigger value="demo">See it in action</TabsTrigger>
+            <TabsTrigger value="steps">The steps</TabsTrigger>
+          </TabsList>
+          <TabsContent value="demo" className="pt-6">
+            <DrawVisualizer />
+          </TabsContent>
+          <TabsContent value="steps" className="pt-6">
+            <MechanismTimeline />
+          </TabsContent>
+        </Tabs>
       </section>
 
       {/* Inventory */}
@@ -140,51 +166,56 @@ export default async function HomePage() {
           <h2 className="font-heading text-2xl font-medium tracking-tight text-foreground">
             What&apos;s on sale
           </h2>
-          <p className="text-sm text-muted-foreground">Organisers pick a draw or first come, first served.</p>
+          <p className="text-sm text-muted-foreground">
+            Organisers pick a draw or first come, first served.
+          </p>
         </div>
         <div className="mt-6">
           <InventoryList releases={releases} />
         </div>
       </section>
 
-      {/* Architecture */}
+      {/* Under the hood: the judge-facing mechanism detail, collapsed by default so a browsing
+          visitor isn't forced to scroll past it to reach the page footer. */}
       <section className="border-t border-border py-14">
-        <SectionLabel>How a request reaches the mock services</SectionLabel>
-        <h2 className="mt-2 font-heading text-2xl font-medium tracking-tight text-foreground">
-          The agent, not the form
-        </h2>
-        <p className="mt-3 max-w-xl text-sm text-muted-foreground">
-          This site is one way to declare interest. KIRRO runs as a Virtual Employee on Pine
-          Labs&apos; AgenticOrg platform &mdash; the agent does the same declare, draw, and book
-          sequence over WhatsApp or chat.
-        </p>
-        <div className="mt-8">
-          <ArchitectureDiagram />
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="mt-6 w-fit"
-          render={<a href={AGENTICORG_URL} target="_blank" rel="noreferrer" />}
-          nativeButton={false}
-        >
-          Open KIRRO on AgenticOrg
-        </Button>
-      </section>
-
-      {/* Evidence */}
-      <section className="border-t border-border pt-14 pb-16">
         <h2 className="font-heading text-2xl font-medium tracking-tight text-foreground">
-          What&apos;s real
+          Under the hood
         </h2>
-        {agentStats.length ? (
-          <div className="mt-6">
-            <AgentStats agents={agentStats} />
-          </div>
-        ) : null}
-        <div className="mt-6">
-          <EvidenceGrid />
-        </div>
+        <Accordion multiple className="mt-6">
+          <AccordionItem value="architecture">
+            <AccordionTrigger>How your request actually gets booked</AccordionTrigger>
+            <AccordionContent>
+              <p className="text-sm text-muted-foreground">
+                This site is one way to declare interest. KIRRO also runs as an agent on Pine
+                Labs&apos; AgenticOrg platform &mdash; it does the same declare, draw, and book
+                sequence over WhatsApp or chat.
+              </p>
+              <div className="mt-6">
+                <ArchitectureDiagram />
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-6 w-fit"
+                render={<a href={AGENTICORG_URL} target="_blank" rel="noreferrer" />}
+                nativeButton={false}
+              >
+                Open KIRRO on AgenticOrg
+              </Button>
+            </AccordionContent>
+          </AccordionItem>
+          <AccordionItem value="evidence">
+            <AccordionTrigger>What&apos;s real</AccordionTrigger>
+            <AccordionContent>
+              {agentStats.length ? (
+                <div className="mb-6">
+                  <AgentStats agents={agentStats} />
+                </div>
+              ) : null}
+              <EvidenceGrid />
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </section>
     </main>
   );

@@ -28,7 +28,8 @@ export default async function TalkPage({
   const events = await api.listEvents({ status: 'published' });
   const { demo } = await searchParams;
 
-  let demoPrompt: { name: string; opensAt: string; startsAt: string | null; slots: Slot[] } | null = null;
+  let demoPrompt: { name: string; opensAt: string; startsAt: string | null; slots: Slot[] } | null =
+    null;
   const demoEvent = demo ? events.find(event => event.event_id === demo) : undefined;
   if (demoEvent) {
     const summaries = await api.listReleases({ event_id: demoEvent.event_id });

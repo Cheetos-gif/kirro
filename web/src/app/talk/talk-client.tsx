@@ -12,12 +12,14 @@ import {
   useVoiceAssistant,
   VoiceAssistantControlBar,
 } from '@livekit/components-react';
+
 import '@livekit/components-styles';
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import type { ReceivedChatMessage } from '@livekit/components-react';
 import { ConnectionState } from 'livekit-client';
 import type { TextStreamReader } from 'livekit-client';
-import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,7 +38,8 @@ const VOICE_ERROR_TOPIC = 'kirro.voice_error';
 const VOICE_OK_TOPIC = 'kirro.voice_ok';
 
 /** Shown when the worker's failure payload carries no message of its own. */
-const DEFAULT_VOICE_NOTICE = 'KIRRO is having trouble speaking right now. Your words are still being heard.';
+const DEFAULT_VOICE_NOTICE =
+  'KIRRO is having trouble speaking right now. Your words are still being heard.';
 
 /** Kirro's own WhatsApp Business number. The draw result is delivered here, but only inside a 24-hour
  * window the user opens themselves by messaging first, so the CTA below exists to make that one message
@@ -83,7 +86,9 @@ export function transcriptAsText(
   const started = startedAt ? `KIRRO voice transcript — ${startedAt.toLocaleString()}\n` : '';
   const id = callId ? `Call id: ${callId}\n` : '';
   const header = started || id ? `${started}${id}\n` : '';
-  return header + lines.map(line => `${line.mine ? 'You' : 'KIRRO'}: ${line.text}`).join('\n\n') + '\n';
+  return (
+    header + lines.map(line => `${line.mine ? 'You' : 'KIRRO'}: ${line.text}`).join('\n\n') + '\n'
+  );
 }
 
 /**
@@ -208,9 +213,7 @@ function Call({
 
   return (
     <>
-      <span className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
-        {label}
-      </span>
+      <span className="text-xs text-muted-foreground">{label}</span>
       <BarVisualizer
         state={state}
         trackRef={audioTrack}
@@ -240,6 +243,7 @@ export function TalkClient({
   const [callId, setCallId] = useState<string | null>(null);
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
   const [whatsAppText, setWhatsAppText] = useState<string | null>(null);
+  const [whatsAppSent, setWhatsAppSent] = useState(false);
   const scrollBox = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -249,7 +253,11 @@ export function TalkClient({
   // Which events the caller has named so far, recomputed as captions arrive. Purely a display
   // affordance over text LiveKit already gives the browser — it never influences the agent.
   const mentioned = useMemo(
-    () => matchEventsInTranscript(lines.map(line => line.text), events),
+    () =>
+      matchEventsInTranscript(
+        lines.map(line => line.text),
+        events
+      ),
     [lines, events]
   );
 
@@ -266,6 +274,7 @@ export function TalkClient({
   }, []);
 
   const onReserved = useCallback((confirmation: string) => {
+    setWhatsAppSent(false);
     setWhatsAppText(whatsAppOpeningMessage(confirmation));
   }, []);
 
@@ -278,6 +287,7 @@ export function TalkClient({
     setCallId(null);
     setVoiceNotice(null);
     setWhatsAppText(null);
+    setWhatsAppSent(false);
     setStartedAt(new Date());
     try {
       const response = await fetch('/api/voice/token', { method: 'POST' });
@@ -336,7 +346,12 @@ export function TalkClient({
             className="flex flex-col gap-4"
           >
             <RoomAudioRenderer />
-            <Call onTurn={onTurn} onCallId={onCallId} onVoiceError={onVoiceError} onReserved={onReserved} />
+            <Call
+              onTurn={onTurn}
+              onCallId={onCallId}
+              onVoiceError={onVoiceError}
+              onReserved={onReserved}
+            />
             <Button variant="outline" className="w-fit" onClick={stop}>
               End call
             </Button>
@@ -346,9 +361,7 @@ export function TalkClient({
             <Button onClick={start} disabled={connecting}>
               {connecting ? 'Connecting…' : lines.length ? 'Start again' : 'Start call'}
             </Button>
-            <span className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
-              Not connected
-            </span>
+            <span className="text-xs text-muted-foreground">Not connected</span>
           </div>
         )}
 
@@ -368,8 +381,8 @@ export function TalkClient({
         <section className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
-              <h2 className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
-                Transcript{lines.length ? ` · ${lines.length} turns` : ''}
+              <h2 className="text-xs text-muted-foreground">
+                Transcript{lines.length ? ` (${lines.length} turns)` : ''}
               </h2>
               {callId ? (
                 <span
@@ -405,7 +418,7 @@ export function TalkClient({
               <ul className="flex flex-col gap-3">
                 {lines.map(line => (
                   <li key={line.key} className="flex flex-col gap-0.5">
-                    <span className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
+                    <span className="text-xs text-muted-foreground">
                       {line.mine ? 'You' : 'KIRRO'}
                     </span>
                     {/* LiveKit's own entry markup and styling for the message body. */}
@@ -428,9 +441,7 @@ export function TalkClient({
 
         {mentioned.length ? (
           <section className="flex flex-col gap-2">
-            <h2 className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
-              Mentioned in this call
-            </h2>
+            <h2 className="text-xs text-muted-foreground">Mentioned in this call</h2>
             <ul className="flex flex-wrap gap-2">
               {mentioned.map(event => (
                 <li key={event.event_id}>
@@ -461,27 +472,39 @@ export function TalkClient({
         >
           <Card className="w-full max-w-sm">
             <CardHeader>
-              <CardTitle id="wa-popup-title">One tap to get your result</CardTitle>
+              <CardTitle id="wa-popup-title">
+                {whatsAppSent ? 'Message sent' : 'One tap to get your result'}
+              </CardTitle>
               <CardDescription>
-                You&apos;re in the draw. WhatsApp only lets a business message you once you&apos;ve
-                messaged it first, so send this one message and the result will reach you there after
-                the window closes.
+                {whatsAppSent
+                  ? "Kirro has your message. You'll hear back here once the window closes — no need to keep this open."
+                  : "You're in the draw. WhatsApp only lets a business message you once you've messaged it " +
+                    'first, so send this one message and the result will reach you there after the window closes.'}
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
-              <p className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                {whatsAppText}
-              </p>
-              <Button
-                render={<a href={whatsAppLink(whatsAppText)} target="_blank" rel="noreferrer" />}
-                nativeButton={false}
-                className="w-full"
-              >
-                Open WhatsApp
-              </Button>
-              <Button variant="ghost" className="w-fit" onClick={() => setWhatsAppText(null)}>
-                Not now
-              </Button>
+              {whatsAppSent ? (
+                <Button className="w-full" onClick={() => setWhatsAppText(null)}>
+                  Done
+                </Button>
+              ) : (
+                <>
+                  <p className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                    {whatsAppText}
+                  </p>
+                  <Button
+                    render={<a href={whatsAppLink(whatsAppText)} target="_blank" rel="noreferrer" />}
+                    nativeButton={false}
+                    className="w-full"
+                    onClick={() => setWhatsAppSent(true)}
+                  >
+                    Open WhatsApp
+                  </Button>
+                  <Button variant="ghost" className="w-fit" onClick={() => setWhatsAppText(null)}>
+                    Not now
+                  </Button>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>

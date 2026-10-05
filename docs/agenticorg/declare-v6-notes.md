@@ -89,6 +89,22 @@ into the pool. Audio, STT, TTS and the chat API all worked. These were the cause
 - **Fixed 2026-10-03: "The window opens at 11:30 AM IST on 9 October."** `opens_at_ist` is now a mock-computed
   field on both release routes (`mock_server/app.py` `opens_at_ist`), so the conversion is no longer the model's
   arithmetic; the prompt still needs to be told to read and repeat it rather than compute its own (live, open).
+- **Fixed 2026-10-04: v6 said Kirro's own Business number aloud, and the opener message got no reply.** Two
+  separate bugs behind the same symptom. First, STEP 4.4's closing line read `+91 81673 12268` and the WhatsApp
+  mechanism out loud on every successful declaration — reported as the agent "reading out the phone number"; the
+  delivery mechanism is now entirely the `/talk` popup's own CTA (`talk-client.tsx`), so the prompt gained a global
+  "never say the word WhatsApp, never read a phone number aloud" rule and STEP 4.4/4.3 were rewritten to stop
+  naming either. Second, the one message the popup's "Open WhatsApp" button sends
+  (`whatsAppOpeningMessage`, "Hi Kirro! I've entered the draw…") landed on a number with no agent listening on it —
+  `Kirro Declare`'s `authorized_tools`/`connector_ids` carry no WhatsApp tool or connector at all (confirmed live,
+  `GET /api/v1/agents/{id}`), so the inbound text just opened the 24-hour window with no reply, and nothing short of
+  new inbound-webhook infrastructure (out of scope here — no code in this repo receives WhatsApp webhooks) can make
+  WhatsApp itself auto-reply. Added a WHATSAPP OPENER rule instead: recognising `whatsAppOpeningMessage`'s own
+  wording as "opening the channel, not a new declaration" and replying once with a plain acknowledgement, call no
+  tool. This only fires if/when WhatsApp is ever wired as an inbound channel to this agent, which it is not today —
+  tracked as open platform work, not fixed by this prompt change. Verified live on both `v6-dev` and `v6`: the
+  opener text gets "Got it - I'll send your result here once the window closes." and a full declare-to-confirmation
+  run names the amount, event, date and window-open time only.
 
 ## 3. Pool and mandate correctness (mock side)
 

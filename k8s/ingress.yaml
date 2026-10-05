@@ -35,3 +35,15 @@ spec:
                 name: kirro-livekit
                 port:
                   number: 7880
+    # The WhatsApp webhook bridge (ADR-022). Meta's Cloud API calls this on /webhook; the DNS
+    # record is the same *.upayan.dev wildcard the other two hosts already use.
+    - host: whatsapp-kirro.upayan.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kirro-whatsapp
+                port:
+                  number: 8083

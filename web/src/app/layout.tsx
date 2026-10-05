@@ -5,8 +5,8 @@ import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import './globals.css';
 
 import { MotionProvider } from '@/components/motion';
-import { ServiceWorkerRegister } from '@/components/pwa/service-worker-register';
 import { QueryProvider, ThemeProvider } from '@/components/providers';
+import { ServiceWorkerRegister } from '@/components/pwa/service-worker-register';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteHeader } from '@/components/site-header';
 import { Toaster } from '@/components/ui/sonner';
@@ -25,7 +25,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'KIRRO',
   description:
-    'KIRRO books scarce slots: courts, screenings, passes. Contested slots go to a seeded fair draw; the rest sell first come, first served.',
+    'KIRRO books scarce slots: courts, screenings, passes. Popular slots get a fair pick; the rest you can just buy, first come, first served.',
   // iOS has no manifest.json support for "Add to Home Screen" styling; these meta tags are the
   // separate, Apple-specific path to the same standalone/app-like presentation.
   appleWebApp: {
